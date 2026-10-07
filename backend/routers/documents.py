@@ -18,10 +18,9 @@ from auth.supabase import get_user_id
 from crypto.encryption import decrypt_document, encrypt_document, get_key_version
 from db import prisma_client as db
 from db.storage import delete_from_storage, download_encrypted, storage_path, upload_encrypted
-from models.document import DocumentResponse
 from models.errors import AppError
 from services.parse_service import parse_upload
-from utils.files import get_extension, sanitize_filename
+from utils.files import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -87,58 +86,19 @@ async def upload_document(
     run = await db.create_processing_run(doc_id, version_id, user_id)
     run_id = str(run["id"])
 
-    # Parse document using existing pipeline
+    # Parse document using the same full pipeline as /api/parse
+    # (region routing, preview artifacts, table enhancement, cross-page merge)
     started = perf_counter()
     try:
-        # Write temp file for the extractor
-        import tempfile
-        from pathlib import Path
-
-        ext = get_extension(filename)
-        with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
-            tmp.write(file_bytes)
-            tmp_path = Path(tmp.name)
-
-        try:
-            from extractors.registry import get_extractor
-            from services.layout_service import assign_reading_order
-            from services.markdown_service import blocks_to_markdown
-            from utils.files import validate_magic_bytes
-
-            header = file_bytes[:16]
-            if not validate_magic_bytes(header, ext):
-                raise AppError("INVALID_FILE", "File content doesn't match format.", status_code=422)
-
-            extractor = get_extractor(ext)
-            if extractor is None:
-                raise AppError("UNSUPPORTED_FORMAT", "Unsupported file type.", status_code=415)
-
-            result = extractor.extract(tmp_path)
-            ordered_blocks = assign_reading_order(result.blocks)
-            markdown = blocks_to_markdown(ordered_blocks)
-
-            processing_time_ms = round((perf_counter() - started) * 1000)
-
-            response = DocumentResponse(
-                document_id=doc_id,
-                filename=filename,
-                file_type=ext,
-                page_count=result.page_count,
-                processing_time_ms=processing_time_ms,
-                status="partial" if result.errors else "success",
-                blocks=ordered_blocks,
-                markdown=markdown,
-                errors=result.errors,
-            )
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        await file.seek(0)  # rewind: the upload was already read for hashing
+        response = await run_in_threadpool(parse_upload, file)
 
         response_json = response.model_dump_json()
-        await db.save_document_output(run_id, response_json, markdown)
+        await db.save_document_output(run_id, response_json, response.markdown)
         await db.complete_processing_run(
             run_id,
             status="completed",
-            processing_time_ms=processing_time_ms,
+            processing_time_ms=response.processing_time_ms,
             page_count=response.page_count,
             block_count=len(response.blocks),
         )
@@ -146,7 +106,7 @@ async def upload_document(
             doc_id, user_id, "processed",
             page_count=response.page_count,
             block_count=len(response.blocks),
-            processing_time_ms=processing_time_ms,
+            processing_time_ms=response.processing_time_ms,
         )
 
         return {
@@ -157,6 +117,14 @@ async def upload_document(
         }
 
     except AppError:
+        processing_time_ms = round((perf_counter() - started) * 1000)
+        await db.complete_processing_run(
+            run_id, status="failed",
+            processing_time_ms=processing_time_ms,
+            error_code="PARSE_ERROR",
+            error_message="Document parsing failed.",
+        )
+        await db.update_document_status(doc_id, user_id, "failed")
         raise
     except Exception as exc:
         processing_time_ms = round((perf_counter() - started) * 1000)
