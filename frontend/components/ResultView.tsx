@@ -29,7 +29,7 @@ export default function ResultView({ result, sourceFile }: ResultViewProps) {
     [result.blocks, selectedBlockId],
   );
 
-  const canShowSource = sourceFile != null && (result.file_type === "pdf" || result.file_type === "jpg" || result.file_type === "jpeg" || result.file_type === "png");
+  const canShowSource = sourceFile != null && (result.file_type === "jpg" || result.file_type === "jpeg" || result.file_type === "png");
 
   function handleSelectBlock(block: DocumentBlock) {
     setSelectedBlockId(block.id);
