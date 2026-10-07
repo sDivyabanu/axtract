@@ -3,6 +3,10 @@ import type { DocumentResponse, ErrorResponse } from "./types";
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+export function previewPageUrl(documentId: string, page: number, dpi = 150): string {
+  return `${API_BASE_URL}/api/preview/${documentId}/pages/${page}?dpi=${dpi}`;
+}
+
 export class ApiError extends Error {
   code: string;
 

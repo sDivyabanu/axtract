@@ -26,6 +26,10 @@ def blocks_to_markdown(blocks: list[DocumentBlock]) -> str:
     parts: list[str] = []
     current_page = -1
 
+    # Expose each block's Markdown so clients (filtered view) never re-implement rendering.
+    for block in sorted_blocks:
+        block.metadata["markdown"] = _block_to_markdown(block)
+
     for block in sorted_blocks:
         # Page break marker
         if block.page != current_page:

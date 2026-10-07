@@ -1,7 +1,7 @@
 "use client";
 
 import type { BBox } from "@/lib/types";
-import { bboxToPixelRect, isBBoxValid } from "@/lib/bbox";
+import { bboxToPixelRect, normalizeBBox } from "@/lib/bbox";
 
 interface SourceHighlightProps {
   bbox: BBox | null;
@@ -16,11 +16,12 @@ export default function SourceHighlight({
   containerHeight,
   label,
 }: SourceHighlightProps) {
-  if (!isBBoxValid(bbox) || containerWidth <= 0 || containerHeight <= 0) {
+  const box = normalizeBBox(bbox);
+  if (!box || containerWidth <= 0 || containerHeight <= 0) {
     return null;
   }
 
-  const rect = bboxToPixelRect(bbox, containerWidth, containerHeight);
+  const rect = bboxToPixelRect(box, containerWidth, containerHeight);
 
   return (
     <div
