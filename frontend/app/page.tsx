@@ -3,10 +3,13 @@
 import { useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
 import ResultView from "@/components/ResultView";
+import { uploadDocument } from "@/lib/api-authenticated";
 import { ApiError, parseDocument } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { DocumentResponse } from "@/lib/types";
 
 export default function Home() {
+  const { user } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<DocumentResponse | null>(null);
@@ -24,7 +27,15 @@ export default function Home() {
     setResult(null);
     setError(null);
     try {
-      setResult(await parseDocument(selectedFile));
+      // Signed in: upload through the authenticated endpoint so the document
+      // and its parse result are stored in the database (visible in History).
+      // Otherwise fall back to the anonymous parse endpoint.
+      if (user) {
+        const upload = await uploadDocument(selectedFile);
+        setResult(upload.result);
+      } else {
+        setResult(await parseDocument(selectedFile));
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`[${err.code}] ${err.message}`);
