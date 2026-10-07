@@ -5,8 +5,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
-
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,28 +14,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from models.errors import AppError, ErrorInfo, ErrorResponse
 from routers import auth, documents, health, parse, preview
 
+# Optional backend settings (Supabase, database, encryption key). Real environment wins.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+
 logger = logging.getLogger("parseanything")
-
-
-def _validate_env() -> list[str]:
-    """Check which optional env vars are set for feature availability."""
-    available = []
-    if os.environ.get("DATABASE_URL"):
-        available.append("database")
-    if os.environ.get("SUPABASE_URL"):
-        available.append("supabase")
-    if os.environ.get("AXTRACT_MASTER_KEY_BASE64"):
-        available.append("encryption")
-    return available
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    features = _validate_env()
-    if features:
-        logger.info("AXTRACT features enabled: %s", ", ".join(features))
-    if "database" in features:
-        from db.prisma_client import close_pool, _use_rest
+    # Decide the DB path up front (PostgreSQL vs Supabase REST) so the first
+    # request doesn't pay for the probe; an unreachable or unconfigured
+    # database never prevents parsing from working.
+    if os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL"):
+        from db.prisma_client import _use_rest
         try:
             rest_mode = await _use_rest()
             logger.info(
@@ -47,12 +36,13 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("Database unavailable; DB-backed features degraded.")
     yield
-    if "database" in features:
+    if os.environ.get("DATABASE_URL"):
         from db.prisma_client import close_pool
+
         await close_pool()
 
 
-app = FastAPI(title="AXTRACT API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="ParseAnything API", version="0.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")

@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
 import ResultView from "@/components/ResultView";
-import { uploadDocument } from "@/lib/api-authenticated";
+import { getDocumentResult, uploadDocument } from "@/lib/api-authenticated";
 import { ApiError, parseDocument } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { DocumentResponse } from "@/lib/types";
@@ -24,20 +24,81 @@ let nextTabId = 1;
 // thread, so a small parallel batch keeps CPU usage sane for heavy files.
 const PARSE_CONCURRENCY = 3;
 
+// Saving is an add-on: if it is unavailable the document is still parsed the normal way.
+const SAVE_UNAVAILABLE = new Set([
+  "NETWORK_ERROR",
+  "AUTH_REQUIRED",
+  "INTERNAL_ERROR",
+  "HTTP_401",
+  "HTTP_500",
+  "HTTP_502",
+  "HTTP_503",
+]);
+
 export default function Home() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [tabs, setTabs] = useState<DocTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function handleFilesSelected(incoming: File[]) {
     setPendingFiles((prev) => [...prev, ...incoming]);
   }
 
+  // Opening a history item (/?doc=<id>) shows the saved result without parsing again.
+  useEffect(() => {
+    const savedId = new URLSearchParams(window.location.search).get("doc");
+    if (!savedId || authLoading || !user) return;
+    let cancelled = false;
+    (async () => {
+      setIsParsing(true);
+      try {
+        const saved = await getDocumentResult(savedId);
+        if (!cancelled) {
+          setTabs((prev) => [
+            ...prev,
+            {
+              id: `tab-${nextTabId++}`,
+              name: saved.result.filename ?? "Saved document",
+              status: "done",
+              result: saved.result,
+              error: null,
+            },
+          ]);
+          setActiveTabId((current) => current ?? `tab-${nextTabId - 1}`);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTabs((prev) => [
+            ...prev,
+            {
+              id: `tab-${nextTabId++}`,
+              name: "Saved document",
+              status: "error",
+              result: null,
+              error:
+                err instanceof ApiError
+                  ? `[${err.code}] ${err.message}`
+                  : "Could not open the saved document.",
+            },
+          ]);
+          setActiveTabId((current) => current ?? `tab-${nextTabId - 1}`);
+        }
+      } finally {
+        if (!cancelled) setIsParsing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
   const parseAll = useCallback(async () => {
     if (pendingFiles.length === 0 || isParsing) return;
     setIsParsing(true);
+    setNotice(null);
 
     const newTabs: DocTab[] = pendingFiles.map((file) => ({
       id: `tab-${nextTabId++}`,
@@ -63,13 +124,24 @@ export default function Home() {
     }
 
     async function parseOne(tabId: string, file: File) {
+      // Signed in: upload through the authenticated endpoint so the document
+      // and its parse result are stored in the database (visible in History).
+      // Otherwise fall back to the anonymous parse endpoint.
       try {
-        // Signed in: upload through the authenticated endpoint so the document
-        // and its parse result are stored in the database (visible in History).
-        // Otherwise fall back to the anonymous parse endpoint.
-        const result: DocumentResponse = user
-          ? (await uploadDocument(file)).result
-          : await parseDocument(file);
+        let result: DocumentResponse;
+        if (user) {
+          try {
+            result = (await uploadDocument(file)).result;
+          } catch (err) {
+            if (!(err instanceof ApiError) || !SAVE_UNAVAILABLE.has(err.code)) throw err;
+            setNotice(
+              "Documents could not be saved to your history, so they were parsed without saving.",
+            );
+            result = await parseDocument(file);
+          }
+        } else {
+          result = await parseDocument(file);
+        }
         await updateTab(tabId, { status: "done", result, error: null });
       } catch (err) {
         const message =
@@ -140,6 +212,15 @@ export default function Home() {
                   pendingFiles.length === 1 ? "Document" : "Documents"
                 }`}
           </button>
+        </div>
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800"
+        >
+          {notice}
         </div>
       )}
 

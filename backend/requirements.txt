@@ -31,6 +31,7 @@ python-Levenshtein
 
 # Database
 asyncpg
+python-dotenv
 
 # Authentication
 PyJWT[crypto]
@@ -43,7 +44,6 @@ httpx
 
 # Testing
 pytest
-pytest-asyncio
 reportlab          # BSD: fixture PDFs
 matplotlib         # fixture charts / rendered equations
 python-dotenv
