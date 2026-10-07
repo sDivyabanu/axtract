@@ -8,17 +8,39 @@ import FilterToolbar from "./FilterToolbar";
 import ActiveFilters from "./ActiveFilters";
 import MatchNavigator from "./MatchNavigator";
 import PageNavigator from "./PageNavigator";
+import SourceViewer from "./SourceViewer";
 
 type Tab = "blocks" | "markdown" | "json";
 const BLOCKS_PER_PAGE = 100;
 
 interface ResultViewProps {
   result: DocumentResponse;
+  sourceFile?: File | null;
 }
 
-export default function ResultView({ result }: ResultViewProps) {
+export default function ResultView({ result, sourceFile }: ResultViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("blocks");
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [sourceViewerOpen, setSourceViewerOpen] = useState(false);
   const explorer = useExplorerState(result);
+
+  const selectedBlock = useMemo(
+    () => result.blocks.find((b) => b.id === selectedBlockId) ?? null,
+    [result.blocks, selectedBlockId],
+  );
+
+  const canShowSource = sourceFile != null && (result.file_type === "pdf" || result.file_type === "jpg" || result.file_type === "jpeg" || result.file_type === "png");
+
+  function handleSelectBlock(block: DocumentBlock) {
+    setSelectedBlockId(block.id);
+    if (canShowSource) {
+      setSourceViewerOpen(true);
+    }
+  }
+
+  function handleCloseSource() {
+    setSourceViewerOpen(false);
+  }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "blocks", label: "Blocks", count: explorer.filtered.length },
@@ -26,8 +48,8 @@ export default function ResultView({ result }: ResultViewProps) {
     { key: "json", label: "JSON" },
   ];
 
-  return (
-    <section className="flex flex-col gap-3">
+  const explorerContent = (
+    <section className="flex flex-col gap-3 min-w-0">
       {/* Document info */}
       <div className="rounded-lg border border-gray-200 p-4">
         <h2 className="mb-2 text-lg font-semibold">Document Info</h2>
@@ -163,6 +185,8 @@ export default function ResultView({ result }: ResultViewProps) {
             query={explorer.debouncedQuery}
             matchInfo={explorer.matchInfo}
             currentMatchIndex={explorer.currentMatchIndex}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={handleSelectBlock}
           />
         )}
         {activeTab === "markdown" && (
@@ -184,6 +208,27 @@ export default function ResultView({ result }: ResultViewProps) {
       </div>
     </section>
   );
+
+  if (sourceViewerOpen && sourceFile && canShowSource) {
+    return (
+      <div className="flex gap-0 -mx-6 px-6" style={{ width: "calc(100vw - 2rem)", maxWidth: "100vw" }}>
+        <div className="w-1/2 min-w-0 pr-3 overflow-y-auto" style={{ maxHeight: "calc(100vh - 120px)" }}>
+          {explorerContent}
+        </div>
+        <div className="w-1/2 min-w-0 sticky top-0" style={{ height: "calc(100vh - 120px)" }}>
+          <SourceViewer
+            file={sourceFile}
+            fileType={result.file_type}
+            pageCount={result.page_count}
+            selectedBlock={selectedBlock}
+            onClose={handleCloseSource}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return explorerContent;
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,11 +240,15 @@ function BlocksTab({
   query,
   matchInfo,
   currentMatchIndex,
+  selectedBlockId,
+  onSelectBlock,
 }: {
   blocks: DocumentBlock[];
   query: string;
   matchInfo: { blockIndex: number; positions: number[] }[];
   currentMatchIndex: number;
+  selectedBlockId: string | null;
+  onSelectBlock: (block: DocumentBlock) => void;
 }) {
   const [page, setPage] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -276,6 +325,8 @@ function BlocksTab({
             block={block}
             query={query}
             highlight={isMatch}
+            selected={block.id === selectedBlockId}
+            onSelect={() => onSelectBlock(block)}
           />
         );
       })}
@@ -365,10 +416,14 @@ function BlockCard({
   block,
   query,
   highlight,
+  selected,
+  onSelect,
 }: {
   block: DocumentBlock;
   query: string;
   highlight: boolean;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const typeColors: Record<string, string> = {
     heading: "bg-blue-100 text-blue-800",
@@ -385,16 +440,24 @@ function BlockCard({
 
   const tagColor = typeColors[block.type] ?? "bg-gray-100 text-gray-600";
 
+  let borderClass: string;
+  if (selected) {
+    borderClass = "border-blue-500 bg-blue-50/50 ring-2 ring-blue-300";
+  } else if (highlight) {
+    borderClass = "border-amber-400 bg-amber-50/50 ring-1 ring-amber-200";
+  } else if (block.requires_review) {
+    borderClass = "border-yellow-400 bg-yellow-50";
+  } else {
+    borderClass = "border-gray-200";
+  }
+
   return (
-    <div
+    <button
+      type="button"
       id={`block-${block.id}`}
-      className={`rounded-lg border p-3 ${
-        highlight
-          ? "border-amber-400 bg-amber-50/50 ring-1 ring-amber-200"
-          : block.requires_review
-            ? "border-yellow-400 bg-yellow-50"
-            : "border-gray-200"
-      }`}
+      onClick={onSelect}
+      className={`w-full text-left rounded-lg border p-3 cursor-pointer transition-colors hover:border-blue-300 hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-400 ${borderClass}`}
+      aria-pressed={selected}
     >
       {/* Metadata row */}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
@@ -425,6 +488,13 @@ function BlockCard({
         {block.reading_order !== null && (
           <span className="text-gray-300">#{block.reading_order}</span>
         )}
+        {block.bbox && (
+          <span className="text-gray-300" title="Has source provenance">
+            <svg className="inline h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </span>
+        )}
       </div>
 
       {/* Content */}
@@ -435,7 +505,7 @@ function BlockCard({
           <HighlightedText text={block.content} query={query} />
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -599,7 +669,6 @@ function JsonTab({
     return JSON.stringify({ ...result, blocks: filtered }, null, 2);
   }, [result, filtered, viewMode]);
 
-  // Truncate display for very large JSON to prevent DOM slowness
   const displayStr = jsonStr.length > 500000 ? jsonStr.slice(0, 500000) + "\n\n... (truncated for display, use Copy for full JSON)" : jsonStr;
 
   return (
