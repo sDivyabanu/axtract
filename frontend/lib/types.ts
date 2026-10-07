@@ -1,0 +1,51 @@
+// Mirrors backend/models/document.py and backend/models/errors.py.
+// Keep these in sync when the backend schema changes.
+
+export type BlockType =
+  | "heading"
+  | "paragraph"
+  | "list"
+  | "table"
+  | "figure"
+  | "chart"
+  | "equation"
+  | "unknown";
+
+// [x1, y1, x2, y2] in PDF points, origin at top-left of the page.
+export type BBox = [number, number, number, number];
+
+export interface DocumentBlock {
+  id: string;
+  type: BlockType;
+  content: string;
+  page: number;
+  bbox: BBox | null;
+  confidence: number | null;
+  extractor: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface DocumentError {
+  code: string;
+  message: string;
+  page?: number | null;
+}
+
+export interface DocumentResponse {
+  document_id: string;
+  filename: string;
+  file_type: string;
+  page_count: number;
+  processing_time_ms: number;
+  status: "success" | "partial";
+  blocks: DocumentBlock[];
+  errors: DocumentError[];
+}
+
+export interface ErrorResponse {
+  status: "error";
+  error: {
+    code: string;
+    message: string;
+  };
+}
