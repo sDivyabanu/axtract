@@ -137,15 +137,27 @@ def index_document(workspace_id: str, doc_id: str, path: Path | None, filename: 
             found = security.scan_text(text)
             if found:
                 quarantined[b.id] = found
-    hidden_spans = []
+            if security.homoglyph_suspected(text):  # flagged for review, not quarantined
+                b.metadata.setdefault("flags", []).append("homoglyph_suspected")
+                b.requires_review = True
+    extra_findings: list[tuple[str, str, int | None, list | None, str]] = []  # reason, kind, page, bbox, snippet
+    hidden_spans: list = []
+    active: list = []
     try:
         from rag import hidden
 
-        hidden_spans = hidden.scan(path, file_type, blocks) if path else []
+        hidden_spans = hidden.scan(path, file_type, blocks)
+        active = hidden.active_findings(path, file_type)
     except ImportError:
         pass
     for hs in hidden_spans:
-        quarantined.setdefault(hs.block_id, []).append(security.Finding(hs.reason, hs.text[:160])) if hs.block_id else None
+        if hs.block_id:
+            quarantined.setdefault(hs.block_id, []).append(security.Finding(hs.reason, hs.text[:160]))
+        else:
+            extra_findings.append((hs.reason, "hidden", hs.page, hs.bbox, hs.text[:300]))
+    for af in active:
+        extra_findings.append((af.reason, "finding", None, None, f"{af.detail} (action: {af.action_taken})"))
+    security_flags = sorted({f.reason for fs in quarantined.values() for f in fs} | {e[0] for e in extra_findings})
     clean_blocks = [b for b in blocks if b.id not in quarantined]
 
     # 4. chunk (quarantined blocks never enter normal chunks)
@@ -198,6 +210,12 @@ def index_document(workspace_id: str, doc_id: str, path: Path | None, filename: 
                  t.currency, t.statement, db.jdump(t.grid), db.jdump(t.printed), t.conf, int(t.estimated), t.kind),
             )
         by_id = {b.id: b for b in blocks}
+        block_to_chunk = {bid: f"{doc_id}:{i}" for i, (ch, trust) in enumerate(all_chunks) if trust == "quarantined" for bid in ch.block_ids}
+        for reason, kind, page, bbox, snippet in extra_findings:
+            c.execute(
+                "INSERT INTO quarantine (id, workspace_id, doc_id, chunk_id, block_id, reason, kind, page, bbox_json, snippet, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (db.new_id(), workspace_id, doc_id, None, None, reason, kind, page, db.jdump(bbox), snippet, time.time()))
         for bid, findings in quarantined.items():
             b = by_id[bid]
             lc = chunker.loc(b)
@@ -205,13 +223,13 @@ def index_document(workspace_id: str, doc_id: str, path: Path | None, filename: 
                 c.execute(
                     "INSERT INTO quarantine (id, workspace_id, doc_id, chunk_id, block_id, reason, kind, page, bbox_json,"
                     " snippet, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (db.new_id(), workspace_id, doc_id, None, bid, f.reason, b.type.value, lc["page"],
+                    (db.new_id(), workspace_id, doc_id, block_to_chunk.get(bid), bid, f.reason, b.type.value, lc["page"],
                      db.jdump(lc["bbox"]), f.detail[:300], time.time()),
                 )
         c.execute(
             "UPDATE documents SET doc_type=?, status='ready', stage='Ready', progress=1.0, indexed_at=?, block_count=?,"
             " chunk_count=?, quarantined_count=?, flag_count=?, flags_json=?, error=NULL WHERE id=?",
-            (doc_type, time.time(), len(blocks), len(built.chunks), len(quarantined), flagged_blocks,
-             db.jdump(sorted(flags_all)), doc_id),
+            (doc_type, time.time(), len(blocks), len(built.chunks), len(quarantined) + len(extra_findings), flagged_blocks,
+             db.jdump(sorted(flags_all | {f"security:{r}" for r in security_flags})), doc_id),
         )
     index.invalidate(workspace_id)

@@ -255,7 +255,7 @@ def build_chunks(blocks: list[DocumentBlock], doc_type: str, filename: str) -> B
             grid = build_grid(b)
             md = b.metadata.get("markdown") or b.content
             hp = heading_path()
-            title = (hp[-1] if hp else "") or caption
+            title = (hp[-1] if hp else "") or caption or str(b.metadata.get("sheet_name") or "")
             header_text = " ".join(grid["col_paths"]) if grid else ""
             unit = M.detect_unit(" ".join([caption, title, header_text, content[:300]]))
             unit = unit if unit[0] or unit[2] else cur_unit

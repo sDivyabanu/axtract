@@ -239,3 +239,31 @@ export async function askStream(
   }
   return final;
 }
+
+export interface BaselineAnswer {
+  text: string;
+  mode: string;
+  model: string | null;
+  total_ms: number;
+  stages: Stage[];
+  sources: { filename: string; page: number; text: string; dense: number }[];
+  checks: {
+    grounding: { verified: number; total: number };
+    unsupported: string[];
+    retrieved_instructions: { filename: string; page: number; reason: string; snippet: string }[];
+  } | null;
+}
+
+export interface QuarantineItem {
+  id: string;
+  doc_id: string;
+  filename: string;
+  block_id: string | null;
+  reason: string;
+  reason_label: string;
+  kind: string | null;
+  page: number | null;
+  bbox: BBox | null;
+  snippet: string;
+  preview_pages: number;
+}

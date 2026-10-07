@@ -52,6 +52,20 @@ def scan_text(text: str) -> list[Finding]:
     return out
 
 
+def homoglyph_suspected(text: str) -> bool:
+    """A word that mixes Latin letters with Cyrillic or Greek look-alikes (e.g. 'раypal')."""
+    for word in re.findall(r"\w{3,}", text):
+        scripts = set()
+        for ch in word:
+            if ch.isalpha():
+                name = unicodedata.name(ch, "")
+                scripts.add("latin" if name.startswith("LATIN") else "cyrillic" if name.startswith("CYRILLIC")
+                            else "greek" if name.startswith("GREEK") else "other")
+        if "latin" in scripts and scripts & {"cyrillic", "greek"}:
+            return True
+    return False
+
+
 def clean_for_index(text: str) -> str:
     """NFKC-normalise and strip invisible characters from text that will be indexed."""
     return unicodedata.normalize("NFKC", _BIDI.sub("", _ZERO_WIDTH.sub("", text)))
@@ -72,4 +86,17 @@ REASON_LABEL = {
     "hidden_text_offpage": "Text placed outside the page",
     "hidden_sheet": "Hidden spreadsheet sheet",
     "hidden_row_col": "Hidden spreadsheet rows/columns",
+    "pdf_open_action": "PDF runs an action when opened (not executed)",
+    "pdf_additional_actions": "PDF defines additional actions (not executed)",
+    "pdf_javascript": "PDF contains JavaScript (not executed)",
+    "pdf_embedded_file": "PDF embeds other files (not extracted)",
+    "pdf_launch": "PDF launches an external program (not executed)",
+    "pdf_submitform": "PDF form submits data (not executed)",
+    "pdf_importdata": "PDF imports external data (not executed)",
+    "office_macro": "Office VBA macro present (not executed)",
+    "office_dde": "Office DDE field instruction (not executed)",
+    "office_ole_object": "Embedded OLE object (not executed)",
+    "office_external_link": "External reference (not fetched)",
+    "office_remote_template": "Remote template reference (not fetched)",
+    "homoglyph_suspected": "Mixed Latin/Cyrillic/Greek letters in a word",
 }

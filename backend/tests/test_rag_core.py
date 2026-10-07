@@ -29,7 +29,11 @@ def room(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "_initialised", set())
     monkeypatch.setattr(llm, "status", lambda force=False: {"available": False, "model": "x", "reason": "test"})
     index._cache.clear()
-    return TestClient(app, raise_server_exceptions=False)
+    from rag import ingest
+
+    yield TestClient(app, raise_server_exceptions=False)
+    # drain the (single) ingest worker so a still-running job cannot touch the next test's database
+    ingest._executor.submit(lambda: None).result(timeout=600)
 
 
 def wait_ready(client: TestClient, ws: str, n: int, timeout: float = 240) -> list[dict]:

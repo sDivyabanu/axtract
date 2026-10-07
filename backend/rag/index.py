@@ -20,7 +20,9 @@ from rag import config, db, embed
 _TOKEN = re.compile(r"[a-z0-9]+(?:\.[0-9]+)?|[₹$€£%]")
 _STOP = frozenset(
     "a an and are as at be but by for from has have in is it its of on or that the this to was were will with "
-    "what which who whom how many much does do did there their they".split()
+    "what which who whom how many much does do did there their they "
+    # instruction words: they say what to do, not what the question is about
+    "summarise summarize summary describe explain provide show give tell state find identify please about".split()
 )
 
 
@@ -74,6 +76,38 @@ def invalidate(workspace_id: str) -> None:
     with _lock:
         _versions[workspace_id] += 1
         _cache.pop(workspace_id, None)
+        _qcache.pop(workspace_id, None)
+
+
+_qcache: dict[str, tuple[list[dict[str, Any]], np.ndarray]] = {}
+
+
+def quarantined_matches(workspace_id: str, query: str, top: int = 2) -> list[dict[str, Any]]:
+    """Quarantined passages that the question would have drawn on (for the 'source excluded' notice).
+
+    They are never used in an answer. A passage counts as relevant if the cross-encoder scores it as an answer
+    candidate for the question. Returns [{chunk_id, doc_id, text_len, pages, rerank}] (text is not returned).
+    """
+    with _lock:
+        cached = _qcache.get(workspace_id)
+    if cached is None:
+        with db.connect() as c:
+            rows = c.execute("SELECT chunk_id, doc_id, text, pages_json, embedding FROM chunks WHERE workspace_id=? AND trust='quarantined'",
+                             (workspace_id,)).fetchall()
+        items = [{"chunk_id": r["chunk_id"], "doc_id": r["doc_id"], "text": r["text"], "pages": db.jload(r["pages_json"], [])} for r in rows]
+        mat = (np.vstack([np.frombuffer(r["embedding"], dtype=np.float32) if r["embedding"] else np.zeros(384, np.float32) for r in rows])
+               if rows else np.zeros((0, 384), np.float32))
+        cached = (items, mat)
+        with _lock:
+            _qcache[workspace_id] = cached
+    items, mat = cached
+    if not items:
+        return []
+    sims = mat @ embed.embed_query(query)
+    order = [int(i) for i in np.argsort(-sims)[:top]]
+    scores = embed.rerank(query, [items[i]["text"] for i in order])
+    return [{"chunk_id": items[i]["chunk_id"], "doc_id": items[i]["doc_id"], "pages": items[i]["pages"], "rerank": sc, "dense": float(sims[i])}
+            for i, sc in zip(order, scores) if sc >= -3.0]  # dense similarity is too noisy to gate on
 
 
 def _build(workspace_id: str) -> _Index:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import time
+from pathlib import Path
 from typing import Any, Iterator
 
 from rag import config, db, index, llm, planner, verifier, workspaces
@@ -67,6 +68,28 @@ def missing_reference(workspace_id: str, question: str, docs: dict[str, dict]) -
     return None
 
 
+_GENERIC_NAME = {"pdf", "docx", "pptx", "xlsx", "jpg", "png", "doc", "final", "draft", "copy", "v1", "v2"}
+
+
+def doc_hint(question: str, docs: dict[str, dict]) -> set[str]:
+    """Documents the question refers to by name ("in the CIM", "per the loan agreement", "management accounts").
+
+    A document matches when at least two of its distinctive filename words appear in the question, or when its
+    only distinctive word does. The company name common to every file is ignored (it would match everything).
+    """
+    q = set(index.tokenize(question))
+    names = {d: [t for t in index.tokenize(Path(v["filename"]).stem.replace("_", " ").replace("-", " ")) if t not in _GENERIC_NAME]
+             for d, v in docs.items() if v["status"] == "ready"}
+    common = set.intersection(*[set(t) for t in names.values()]) if len(names) > 1 else set()
+    out = set()
+    for d, toks in names.items():
+        toks = [t for t in toks if t not in common and not re.fullmatch(r"fy\d{2,4}|20\d{2}", t)]
+        hit = [t for t in toks if t in q]
+        if len(hit) >= 2 or (len(toks) == 1 and hit):
+            out.add(d)
+    return out
+
+
 def _terms(q: str) -> set[str]:
     return set(index.tokenize(q))
 
@@ -95,12 +118,20 @@ def _citation(n: int, row: dict[str, Any], docs: dict[str, dict]) -> dict[str, A
     if conf is not None and conf < 0.6 and not any("OCR" in b["label"] for b in badges):
         badges.append({"label": f"low confidence {conf:.0%}", "level": "amber"})
     d = docs.get(row["doc_id"], {})
+    for f in d.get("flags", []):  # document-level security findings (hidden content, active content, ...)
+        if f.startswith("security:") and not any(b["label"].startswith("security finding") for b in badges):
+            badges.append({"label": "security finding in this document", "level": "red"})
     return {
         "n": n, "chunk_id": row["chunk_id"], "doc_id": row["doc_id"], "filename": d.get("filename", ""),
         "preview_pages": d.get("preview_pages", 0), "kind": row["kind"], "pages": row["pages"],
         "printed_pages": row["printed_pages"], "heading_path": row["heading_path"], "bboxes": row["bboxes"],
         "snippet": row["text"][:260], "min_confidence": conf, "flags": flags, "badges": badges,
     }
+
+
+def _pool_text(row: dict[str, Any], docs: dict[str, dict]) -> str:
+    """Text a claim may be checked against: the passage plus the context shown with it (headings, document name)."""
+    return " ".join(row["heading_path"]) + " " + Path(docs.get(row["doc_id"], {}).get("filename", "")).stem.replace("_", " ") + " " + row["text"]
 
 
 def _source_text(row: dict[str, Any]) -> str:
@@ -243,7 +274,8 @@ def ask_stream(
     # ---- retrieval
     yield _ev("Retrieving", status="start")
     t0 = time.time()
-    hits = index.search(workspace_id, question, doc_ids=set(doc_ids) if doc_ids else None,
+    hinted = doc_hint(question, docs) if not doc_ids else set()
+    hits = index.search(workspace_id, question, doc_ids=set(doc_ids) if doc_ids else (hinted or None),
                         doc_types=set(doc_types) if doc_types else None,
                         periods=set(periods) if periods else None)
     yield done("Retrieving", t0, candidates=len(hits))
@@ -262,7 +294,7 @@ def ask_stream(
         yield _ev("Computing", status="start")
         t0 = time.time()
         top_rows = [index.chunk_row(workspace_id, h.chunk_id) for h in ranked[:8]]
-        tids = planner.candidate_table_ids(workspace_id, question, top_rows)
+        tids = planner.candidate_table_ids(workspace_id, question, top_rows, only_docs=set(doc_ids) if doc_ids else (hinted or None))
         tables = planner.load_tables(workspace_id, tids)
         outcome = planner.plan_and_run(question, tables) if tables else None
         plan_info = {"candidate_tables": [{"alias": a, "title": t.title, "document": t.filename} for a, t in tables.items()],
@@ -301,10 +333,26 @@ def ask_stream(
             for h in (ranked[:12] or hits[:12])
         ],
         "plan": plan_info,
+        "scoped_to": [docs[d]["filename"] for d in (set(doc_ids) if doc_ids else hinted) if d in docs],
         "thresholds": {"abstain_below": ABSTAIN_BELOW, "strong_above": STRONG_ABOVE, "best": best, "top_overlap": round(top_overlap, 2)},
     }
 
+    # sources the question would have drawn on that were quarantined (hidden / injected content)
+    excluded = []
+    try:
+        from rag import security as _sec
+
+        for m in index.quarantined_matches(workspace_id, question):
+            with db.connect() as c:
+                qr = c.execute("SELECT reason, page FROM quarantine WHERE chunk_id=? LIMIT 1", (m["chunk_id"],)).fetchone()
+            excluded.append({"reason": _sec.REASON_LABEL.get(qr["reason"], qr["reason"]) if qr else "quarantined content",
+                             "page": (qr["page"] if qr and qr["page"] else (m["pages"][0] if m["pages"] else None)),
+                             "filename": docs.get(m["doc_id"], {}).get("filename", ""), "doc_id": m["doc_id"]})
+    except Exception:  # noqa: BLE001 - the notice is informative; never fail an answer for it
+        excluded = []
+
     base: dict[str, Any] = {
+        "excluded_sources": excluded,
         "answer_id": answer_id, "question": question, "route": route, "mode": "extractive", "model": None,
         "receipts": [], "grounding": None, "badges": [], "abstained": False, "abstain_reason": None,
         "searched": None, "sentences": [], "citations": [], "text": "", "stages": stages, "glass_box": glass,
@@ -340,7 +388,7 @@ def ask_stream(
         src = [r for r in idx_rows.values() if r["kind"] in ("table", "chart") and r.get("table_ref") and (r["doc_id"], r["table_ref"]) in want]
         used = [(i + 1, r) for i, r in enumerate(src[:4])]
         base["citations"] = [_citation(n, r, docs) for n, r in used]
-        sources = {n: r["text"] for n, r in used}
+        sources = {n: _pool_text(r, docs) for n, r in used}
         sentence = f"{rc['title']}: {rc['result_display']}."
         chk = verifier.check_sentence(sentence, [n for n, _ in used], sources, res.numbers)
         base["sentences"] = [{"text": chk.text, "citations": chk.citations, "verified": chk.verified, "reason": chk.reason,
@@ -380,7 +428,7 @@ def ask_stream(
 
     citations = [_citation(n, row, docs) for n, row in used]
     base["citations"] = citations
-    sources = {n: row["text"] for n, row in used}
+    sources = {n: _pool_text(row, docs) for n, row in used}
 
     # ---- generation (or extractive fallback)
     yield _ev("Generating", status="start")

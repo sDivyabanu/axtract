@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from models.errors import AppError
-from rag import config, db, index, ingest, llm, qa, workspaces
+from rag import baseline, config, db, index, ingest, llm, qa, workspaces
 from utils.files import get_extension, remove_temp_file, sanitize_filename, save_upload_to_temp
 
 router = APIRouter(prefix="/api", tags=["deallens"])
@@ -90,6 +90,24 @@ def ask(workspace_id: str, body: AskIn) -> StreamingResponse:
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+class CompareIn(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+
+
+@router.post("/workspaces/{workspace_id}/compare")
+def compare(workspace_id: str, body: CompareIn) -> dict[str, Any]:
+    """Run the naive baseline and DealLens live on the same question (sequentially: one laptop, one LLM)."""
+    workspaces.require(workspace_id)
+    base = baseline.answer(workspace_id, body.question)
+    final = None
+    for ev in qa.ask_stream(workspace_id, body.question, mode="dealLens"):
+        if ev["event"] == "answer":
+            final = ev["answer"]
+    db.audit("compare", workspace_id, final["answer_id"] if final else None,
+             {"baseline_ms": base["total_ms"], "dealLens_ms": final["total_ms"] if final else None})
+    return {"question": body.question, "baseline": base, "dealLens": final}
 
 
 @router.get("/answers/{answer_id}")

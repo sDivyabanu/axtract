@@ -50,19 +50,23 @@ def load_tables(workspace_id: str, table_ids: list[str]) -> dict[str, Table]:
     return out
 
 
-def candidate_table_ids(workspace_id: str, question: str, ranked_chunk_rows: list[dict[str, Any]], limit: int = 4) -> list[str]:
-    """Tables referenced by the best retrieved chunks, plus tables whose row labels match the question."""
+def candidate_table_ids(workspace_id: str, question: str, ranked_chunk_rows: list[dict[str, Any]], limit: int = 4,
+                        only_docs: set[str] | None = None) -> list[str]:
+    """Tables referenced by the best retrieved chunks, plus tables whose row labels match the question.
+
+    `only_docs` restricts the candidates to the documents the question names explicitly.
+    """
     ids: list[str] = []
     for row in ranked_chunk_rows:
-        if row.get("table_ref"):
+        if row.get("table_ref") and (not only_docs or row["doc_id"] in only_docs):
             tid = f"{row['doc_id']}:{row['table_ref']}"
             if tid not in ids:
                 ids.append(tid)
     qt = _q_tokens(question)
     scored: list[tuple[float, str]] = []
     with db.connect() as c:
-        for r in c.execute("SELECT table_id, title, grid_json FROM tables_store WHERE workspace_id=?", (workspace_id,)):
-            if r["table_id"] in ids:
+        for r in c.execute("SELECT table_id, doc_id, title, grid_json FROM tables_store WHERE workspace_id=?", (workspace_id,)):
+            if r["table_id"] in ids or (only_docs and r["doc_id"] not in only_docs):
                 continue
             grid = db.jload(r["grid_json"], {})
             labels = " ".join((x["label"] or "") for x in grid.get("rows", []))

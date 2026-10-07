@@ -1,5 +1,22 @@
 ## Security
 
+> **Implementation status (checked against the code on the RAG branch).** The bullets below were written as a feature
+> list; when the RAG layer was started none of the controls existed in the source tree. This table says what is
+> implemented now and where. ✅ implemented + tested · 🟡 partial · ⏳ not implemented yet.
+>
+> | Control | Status | Where / how it differs from the description |
+> |---|---|---|
+> | S15 hidden-content detection | ✅ | `backend/rag/hidden.py` + XLSX extractor. PDF white/near-background (not white-on-dark bands), < 1 pt, off-page, invisible render mode (not on scans' OCR layers); DOCX hidden/white/tiny runs; XLSX hidden sheets/rows/columns. Hidden text is **quarantined at DealLens ingest** (not a `hidden_content[]` field on the parser output) |
+> | S15 prompt-injection scanning | ✅ | `rag/security.py`: instruction-override, role-hijack, prompt-exfiltration, answer-steering, chat-template tokens. Chunks are **quarantined** (excluded from retrieval, listed in the Quarantine tab), not just flagged `prompt_injection_suspected` |
+> | S16 Unicode normalisation / tricks | ✅ | NFKC + zero-width + bidi-override handling and mixed-script (`homoglyph_suspected`) flagging in `rag/security.py`; applies to DealLens indexing, not to the parser's raw output |
+> | S10 PDF active content | ✅ | `hidden.active_findings`: JavaScript, OpenAction, AA, Launch, SubmitForm, EmbeddedFiles via pypdf; reported with `action_taken: not_executed` |
+> | S11 Office macro / DDE / OLE | ✅ | VBA project, DDE/DDEAUTO field instructions, embedded OLE objects; nothing executed |
+> | S12 remote template / external links | ✅ | `TargetMode="External"` relationships reported (attachedTemplate flagged as remote template); zero network requests |
+> | F28 formula integrity | ✅ | XLSX extractor: `manual_override_suspected` for typed numbers on Total / EBITDA / Revenue / Net income / Gross profit / Operating income lines in formula-driven sheets; `formulas_without_cached_values` |
+> | S17 XSS-safe output & formula-injection prevention | 🟡 | The React UI escapes all text; CSV/XLSX export guard is implemented with the Phase 4 exports. Markdown output of the parser is not HTML-escaped |
+> | S19 schema validation on every response | 🟡 | Parser endpoints are validated by Pydantic response models; DealLens endpoints return typed dicts (not yet model-validated) |
+> | F34 security gauntlet | ⏳ | `tests/gauntlet/make_gauntlet.py` does not exist yet. Equivalent coverage exists as unit/integration tests (`backend/tests/test_rag_security.py`) |
+
 - **Hidden content detection** (S15) — Detects white-on-white text, sub-1pt fonts,
   off-page bounding boxes, and text hidden under images in PDFs; detects hidden
   sheets and hidden rows/columns in Excel. All hidden content is moved to a
@@ -154,3 +171,40 @@ extractive answer ≈ 1.3 s; LLM answer (short, grounded) ≈ 4 s, ~20 tokens/s.
 Verified live on the demo data room: "total debt maturing in 2026" → ₹104.8 Cr (14 operands over both pages, all exact
 cells), total debt ₹385.6 Cr, Equipment Loan 45 ₹2.8 Cr (page 2), revenue growth +20.8 %, net debt ÷ EBITDA 3.86×,
 CIM FY2023 revenue ₹385 Cr — each in under a second.
+
+
+## Phase 3 — Trust & security in RAG  ✅
+
+- ✅ **Injection shield at ingest** — every block is scanned before chunking. Instruction-like text aimed at an AI
+  ("ignore previous instructions", role hijack, prompt exfiltration, answer steering, chat-template tokens) and hidden
+  text are **quarantined**: excluded from retrieval and from every prompt, kept (never deleted) and listed with reason,
+  page and the exact text. Ordinary legal/financial prose that merely contains words like "previous" or "instructions" is
+  not flagged (tested).
+- ✅ **Hidden-text detection** — PDF: white / near-background text (but *not* white text on a coloured band or over an
+  image), font < 1 pt, text outside the page, invisible render mode (ignored on scans, whose OCR layer is invisible by
+  design); DOCX: hidden, white or < 1 pt runs; XLSX: hidden sheets, hidden rows and columns (their values are removed
+  from the table before it is indexed). Hidden text is mapped back to its exact block and bounding box.
+- ✅ **Quarantine tab** — every finding with a coloured kind (hidden content / instruction aimed at an AI / active content ·
+  not executed / unicode trick), the reason in plain words, document and page, the quoted text, and **"Show in document"**
+  which opens the page with a box on the exact line.
+- ✅ **"Source excluded" notice on answers** — if the question would have drawn on a quarantined passage (cross-encoder
+  relevance), the answer shows "⚠ 1 source excluded: Instruction aimed at an AI … on p.1 (Falcon_Board_Minutes.pdf)".
+  Example: the hidden-sheet add-back question abstains and says the only source is a hidden spreadsheet sheet.
+- ✅ **Security & quality badges on citations** — `hardcoded value` (formula-less financial cell), `needs review`,
+  `estimated values`, `low OCR confidence`, `security finding in this document` (red).
+- ✅ **Active-content findings** (PDF JavaScript/OpenAction/Launch/EmbeddedFiles; Office macros, DDE, OLE, external
+  references) reported as `not_executed`; the document is still indexed.
+- ✅ **Unicode defence** — NFKC normalisation and zero-width / bidi stripping of everything indexed; mixed Latin/Cyrillic/Greek
+  words flagged for review.
+- ✅ **Document names scope the search** — "in the CIM", "per the management accounts" restrict retrieval and table
+  candidates to the named file.
+- ✅ **Baseline vs DealLens "Hallucination Trap" (Compare page)** — a deliberately naive pipeline (pypdf / python-docx /
+  openpyxl text only, hidden text included, fixed 500-token chunks, dense-only, same local LLM, no verification, no
+  abstention, no quarantine) and DealLens answer the same question **live, side by side**, with timings. Five preset trap
+  buttons (unanswerable, hidden instruction, page-split table, chart value, missing schedule). To keep it honest, *our*
+  grounding check and injection scan are run on the baseline's output for display and labelled as such.
+  Observed on this machine with the same local model: the baseline **obeys the hidden instruction** ("No, Falcon Industries
+  does not have any debt") while DealLens answers "Yes … ₹385.6 crore" and shows the excluded source; the baseline needs
+  25–55 s and cannot produce the exact page-split total that DealLens computes in under 2 s. (It does *not* hallucinate on
+  the unanswerable and chart questions with this model: it says "cannot be determined"; the gap there is receipts,
+  provenance and speed, not invention.)
