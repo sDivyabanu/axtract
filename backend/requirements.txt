@@ -46,3 +46,4 @@ pytest
 pytest-asyncio
 reportlab          # BSD: fixture PDFs
 matplotlib         # fixture charts / rendered equations
+python-dotenv

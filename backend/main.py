@@ -1,6 +1,11 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -32,9 +37,15 @@ async def lifespan(app: FastAPI):
     if features:
         logger.info("AXTRACT features enabled: %s", ", ".join(features))
     if "database" in features:
-        from db.prisma_client import get_pool
-        await get_pool()
-        logger.info("Database connection pool initialized.")
+        from db.prisma_client import close_pool, _use_rest
+        try:
+            rest_mode = await _use_rest()
+            logger.info(
+                "Database ready (%s).",
+                "Supabase REST over HTTPS" if rest_mode else "PostgreSQL",
+            )
+        except Exception:
+            logger.warning("Database unavailable; DB-backed features degraded.")
     yield
     if "database" in features:
         from db.prisma_client import close_pool
