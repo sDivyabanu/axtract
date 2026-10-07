@@ -1,6 +1,9 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -11,37 +14,24 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from models.errors import AppError, ErrorInfo, ErrorResponse
 from routers import auth, documents, health, parse, preview
 
+# Optional backend settings (Supabase, database, encryption key). Real environment wins.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+
 logger = logging.getLogger("parseanything")
-
-
-def _validate_env() -> list[str]:
-    """Check which optional env vars are set for feature availability."""
-    available = []
-    if os.environ.get("DATABASE_URL"):
-        available.append("database")
-    if os.environ.get("SUPABASE_URL"):
-        available.append("supabase")
-    if os.environ.get("AXTRACT_MASTER_KEY_BASE64"):
-        available.append("encryption")
-    return available
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    features = _validate_env()
-    if features:
-        logger.info("AXTRACT features enabled: %s", ", ".join(features))
-    if "database" in features:
-        from db.prisma_client import get_pool
-        await get_pool()
-        logger.info("Database connection pool initialized.")
+    # The database pool is created lazily on the first persistence request, so an
+    # unreachable or unconfigured database never prevents parsing from working.
     yield
-    if "database" in features:
+    if os.environ.get("DATABASE_URL"):
         from db.prisma_client import close_pool
+
         await close_pool()
 
 
-app = FastAPI(title="AXTRACT API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="ParseAnything API", version="0.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")
