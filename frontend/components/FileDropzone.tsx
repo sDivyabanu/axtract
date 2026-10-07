@@ -2,6 +2,9 @@
 
 import { useRef, useState, type DragEvent } from "react";
 
+const ACCEPTED_TYPES =
+  ".pdf,.docx,.pptx,.xlsx,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png";
+
 interface FileDropzoneProps {
   selectedFile: File | null;
   onFileSelected: (file: File) => void;
@@ -32,42 +35,46 @@ export default function FileDropzone({
       }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
-      className={`flex flex-col items-center gap-3 rounded border-2 border-dashed p-8 text-center ${
-        isDragging ? "border-blue-600 bg-blue-50" : "border-gray-400"
+      className={`flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+        isDragging
+          ? "border-blue-500 bg-blue-50"
+          : "border-gray-300 hover:border-gray-400"
       }`}
     >
-      <p>Drag and drop a file here</p>
-      <p className="text-sm text-gray-600">or</p>
+      <div className="text-4xl">📄</div>
+      <p className="font-medium">Drag and drop a file here</p>
+      <p className="text-sm text-gray-500">or</p>
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={disabled}
-        className="rounded border border-gray-500 px-4 py-2 disabled:opacity-50"
+        className="rounded-md bg-gray-900 px-4 py-2 text-sm text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
       >
         Choose File
       </button>
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,application/pdf"
+        accept={ACCEPTED_TYPES}
         className="hidden"
         disabled={disabled}
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) onFileSelected(file);
-          // Reset so selecting the same file again still fires onChange.
           event.target.value = "";
         }}
       />
-      <p className="text-sm">
-        {selectedFile ? (
-          <>
-            Selected: <strong>{selectedFile.name}</strong>
-          </>
-        ) : (
-          "No file selected"
-        )}
+      <p className="text-xs text-gray-400">
+        PDF · DOCX · PPTX · XLSX · JPG · PNG
       </p>
+      {selectedFile && (
+        <p className="text-sm">
+          Selected: <strong>{selectedFile.name}</strong>{" "}
+          <span className="text-gray-400">
+            ({(selectedFile.size / 1024).toFixed(1)} KB)
+          </span>
+        </p>
+      )}
     </div>
   );
 }
