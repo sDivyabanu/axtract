@@ -9,9 +9,11 @@ export type BlockType =
   | "figure"
   | "chart"
   | "equation"
+  | "header"
+  | "footer"
   | "unknown";
 
-// [x1, y1, x2, y2] in PDF points, origin at top-left of the page.
+// [x1, y1, x2, y2] normalized 0.0–1.0, origin at top-left of the page.
 export type BBox = [number, number, number, number];
 
 export interface DocumentBlock {
@@ -22,6 +24,8 @@ export interface DocumentBlock {
   bbox: BBox | null;
   confidence: number | null;
   extractor: string;
+  reading_order: number | null;
+  requires_review: boolean;
   metadata: Record<string, unknown>;
 }
 
@@ -39,6 +43,7 @@ export interface DocumentResponse {
   processing_time_ms: number;
   status: "success" | "partial";
   blocks: DocumentBlock[];
+  markdown: string;
   errors: DocumentError[];
 }
 
