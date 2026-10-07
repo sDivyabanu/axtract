@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Profile {
+  id        String   @id @db.Uuid
+  fullName  String?  @map("full_name")
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  documents Document[]
+
+  @@map("profiles")
+}
+
+model Document {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  originalFilename String    @map("original_filename")
+  mimeType         String    @map("mime_type")
+  fileSizeBytes    Int       @map("file_size_bytes")
+  status           String    @default("pending")
+  pageCount        Int?      @map("page_count")
+  blockCount       Int?      @map("block_count")
+  processingTimeMs Int?      @map("processing_time_ms")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user           Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions       DocumentVersion[]
+  processingRuns ProcessingRun[]
+
+  @@index([userId])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentId          String   @map("document_id") @db.Uuid
+  versionNumber       Int      @map("version_number") @default(1)
+  storagePath         String   @map("storage_path")
+  encryptionAlgorithm String   @default("aes-256-gcm") @map("encryption_algorithm")
+  encryptionVersion   Int      @default(1) @map("encryption_version")
+  encryptionNonce     Bytes    @map("encryption_nonce") @db.ByteA
+  encryptedDek        Bytes    @map("encrypted_dek") @db.ByteA
+  dekWrappingNonce    Bytes    @map("dek_wrapping_nonce") @db.ByteA
+  keyVersion          Int      @default(1) @map("key_version")
+  ciphertextSizeBytes Int      @map("ciphertext_size_bytes")
+  contentHash         String?  @map("content_hash")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  document       Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  processingRuns ProcessingRun[]
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+  @@map("document_versions")
+}
+
+model ProcessingRun {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentId        String    @map("document_id") @db.Uuid
+  documentVersionId String    @map("document_version_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  status            String    @default("pending")
+  startedAt         DateTime  @default(now()) @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+  processingTimeMs  Int?      @map("processing_time_ms")
+  pageCount         Int?      @map("page_count")
+  blockCount        Int?      @map("block_count")
+  errorCode         String?   @map("error_code")
+  errorMessage      String?   @map("error_message")
+  pipelineVersion   String    @default("1.0") @map("pipeline_version")
+
+  document        Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion  @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  output          DocumentOutput?
+
+  @@index([documentId])
+  @@index([userId])
+  @@map("processing_runs")
+}
+
+model DocumentOutput {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  processingRunId String   @unique @map("processing_run_id") @db.Uuid
+  responseJson    Json     @map("response_json")
+  markdown        String   @default("")
+  schemaVersion   String   @default("1.0") @map("schema_version")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  processingRun ProcessingRun @relation(fields: [processingRunId], references: [id], onDelete: Cascade)
+
+  @@map("document_outputs")
+}

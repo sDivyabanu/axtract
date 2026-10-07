@@ -16,6 +16,12 @@ out/
 .env
 .env.*
 !.env.example
+!backend/.env.example
+
+# Prisma generated
+dist/
+src/prisma/
+prisma-8.md
 
 # Temporary uploads and generated output
 backend/uploads/*

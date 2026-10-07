@@ -1,0 +1,30 @@
+{
+  "name": "axtract",
+  "version": "1.0.0",
+  "description": "**Universal document ingestion engine.** Accepts documents in multiple formats and converts them into structured JSON and clean Markdown, preserving headings, paragraphs, lists, tables, figures, page context, bounding boxes, extractor provenance, and real confidence scores.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "contract:emit": "prisma contract emit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sDivyabanu/axtract.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sDivyabanu/axtract/issues"
+  },
+  "homepage": "https://github.com/sDivyabanu/axtract#readme",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/cli-engine": "^0.6.3",
+    "@prisma/client": "^7.10.0",
+    "@prisma/config": "^7.10.0",
+    "@prisma/orm-postgres": "^8.0.0-rc.16",
+    "dotenv": "^18.0.6",
+    "pg": "^8.23.1",
+    "prisma": "^8.0.0-rc.21"
+  }
+}

@@ -17,6 +17,18 @@ rapidocr-onnxruntime
 # Image processing
 Pillow
 
+# Database
+asyncpg
+
+# Authentication
+PyJWT[crypto]
+
+# Encryption
+cryptography
+
+# HTTP client (for Supabase Storage)
+httpx
+
 # Testing
 pytest
-httpx
+pytest-asyncio
