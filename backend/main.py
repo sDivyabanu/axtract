@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -11,7 +12,16 @@ from routers import health, parse, preview, rag
 
 logger = logging.getLogger("parseanything")
 
-app = FastAPI(title="ParseAnything API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    from rag import warmup
+
+    warmup.start()  # background: LLM weights + prompt, embedder, reranker, retrieval indexes (never blocks or fails startup)
+    yield
+
+
+app = FastAPI(title="ParseAnything API", version="0.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -46,6 +56,7 @@ app.include_router(health.router)
 app.include_router(parse.router)
 app.include_router(preview.router)
 app.include_router(rag.router)
+
 
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:

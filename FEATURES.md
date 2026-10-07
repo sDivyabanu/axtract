@@ -302,3 +302,58 @@ CIM FY2023 revenue ₹385 Cr — each in under a second.
   filters. Entries contain ids, hashes and timings only — never document text (tested).
 - ✅ **Suggested questions** — per document, generated **deterministically** from its headings, debt-maturity tables and charts (no LLM,
   so they are instant and can never be hallucinated); clicking one asks it (`GET …/suggestions`).
+
+## Phase 7 — Local latency & answer quality (still 100 % Ollama)  ✅ (measured; see limits)
+
+Decision: **no cloud model, no remote option** — the brief requires fully self-hosted operation. Everything below runs on the local
+`qwen3:4b-instruct`; the Baseline pipeline uses the same model, so the Compare page and the eval stay fair.
+Measured with `scripts/bench_latency.py` (HTTP against a running server; raw numbers in `reports/latency_*.json`) and
+`scripts/cold_start.py` (unloads the model, restarts the backend, times the first answer).
+
+- ✅ **Warm-up at server start** (`rag/warmup.py`, lifespan hook) — loads the LLM and primes it with the real system prompt, loads the embedder and
+  cross-encoder, and builds the retrieval index of the 12 most recent data rooms, in the background. `keep_alive = -1` (configurable
+  `DEALLENS_KEEP_ALIVE`) so the model never unloads mid-demo. Status is shown in `GET /api/rag/status → warmup`. **First answer after a cold start:
+  first token 9.6 s → 3.6 s, total 13.1 s → 8.6 s** (model load 3.4 s → 9 ms; warm-up finishes about 5 s after the API is up; a question asked
+  *during* warm-up took 7.4 s to first token).
+- ✅ **Smaller, cheaper prompts** — at most `PROMPT_K = 4` sources go to the model, each trimmed to the first sentence plus the best-matching sentences
+  (or a table's header, best-matching rows and total row), under a hard character budget (`PROMPT_CHARS`); `num_ctx` 6144 → 4096 (a test checks the
+  budget fits). Grounding verification still checks claims against the **full** source chunks. Prompt tokens are now recorded per answer
+  (Glass Box → Generating stage: prompt/completion tokens, time to first token, Ollama's own prompt-eval and generation time).
+- ✅ **Skip the LLM when it is not needed** — numeric answers come from the table engine (one templated sentence, no LLM call), abstentions never call the LLM
+  (both were already so; confirmed by the stage timings). **The LLM planner is now opt-in** (`DEALLENS_LLM_PLANNER=1`): none of the 27 golden questions
+  needed it, and on a 364-page report it cost 4–22 s per numeric-sounding question for no answer. Rules still run first.
+- ✅ **Streaming** — tokens and stage chips stream to the UI as they are produced (unchanged; time to first token is now measured).
+- ✅ **Retrieval / floor-score bugs fixed** — (a) coverage alone could accept hopeless evidence (*"capital of France" answered from model knowledge on a real
+  report*): added a hard cross-encoder floor, waived only when the question names a document ("summarise the board minutes"); (b) the rule planner turned
+  *"how many employees"* into a nonsense row count with a Number Receipt: counts now need a repeating row noun, and average/max/min need a title or column match.
+- ✅ **Tighter answer prompt** — answer-first in one sentence, a second sentence only for a needed qualifier (period, unit, condition), no commentary, ≤ 60 words,
+  3 short domain examples (debt, contract clause, not-found), `max_tokens` 170. Each source tag now carries its **section title**; document-derived text
+  in tag attributes is sanitised so a heading cannot close the source block (tested).
+- ⏳ **Smaller / more quantised model (step 7)** — not started: the target is met on the golden set (below), so per your instruction I will bring numbers
+  before switching anything.
+
+### Measured results (golden set, 27 questions, DealLens, LLM on)
+
+| Run | p50 | p95 | LLM-answered p50 (n) | mean prompt tokens | accuracy |
+|---|---|---|---|---|---|
+| before (after the abstention-floor fix) | 1.34 s | 7.9 s | 5.7 s (8) | 326 | 96.3 % (q26 over-abstained; fixed since) |
+| + prompt trim | 1.38 s | 11.2 s | 5.3 s (9) | 320 | 100 % |
+| + planner gating | 1.37 s | 8.1 s | 4.8 s (9) | 320 | 100 % |
+| + answer-first prompt with 4 examples | 1.30 s | 8.5 s | 6.2 s (9) | 618 | 100 % |
+| **final (compact prompt)** | **1.32 s** | **9.2 s** | **5.2 s (9)** | **534** | **100 %** |
+
+**Honest reading:** the *p50 < 8 s* target was already met on the golden set before any change, because 18 of 27 answers are computed or extractive and never wait for
+the LLM; p95 is the LLM-answered tail and did not improve (it is dominated by 8–10 s generations). Prompt trimming made **no difference on this room** (its
+passages are already ~300 tokens) and the few-shot examples *added* ~200 tokens per call; the real gains are the cold start, the removed planner calls and the
+bug fixes. Answer quality on the large report improved (CEO question found instead of a false "not found"; dividend answer leads with the figure; filler gone).
+
+### Large real report (364-page annual report, 8 questions) — target NOT met
+
+p50 was 7.6 s in the first measurement and 15–17 s in the final ones. A controlled check against Ollama (identical 1,562-token prompt, `num_ctx` 4096 vs 6144) showed
+**no difference from my context change** (~80 tokens/s both ways) and that the machine was running prefill at ~80 tokens/s, versus 300+ earlier in the session.
+At that moment the Mac was **on battery at 25 % with Low Power Mode on**, and ~4 GB of swap in use (8 GB RAM; `llama-server` alone holds ~3 GB), so the large-report timings
+are not a fair measure of the code. **To be re-measured plugged in, Low Power Mode off, other apps closed** (`scripts/bench_latency.py --label final_ac --big`).
+Prompts on this report were not smaller (mean ≈ 1.2k tokens; numeric tables tokenise densely). Ollama's prompt cache works (an identical repeat took 69 ms), so the fixed
+system prompt is likely cheaper than its token count suggests, but I did not isolate that. Known wrong/weak answers remain: *"total revenue"* returned $78,454 M, which is the **International
+metrics** table, not firm-wide revenue (the section title is visible in the Sources list); *"employees"* returned an irrelevant "150 employees". These are
+retrieval/scope limits of a 4B model on a 364-page document, not fixed by prompting.

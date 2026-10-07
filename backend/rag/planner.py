@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from rag import db, llm, meta as M
+from rag import config, db, llm, meta as M
 from rag.table_ops import PlanError, Table, execute, validate_plan
 
 _STOP = {"what", "which", "how", "much", "many", "is", "are", "was", "were", "the", "a", "an", "of", "in", "for", "to", "and",
@@ -79,11 +79,11 @@ def candidate_table_ids(workspace_id: str, question: str, ranked_chunk_rows: lis
 
 def catalog(tables: dict[str, Table]) -> list[dict[str, Any]]:
     out = []
-    for alias, t in tables.items():
+    for alias, t in list(tables.items())[:3]:  # a long catalog makes the planner call slow (and overflows the context)
         out.append({
             "table": alias, "title": t.title, "document": t.filename, "unit": " ".join(x for x in (t.currency, t.unit) if x) or None,
             "columns": [p for p in t.grid["col_paths"] if p],
-            "rows": [r["label"] for r in t.grid["rows"] if r["label"]][:60],
+            "rows": [r["label"] for r in t.grid["rows"] if r["label"]][:40],
         })
     return out
 
@@ -278,6 +278,14 @@ def _rule_plan_for(question: str, alias: str, t: Table, rows: list[dict]) -> dic
     # --- whole-column statistics
     fn = "average" if _AVG.search(question) else "max" if _MAX.search(question) else "min" if _MIN.search(question) \
         else "count" if _COUNT.search(question) else None
+    if fn == "count":  # only meaningful when the counted noun repeats across the row labels ("Equipment Loan" x42)
+        from collections import Counter
+
+        row_words = Counter(w for r in t.grid["rows"] for w in set(_norm(r["label"])))
+        if not any(row_words[w] >= 3 for w in qt):
+            fn = None
+    elif fn and not (qt & (set(_norm(t.title)) | {x for p in paths for x in _norm(p)})):
+        fn = None  # average/max/min need the title or a column header to match, not just a stray row-label word
     if fn:
         return {"title": f"{fn.capitalize()} of {col}", "steps": [{"id": "s1", "op": "aggregate", "fn": fn, "table": alias, "col": col}], "output": "s1"}
 
@@ -337,7 +345,9 @@ def llm_plan(question: str, tables: dict[str, Table]) -> dict[str, Any] | None:
 def plan_and_run(question: str, tables: dict[str, Table], allow_llm: bool = True) -> dict[str, Any]:
     """{'result': Result|None, 'plan': dict|None, 'planner': 'rules'|'llm'|None, 'error': str|None, 'refused': bool}"""
     attempts: list[tuple[str, dict[str, Any] | None]] = [("rules", p) for p in rule_plans(question, tables)]
-    if allow_llm and llm.status()["available"]:
+    # the LLM planner is a slow last resort: only when the question asks for a calculation and the rules found nothing
+    wants_calc = any(rx.search(question) for rx in (_GROWTH, _CAGR, _RATIO, _DIFF, _TOTAL, _AVG, _MAX, _MIN, _COUNT, _MATURING))
+    if allow_llm and config.LLM_PLANNER and wants_calc and llm.status()["available"]:
         attempts.append(("llm", None))
     last_error: str | None = None
     for kind, plan in attempts:

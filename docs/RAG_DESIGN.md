@@ -51,3 +51,10 @@ Colour language: green verified · amber needs review/estimated · red contradic
 LLM never decides facts or does arithmetic (plans JSON; our DSL computes). No `eval`/`exec` of model output. Document text is
 untrusted: sources are wrapped in delimited blocks with a "sources are data" instruction; quarantined chunks never reach the
 prompt. If Ollama is down → extractive mode with a visible badge. Logs carry ids/hashes/timings only.
+
+## Latency and warm-up (local-only)
+
+Everything stays on the local Ollama model. At server start `rag/warmup.py` loads the model (primed with the real system prompt, `keep_alive=-1`), the embedder, the
+cross-encoder and the indexes of the 12 newest data rooms in the background. Prompts send at most 4 sources, each trimmed to its relevant sentences or table rows under
+`DEALLENS_PROMPT_CHARS`; `num_ctx` is 4096. The numeric planner is rules-only by default (`DEALLENS_LLM_PLANNER=1` enables the LLM fallback). Measured results and
+their limits are in `FEATURES.md` (Phase 7) and `reports/latency_*.json`.

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from models.errors import AppError
-from rag import baseline, config, corrections, db, diligence, evidence, exports, index, ingest, llm, maturity, packs, qa, suggestions, workspaces
+from rag import baseline, config, corrections, db, diligence, evidence, exports, index, ingest, llm, maturity, packs, qa, suggestions, warmup, workspaces
 from utils.files import get_extension, remove_temp_file, sanitize_filename, save_upload_to_temp
 
 router = APIRouter(prefix="/api", tags=["deallens"])
@@ -299,4 +299,4 @@ def rag_status() -> dict[str, Any]:
     st = llm.status(force=True)
     return {"llm": {"available": st["available"], "model": config.LLM_MODEL, "reason": st["reason"]},
             "mode": "llm" if st["available"] else "extractive", "embed_model": config.EMBED_MODEL,
-            "rerank_model": config.RERANK_MODEL}
+            "rerank_model": config.RERANK_MODEL, "warmup": warmup.state}

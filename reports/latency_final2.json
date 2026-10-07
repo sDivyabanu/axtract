@@ -1,0 +1,183 @@
+{
+  "label": "final2",
+  "ts": "2026-10-08 05:12",
+  "falcon": [],
+  "big": [
+    {
+      "q": "Which company is this annual report for?",
+      "answer": "The annual report is for JPMorganChase.",
+      "ms": 15627,
+      "first_token_ms": 14183,
+      "mode": "llm",
+      "prompt_tokens": 1421,
+      "completion_tokens": 15,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 1075,
+        "Generating": 14375,
+        "Verifying": 1
+      },
+      "ttft_ms": 12944,
+      "prompt_eval_ms": 12886,
+      "gen_ms": 1429
+    },
+    {
+      "q": "What is the net profit for the year?",
+      "answer": "Net income for the year ended December 31, 2025, was $57,048 million.",
+      "ms": 25988,
+      "first_token_ms": 22801,
+      "mode": "llm",
+      "prompt_tokens": 2061,
+      "completion_tokens": 31,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 13,
+        "Reranking": 1172,
+        "Computing": 25,
+        "Generating": 24644,
+        "Verifying": 2
+      },
+      "ttft_ms": 21470,
+      "prompt_eval_ms": 21324,
+      "gen_ms": 3176
+    },
+    {
+      "q": "What was the total revenue for the year?",
+      "answer": "The total net revenue for the year ended December 31, 2025, was $78,454 million. This figure is derived from the total net revenue section in the annual report.",
+      "ms": 11548,
+      "first_token_ms": 6495,
+      "mode": "llm",
+      "prompt_tokens": 1009,
+      "completion_tokens": 49,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 29,
+        "Reranking": 1215,
+        "Computing": 26,
+        "Generating": 10142,
+        "Verifying": 1
+      },
+      "ttft_ms": 5101,
+      "prompt_eval_ms": 4901,
+      "gen_ms": 5048
+    },
+    {
+      "q": "Who is the chief executive officer?",
+      "answer": "Jamie Dimon is the Chairman and Chief Executive Officer. Phebe N. Novakovic is listed as Chief Executive Officer. Amin H. Nasser is Group Chief Executive Office",
+      "ms": 10348,
+      "first_token_ms": 3549,
+      "mode": "llm",
+      "prompt_tokens": 633,
+      "completion_tokens": 66,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 32,
+        "Reranking": 182,
+        "Generating": 9919,
+        "Verifying": 1
+      },
+      "ttft_ms": 3135,
+      "prompt_eval_ms": 2985,
+      "gen_ms": 6782
+    },
+    {
+      "q": "What was the dividend per share declared?",
+      "answer": "The dividend per share declared was $257.50 for Series R preferred stock. Prior to August 1, 2023, the dividend rate was fixed at $300.00 per share.",
+      "ms": 17553,
+      "first_token_ms": 11864,
+      "mode": "llm",
+      "prompt_tokens": 1180,
+      "completion_tokens": 54,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 27,
+        "Reranking": 1626,
+        "Generating": 15635,
+        "Verifying": 2
+      },
+      "ttft_ms": 9965,
+      "prompt_eval_ms": 9859,
+      "gen_ms": 5669
+    },
+    {
+      "q": "What is the capital of France?",
+      "answer": "Not found in this data room.",
+      "ms": 1089,
+      "first_token_ms": 1089,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 77,
+        "Reranking": 793
+      },
+      "ttft_ms": null,
+      "prompt_eval_ms": null,
+      "gen_ms": null
+    },
+    {
+      "q": "What are the main risk factors described?",
+      "answer": "The main risk factors described are market risk, operational risk, and structural interest rate risk. Market risk arises from changes in market factors such as ",
+      "ms": 16903,
+      "first_token_ms": 7154,
+      "mode": "llm",
+      "prompt_tokens": 865,
+      "completion_tokens": 95,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 14,
+        "Reranking": 793,
+        "Generating": 15788,
+        "Verifying": 1
+      },
+      "ttft_ms": 6052,
+      "prompt_eval_ms": 5849,
+      "gen_ms": 9736
+    },
+    {
+      "q": "How many employees does the firm have?",
+      "answer": "The firm has 150 company employees throughout the state.",
+      "ms": 10180,
+      "first_token_ms": 8519,
+      "mode": "llm",
+      "prompt_tokens": 1002,
+      "completion_tokens": 17,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 19,
+        "Reranking": 707,
+        "Computing": 27,
+        "Generating": 9121,
+        "Verifying": 1
+      },
+      "ttft_ms": 7474,
+      "prompt_eval_ms": 7354,
+      "gen_ms": 1648
+    }
+  ],
+  "summary": {
+    "falcon": {},
+    "big": {
+      "n": 8,
+      "p50_ms": 15627,
+      "p95_ms": 25988,
+      "mean_ms": 13654,
+      "first_token_p50_ms": 8519,
+      "first_token_p95_ms": 22801,
+      "llm_answers": 7,
+      "llm_p50_ms": 15627,
+      "prompt_tokens_mean": 1167
+    },
+    "falcon_accuracy": 0.0
+  }
+}
