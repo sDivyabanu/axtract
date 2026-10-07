@@ -1,21 +1,61 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
 import ResultView from "@/components/ResultView";
 import { ApiError, parseDocument } from "@/lib/api";
+import { getDocumentResult, uploadDocument } from "@/lib/api-authenticated";
+import { useAuth } from "@/lib/auth-context";
 import type { DocumentResponse } from "@/lib/types";
 
+// Saving is an add-on: if it is unavailable the document is still parsed the normal way.
+const SAVE_UNAVAILABLE = new Set([
+  "NETWORK_ERROR",
+  "AUTH_REQUIRED",
+  "INTERNAL_ERROR",
+  "HTTP_401",
+  "HTTP_500",
+  "HTTP_502",
+  "HTTP_503",
+]);
+
 export default function Home() {
+  const { user, loading: authLoading } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<DocumentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Opening a history item (/?doc=<id>) shows the saved result without parsing again.
+  useEffect(() => {
+    const savedId = new URLSearchParams(window.location.search).get("doc");
+    if (!savedId || authLoading || !user) return;
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const saved = await getDocumentResult(savedId);
+        if (!cancelled) setResult(saved.result);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof ApiError ? `[${err.code}] ${err.message}` : "Could not open the saved document.");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
 
   function handleFileSelected(file: File) {
     setSelectedFile(file);
     setResult(null);
     setError(null);
+    setNotice(null);
   }
 
   async function handleParse() {
@@ -23,8 +63,19 @@ export default function Home() {
     setIsLoading(true);
     setResult(null);
     setError(null);
+    setNotice(null);
     try {
-      setResult(await parseDocument(selectedFile));
+      if (user) {
+        try {
+          setResult((await uploadDocument(selectedFile)).result);
+        } catch (err) {
+          if (!(err instanceof ApiError) || !SAVE_UNAVAILABLE.has(err.code)) throw err;
+          setNotice("This document could not be saved to your history, so it was parsed without saving.");
+          setResult(await parseDocument(selectedFile));
+        }
+      } else {
+        setResult(await parseDocument(selectedFile));
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(`[${err.code}] ${err.message}`);
@@ -66,6 +117,12 @@ export default function Home() {
         <p className="text-sm text-gray-500">
           Parsing document, please wait…
         </p>
+      )}
+
+      {notice && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+          {notice}
+        </div>
       )}
 
       {error && (

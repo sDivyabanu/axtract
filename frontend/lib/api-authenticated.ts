@@ -21,14 +21,20 @@ async function authFetch(
   init?: RequestInit,
 ): Promise<Response> {
   const token = await getAccessToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      ...init?.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  return response;
+  try {
+    return await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch {
+    throw new ApiError(
+      "NETWORK_ERROR",
+      `Could not reach the backend at ${API_BASE_URL}. Is FastAPI running?`,
+    );
+  }
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -43,11 +49,15 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 
   if (!response.ok) {
-    const detail =
-      typeof payload === "object" && payload !== null && "detail" in payload
-        ? String((payload as { detail: unknown }).detail)
-        : `Request failed (HTTP ${response.status}).`;
-    throw new ApiError("HTTP_ERROR", detail);
+    const body = (typeof payload === "object" && payload !== null ? payload : {}) as {
+      error?: { code?: string; message?: string };
+      detail?: unknown;
+    };
+    throw new ApiError(
+      body.error?.code ?? `HTTP_${response.status}`,
+      body.error?.message ??
+        (body.detail !== undefined ? String(body.detail) : `Request failed (HTTP ${response.status}).`),
+    );
   }
 
   return payload as T;
