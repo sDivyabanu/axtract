@@ -57,6 +57,10 @@ class TableOut:
     currency: str | None
     statement: str | None
     grid: dict[str, Any]
+    printed: dict[str, str] = field(default_factory=dict)
+    conf: float | None = None
+    estimated: bool = False
+    kind: str = "table"
 
 
 @dataclass
@@ -117,6 +121,41 @@ def _split_long(text: str, limit: int) -> list[str]:
     if cur:
         pieces.append(cur)
     return pieces
+
+
+def chart_table(b: DocumentBlock, data: dict) -> tuple[dict, str | None, float | None, str | None] | None:
+    """A chart's series as a queryable grid: categories are rows, series are columns."""
+    series = data.get("series") or []
+    if not series or not any(isinstance(v, (int, float)) for s in series for v in s.get("values", [])):
+        return None
+    cats = data.get("categories") or []
+    scatter = any(s.get("x_values") for s in series)
+    n = max(len(s["values"]) for s in series)
+    loc_ = loc(b)
+    unit = M.detect_unit(" ".join([str(data.get("title", "")), str(data.get("y_label", "")), str(data.get("x_label", ""))]))
+    rows = []
+    for i in range(n):
+        if scatter:
+            xs = series[0].get("x_values") or []
+            label = f"x={xs[i]:g}" if i < len(xs) and xs[i] is not None else f"point {i + 1}"
+        else:
+            label = str(cats[i]) if i < len(cats) and cats[i] else f"item {i + 1}"
+        cells = [{"raw": label, "v": None, "pct": False, "page": loc_["page"], "bbox": loc_["bbox"], "exact_cell": False, "conf": b.confidence}]
+        for s in series:
+            v = s["values"][i] if i < len(s["values"]) else None
+            cells.append({"raw": None if v is None else f"{v:g}", "v": None if v is None else float(v), "pct": False,
+                          "page": loc_["page"], "bbox": loc_["bbox"], "exact_cell": False, "conf": b.confidence})
+        rows.append({"ridx": i + 1, "label": label, "is_total": False, "cells": cells})
+    def series_name(k: int, s: dict) -> str:
+        name = s.get("name") or f"Series {k + 1}"
+        if len(series) == 1 and re.fullmatch(r"Series \d+", name):
+            return str(data.get("y_label") or data.get("title") or name)  # what the chart measures
+        return name
+
+    paths = ["Category"] + [series_name(k, s) for k, s in enumerate(series)]
+    grid = {"header_rows": 1, "col_paths": paths, "col_periods": [None] * len(paths), "rows": rows, "merged": [],
+            "n_cols": len(paths)}
+    return grid, unit[0], unit[1], unit[2]
 
 
 def build_chunks(blocks: list[DocumentBlock], doc_type: str, filename: str) -> Built:
@@ -223,8 +262,9 @@ def build_chunks(blocks: list[DocumentBlock], doc_type: str, filename: str) -> B
             statement = M.detect_statement(" ".join(hp + [caption, header_text]))
             if grid:
                 periods = [p for p in grid["col_periods"] if p]
-                built.tables.append(TableOut(b.id, title, int(b.metadata.get("preview", {}).get("page") or b.page),
-                                             unit[0], unit[1], unit[2], statement, grid))
+                tpages = [int(p["page"]) for p in (b.metadata.get("part_bboxes") or [])] or [loc(b)["page"]]
+                built.tables.append(TableOut(b.id, title, loc(b)["page"], unit[0], unit[1], unit[2], statement, grid,
+                                             {str(p): pmap[p] for p in tpages if p in pmap}, b.confidence))
                 summary = table_summary(grid, title, unit[0], unit[2], loc(b)["page"])
             else:
                 periods, summary = [], f"Table on page {loc(b)['page']}."
@@ -239,7 +279,14 @@ def build_chunks(blocks: list[DocumentBlock], doc_type: str, filename: str) -> B
         if t == "chart":
             flush_section()
             md = b.metadata.get("markdown") or content
-            emit("chart", md, md, [b], {"chart_type": b.metadata.get("chart_type")})
+            data = b.metadata.get("chart_data") or {}
+            ct = chart_table(b, data)
+            if ct is not None:
+                built.tables.append(TableOut(b.id, data.get("title") or "", loc(b)["page"], ct[1], ct[2], ct[3], None, ct[0],
+                                             {str(p): pmap[p] for p in [loc(b)["page"]] if p in pmap}, b.confidence,
+                                             bool(data.get("values_estimated")), "chart"))
+            emit("chart", md, md, [b], {"chart_type": b.metadata.get("chart_type"), "table_id": b.id,
+                                         "estimated": bool(data.get("values_estimated"))}, table_ref=b.id if ct else None)
             continue
 
         if t == "equation":

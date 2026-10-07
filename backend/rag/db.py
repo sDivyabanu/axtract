@@ -37,7 +37,8 @@ CREATE INDEX IF NOT EXISTS ix_chunk_ws ON chunks(workspace_id);
 CREATE INDEX IF NOT EXISTS ix_chunk_doc ON chunks(doc_id);
 CREATE TABLE IF NOT EXISTS tables_store (
   table_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, workspace_id TEXT NOT NULL, block_id TEXT,
-  title TEXT, page INTEGER, unit TEXT, scale REAL, currency TEXT, statement TEXT, grid_json TEXT NOT NULL);
+  title TEXT, page INTEGER, unit TEXT, scale REAL, currency TEXT, statement TEXT, grid_json TEXT NOT NULL,
+  printed_json TEXT, conf REAL, estimated INTEGER DEFAULT 0, kind TEXT DEFAULT 'table');
 CREATE INDEX IF NOT EXISTS ix_tab_ws ON tables_store(workspace_id);
 CREATE TABLE IF NOT EXISTS facts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, doc_id TEXT NOT NULL, concept TEXT NOT NULL,
@@ -62,6 +63,15 @@ _init_lock = threading.Lock()
 _initialised: set[str] = set()
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after a database was first created."""
+    have = {r["name"] for r in conn.execute("PRAGMA table_info(tables_store)")}
+    for col, ddl in (("printed_json", "TEXT"), ("conf", "REAL"), ("estimated", "INTEGER DEFAULT 0"), ("kind", "TEXT DEFAULT 'table'")):
+        if col not in have:
+            conn.execute(f"ALTER TABLE tables_store ADD COLUMN {col} {ddl}")
+    conn.commit()
+
+
 def _connect() -> sqlite3.Connection:
     config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(config.DB_PATH), timeout=30, check_same_thread=False)
@@ -72,6 +82,7 @@ def _connect() -> sqlite3.Connection:
     if key not in _initialised:
         with _init_lock:
             conn.executescript(_SCHEMA)
+            _migrate(conn)
             _initialised.add(key)
     return conn
 

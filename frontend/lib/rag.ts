@@ -80,6 +80,7 @@ export interface Operand {
   doc_id: string;
   filename: string;
   page: number;
+  printed_page?: string | null;
   bbox: BBox | null;
   confidence: number | null;
   exact_cell: boolean;
@@ -131,9 +132,10 @@ export interface Answer {
   badges: Badge[];
   abstained: boolean;
   abstain_reason: string | null;
-  searched: { documents: string[]; chunks_searched: number; closest_sections: { filename: string; pages: number[] }[] } | null;
+  searched: { documents: string[]; chunks_searched: number; closest_sections: { filename: string; pages: number[] }[]; note?: string } | null;
   route: string;
-  mode: "llm" | "extractive";
+  mode: "llm" | "extractive" | "computed";
+  refusal?: string;
   model: string | null;
   stages: Stage[];
   total_ms?: number;

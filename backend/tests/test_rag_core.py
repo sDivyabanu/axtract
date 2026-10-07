@@ -134,7 +134,8 @@ class TestIngestAndAnswer:
         assert all(d["status"] == "ready" and d["chunk_count"] > 0 for d in docs)
 
         a = ask(room, ws, "What is the TOTAL for FY2024 in the revenue table?")
-        assert not a["abstained"] and a["citations"] and a["mode"] == "extractive"
+        assert not a["abstained"] and a["citations"] and a["mode"] == "computed"   # exact table value, no LLM
+        assert a["receipts"][0]["result"] == pytest.approx(27725540)
         cite = a["citations"][0]
         assert cite["doc_id"] in {d["doc_id"] for d in docs} and cite["bboxes"] and cite["bboxes"][0]["bbox"]
         assert "27,725,540" in a["text"] or any("27,725,540" in c["snippet"] for c in a["citations"])

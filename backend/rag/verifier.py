@@ -67,7 +67,7 @@ def _entities(sentence: str) -> list[str]:
     words = _WORD.findall(sentence)
     out = []
     for i, w in enumerate(words):
-        if i == 0 or not w[0].isupper() or len(w) < 4:
+        if i == 0 or not w[0].isupper() or len(w) < 4 or any(ch.isdigit() for ch in w):
             continue
         if w.lower() in _GENERIC or w.lower() in _MONTHS:
             continue

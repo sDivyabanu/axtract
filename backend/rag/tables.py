@@ -87,6 +87,7 @@ def build_grid(block: DocumentBlock) -> dict[str, Any] | None:
                 "page": page,
                 "bbox": box or (prev.get("bbox") if prev.get("bbox") else table_bbox),
                 "exact_cell": bool(box),
+                "conf": block.confidence,
             })
         out_rows.append({"ridx": ridx, "label": label, "is_total": bool(_TOTAL.match(label)), "cells": cells})
 

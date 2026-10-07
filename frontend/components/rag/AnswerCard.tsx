@@ -45,11 +45,11 @@ export default function AnswerCard({
   const allVerified = g != null && g.verified === g.total;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div data-answer className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">route: {answer.route}</span>
-        <span className={`rounded px-2 py-0.5 ${answer.mode === "llm" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
-          {answer.mode === "llm" ? `LLM · ${answer.model}` : "LLM offline – extractive mode"}
+        <span className={`rounded px-2 py-0.5 ${answer.mode === "extractive" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
+          {answer.mode === "llm" ? `LLM · ${answer.model}` : answer.mode === "computed" ? "Computed by table engine · no LLM arithmetic" : "LLM offline – extractive mode"}
         </span>
         {g && (
           <span className={`rounded px-2 py-0.5 font-medium ${allVerified ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
@@ -59,12 +59,19 @@ export default function AnswerCard({
         {answer.total_ms != null && <span className="text-gray-400">{(answer.total_ms / 1000).toFixed(1)} s</span>}
       </div>
 
-      {answer.abstained ? (
+      {answer.refusal ? (
+        <div className="rounded border border-amber-300 bg-amber-50 p-3">
+          <div className="text-base font-semibold text-amber-900">DealLens refused to compute this</div>
+          <p className="mt-1 text-sm text-amber-900">{answer.refusal}</p>
+          <p className="mt-1 text-xs text-amber-800">Mixing incompatible units would produce a wrong number, so no number is shown.</p>
+        </div>
+      ) : answer.abstained ? (
         <div className="rounded border border-gray-200 bg-gray-50 p-3">
           <div className="text-base font-semibold text-gray-800">Not found in this data room</div>
           <p className="mt-1 text-sm text-gray-600">
             DealLens will not guess. {answer.abstain_reason === "no_documents" ? "No documents are indexed yet." : "The retrieved passages do not answer the question."}
           </p>
+          {answer.searched?.note && <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-900">⚠ {answer.searched.note}</p>}
           {answer.searched && (
             <div className="mt-2 text-xs text-gray-600">
               <div><b>Searched:</b> {answer.searched.chunks_searched} passages in {answer.searched.documents.length} documents ({answer.searched.documents.join(", ")})</div>

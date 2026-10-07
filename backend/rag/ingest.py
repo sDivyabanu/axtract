@@ -193,9 +193,9 @@ def index_document(workspace_id: str, doc_id: str, path: Path | None, filename: 
         for t in built.tables:
             c.execute(
                 "INSERT INTO tables_store (table_id, doc_id, workspace_id, block_id, title, page, unit, scale, currency,"
-                " statement, grid_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " statement, grid_json, printed_json, conf, estimated, kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (f"{doc_id}:{t.table_ref}", doc_id, workspace_id, t.table_ref, t.title, t.page, t.unit, t.scale,
-                 t.currency, t.statement, db.jdump(t.grid)),
+                 t.currency, t.statement, db.jdump(t.grid), db.jdump(t.printed), t.conf, int(t.estimated), t.kind),
             )
         by_id = {b.id: b for b in blocks}
         for bid, findings in quarantined.items():

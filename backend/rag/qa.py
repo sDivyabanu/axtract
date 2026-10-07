@@ -11,7 +11,7 @@ import re
 import time
 from typing import Any, Iterator
 
-from rag import config, db, index, llm, verifier, workspaces
+from rag import config, db, index, llm, planner, verifier, workspaces
 
 ROUTES = ("lookup", "numeric", "list", "compare")
 
@@ -27,6 +27,10 @@ _LIST = re.compile(r"\b(list|enumerate|which (?:documents?|parties|files|agreeme
 ABSTAIN_BELOW = -3.0
 STRONG_ABOVE = 2.0
 USED_WINDOW = 9.0  # keep chunks within this many logits of the best
+# idf-weighted share of the question's terms present in the top passages (see scripts/calibrate_abstain.py)
+COVER_STRONG = 0.30  # with a strong rerank score
+COVER_WEAK = 0.40    # with a moderate rerank score
+COVER_ALONE = 0.55   # lexical coverage alone is enough (the cross-encoder is weak on 'summarise ...' questions)
 
 
 def classify_route(question: str) -> str:
@@ -38,6 +42,29 @@ def classify_route(question: str) -> str:
     if _NUMERIC.search(q):
         return "numeric"
     return "lookup"
+
+
+_REF = re.compile(r"\b(schedule|annexure|annex|exhibit|appendix)\s+([0-9]+|[a-z])\b", re.I)
+
+
+def missing_reference(workspace_id: str, question: str, docs: dict[str, dict]) -> dict[str, Any] | None:
+    """The question asks about "Schedule 3" (etc.) which is referenced in the data room but never provided.
+
+    A schedule counts as provided if some passage sits under a heading with that label or starts with it.
+    """
+    m = _REF.search(question)
+    if not m:
+        return None
+    label = f"{m.group(1).lower()} {m.group(2).lower()}"
+    rows = index.get_index(workspace_id).rows.values()
+    for r in rows:
+        if any(label in h.lower() for h in r["heading_path"]) or r["text"].lower().lstrip().startswith(label):
+            return None
+    for r in rows:
+        if label in r["text"].lower():
+            d = docs.get(r["doc_id"], {})
+            return {"label": label.title(), "filename": d.get("filename", ""), "pages": r["pages"]}
+    return None
 
 
 def _terms(q: str) -> set[str]:
@@ -227,10 +254,32 @@ def ask_stream(
     ranked = index.rerank_hits(workspace_id, question, hits) if hits else []
     yield done("Reranking", t0)
 
+    # ---- computing: numbers come from the typed table store, never from the LLM
+    outcome: dict[str, Any] | None = None
+    plan_info: dict[str, Any] | None = None
+    tables: dict[str, Any] = {}
+    if route in ("numeric", "compare") and ready:
+        yield _ev("Computing", status="start")
+        t0 = time.time()
+        top_rows = [index.chunk_row(workspace_id, h.chunk_id) for h in ranked[:8]]
+        tids = planner.candidate_table_ids(workspace_id, question, top_rows)
+        tables = planner.load_tables(workspace_id, tids)
+        outcome = planner.plan_and_run(question, tables) if tables else None
+        plan_info = {"candidate_tables": [{"alias": a, "title": t.title, "document": t.filename} for a, t in tables.items()],
+                     "planner": outcome["planner"] if outcome else None, "plan": outcome["plan"] if outcome else None,
+                     "error": outcome["error"] if outcome else None}
+        yield done("Computing", t0, planner=plan_info["planner"], ok=bool(outcome and outcome["result"]))
+
     best = ranked[0].rerank if ranked and ranked[0].rerank is not None else None
     q_terms = _terms(question)
-    top_overlap = max((_overlap(q_terms, index.chunk_row(workspace_id, h.chunk_id)["text"]) for h in ranked[:3]), default=0.0)
-    evidence_ok = best is not None and (best >= STRONG_ABOVE or (best >= ABSTAIN_BELOW and top_overlap >= 0.34))
+    top_overlap = index.coverage(workspace_id, question,
+                                 [index.chunk_row(workspace_id, h.chunk_id)["text"] + " " + " ".join(index.chunk_row(workspace_id, h.chunk_id)["heading_path"])
+                                  for h in ranked[:3]]) if ranked else 0.0
+    evidence_ok = best is not None and ((best >= STRONG_ABOVE and top_overlap >= COVER_STRONG) or
+                                        (best >= ABSTAIN_BELOW and top_overlap >= COVER_WEAK) or top_overlap >= COVER_ALONE)
+    missing_ref = missing_reference(workspace_id, question, docs)
+    if missing_ref:
+        evidence_ok = False
 
     used: list[tuple[int, dict[str, Any]]] = []
     if evidence_ok:
@@ -251,6 +300,7 @@ def ask_stream(
              "rerank": None if h.rerank is None else round(h.rerank, 3), "used": h.used}
             for h in (ranked[:12] or hits[:12])
         ],
+        "plan": plan_info,
         "thresholds": {"abstain_below": ABSTAIN_BELOW, "strong_above": STRONG_ABOVE, "best": best, "top_overlap": round(top_overlap, 2)},
     }
 
@@ -272,6 +322,42 @@ def ask_stream(
             "q_hash": __import__("hashlib").sha256(question.encode()).hexdigest()[:16], "model": ans["model"]})
         return ans
 
+    # ---- computed answer (exact numbers + receipt) or an explained refusal
+    if outcome and (outcome["result"] is not None or outcome["refused"]):
+        base["mode"], base["model"] = "computed", None
+        if outcome["refused"]:
+            base.update(text=f"I can't compute this: {outcome['error']}", refusal=outcome["error"],
+                        sentences=[{"text": f"I can't compute this: {outcome['error']}", "citations": [], "verified": None, "reason": "", "claims": []}],
+                        badges=[{"label": "refused: incompatible units", "level": "amber"}])
+            yield {"event": "answer", "answer": finish(base)}
+            return
+        res = outcome["result"]
+        rc = res.receipt
+        # cite the table chunk(s) the operands come from
+        used_aliases = {st.get("table") for st in outcome["plan"]["steps"] if st.get("table")}
+        want = {(tables[al].doc_id, tables[al].real_id.split(":", 1)[1]) for al in used_aliases if al in tables}
+        idx_rows = index.get_index(workspace_id).rows
+        src = [r for r in idx_rows.values() if r["kind"] in ("table", "chart") and r.get("table_ref") and (r["doc_id"], r["table_ref"]) in want]
+        used = [(i + 1, r) for i, r in enumerate(src[:4])]
+        base["citations"] = [_citation(n, r, docs) for n, r in used]
+        sources = {n: r["text"] for n, r in used}
+        sentence = f"{rc['title']}: {rc['result_display']}."
+        chk = verifier.check_sentence(sentence, [n for n, _ in used], sources, res.numbers)
+        base["sentences"] = [{"text": chk.text, "citations": chk.citations, "verified": chk.verified, "reason": chk.reason,
+                              "claims": [{"kind": x.kind, "text": x.text, "supported": x.supported} for x in chk.claims]}]
+        base["text"] = sentence
+        base["grounding"] = verifier.grounding([chk])
+        base["receipts"] = [rc]
+        base["badges"] = [{"label": w, "level": "amber"} for w in rc["warnings"]]
+        for c in base["citations"]:
+            for b in c["badges"]:
+                if b["label"] not in {x["label"] for x in base["badges"]}:
+                    base["badges"].append(b)
+        yield _ev("Verifying", status="start")
+        yield done("Verifying", time.time())
+        yield {"event": "answer", "answer": finish(base)}
+        return
+
     # ---- abstention
     if not ready:
         base.update(abstained=True, abstain_reason="no_documents",
@@ -284,8 +370,11 @@ def ask_stream(
             "chunks_searched": glass["workspace_chunks"],
             "closest_sections": [{"filename": r["filename"], "pages": r["pages"]} for r in glass["retrieved"][:3]],
         }
-        base.update(abstained=True, abstain_reason="weak_evidence", searched=searched,
-                    text="Not found in this data room.")
+        if missing_ref:
+            searched["note"] = (f"{missing_ref['label']} is referenced in {missing_ref['filename']} (p.{', '.join(map(str, missing_ref['pages']))}) "
+                                "but it is not included in the data room.")
+        base.update(abstained=True, abstain_reason="referenced_not_provided" if missing_ref else "weak_evidence", searched=searched,
+                    text=(f"Not found in this data room: {missing_ref['label']} is referenced but not provided." if missing_ref else "Not found in this data room."))
         yield {"event": "answer", "answer": finish(base)}
         return
 

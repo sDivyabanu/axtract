@@ -24,9 +24,21 @@ _STOP = frozenset(
 )
 
 
+def stem(t: str) -> str:
+    """Very light suffix stripping so 'maturing', 'matures' and 'maturity' share a term."""
+    if len(t) < 5 or t.isdigit():
+        return t
+    if t.endswith("ies") and len(t) > 5:
+        return t[:-3] + "y"
+    for suf in ("ing", "ity", "ed", "es", "s"):
+        if t.endswith(suf) and len(t) - len(suf) >= 4:
+            return t[: -len(suf)]
+    return t
+
+
 def tokenize(text: str) -> list[str]:
     text = text.lower().replace(",", "")
-    return [t for t in _TOKEN.findall(text) if t not in _STOP]
+    return [stem(t) for t in _TOKEN.findall(text) if t not in _STOP]
 
 
 @dataclass
@@ -196,3 +208,28 @@ def rrf_fuse(rankings: list[list[str]], k: int = config.RRF_K) -> list[tuple[str
         for rank, cid in enumerate(ranking, 1):
             score[cid] += 1.0 / (k + rank)
     return sorted(score.items(), key=lambda kv: -kv[1])
+
+
+def coverage(workspace_id: str, query: str, texts: list[str]) -> float:
+    """idf-weighted share of the question's terms found in `texts` (0-1).
+
+    A question about the "chief executive officer" scores ~0 against passages that only repeat the
+    company name, because the rare terms are missing; a table lookup scores high when its row and
+    column words are present. Terms absent from the whole workspace weigh the most.
+    """
+    idx = get_index(workspace_id)
+    n = max(len(idx.ids), 1)
+    q = set(tokenize(query))
+    if not q:
+        return 0.0
+    have = set()
+    for t in texts:
+        have |= set(tokenize(t))
+    total = got = 0.0
+    for term in q:
+        df = len(idx.postings.get(term, ()))
+        idf = math.log(1 + (n - df + 0.5) / (df + 0.5))
+        total += idf
+        if term in have:
+            got += idf
+    return got / total if total else 0.0
