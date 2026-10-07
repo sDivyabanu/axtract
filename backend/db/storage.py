@@ -45,47 +45,63 @@ def storage_path(user_id: str, document_id: str, version_id: str) -> str:
 
 async def upload_encrypted(path: str, data: bytes) -> None:
     """Upload ciphertext to the private storage bucket."""
+    from db.prisma_client import _with_retries, get_http_client
+
     url, _, bucket = _get_config()
     endpoint = f"{url}/storage/v1/object/{bucket}/{path}"
+    client = await get_http_client()
+    headers = {
+        **_headers(),
+        "Content-Type": "application/octet-stream",
+    }
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            endpoint,
-            headers={
-                **_headers(),
-                "Content-Type": "application/octet-stream",
-            },
-            content=data,
-        )
-        if resp.status_code not in (200, 201):
-            logger.error("Storage upload failed: %s %s", resp.status_code, resp.text)
-            raise RuntimeError(f"Storage upload failed: {resp.status_code}")
+    # Path is deterministic per (user, document, version), so a retried
+    # upload overwrites the same object — safe.
+    await _with_retries(
+        lambda: _post_and_check(client, endpoint, headers, data),
+        idempotent=True,
+    )
+
+
+async def _post_and_check(client, endpoint, headers, data) -> None:
+    resp = await client.post(endpoint, headers=headers, content=data)
+    if resp.status_code not in (200, 201):
+        logger.error("Storage upload failed: %s %s", resp.status_code, resp.text)
+        raise RuntimeError(f"Storage upload failed: {resp.status_code}")
 
 
 async def download_encrypted(path: str) -> bytes:
     """Download ciphertext from the private storage bucket."""
+    from db.prisma_client import _with_retries, get_http_client
+
     url, _, bucket = _get_config()
     endpoint = f"{url}/storage/v1/object/{bucket}/{path}"
+    client = await get_http_client()
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.get(endpoint, headers=_headers())
-        if resp.status_code != 200:
-            logger.error("Storage download failed: %s %s", resp.status_code, resp.text)
-            raise RuntimeError(f"Storage download failed: {resp.status_code}")
-        return resp.content
+    async def call() -> httpx.Response:
+        return await client.get(endpoint, headers=_headers())
+
+    resp = await _with_retries(call, idempotent=True)
+    if resp.status_code != 200:
+        logger.error("Storage download failed: %s %s", resp.status_code, resp.text)
+        raise RuntimeError(f"Storage download failed: {resp.status_code}")
+    return resp.content
 
 
 async def delete_from_storage(path: str) -> None:
     """Delete a file from the private storage bucket."""
+    from db.prisma_client import _with_retries, get_http_client
+
     url, _, bucket = _get_config()
     endpoint = f"{url}/storage/v1/object/{bucket}"
+    client = await get_http_client()
+    headers = {**_headers(), "Content-Type": "application/json"}
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.request(
-            "DELETE",
-            endpoint,
-            headers={**_headers(), "Content-Type": "application/json"},
-            json={"prefixes": [path]},
+    async def call() -> httpx.Response:
+        return await client.request(
+            "DELETE", endpoint, headers=headers, json={"prefixes": [path]},
         )
-        if resp.status_code not in (200, 204):
-            logger.warning("Storage delete failed: %s %s", resp.status_code, resp.text)
+
+    resp = await _with_retries(call, idempotent=True)
+    if resp.status_code not in (200, 204):
+        logger.warning("Storage delete failed: %s %s", resp.status_code, resp.text)

@@ -11,6 +11,7 @@ privileged backend connections.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import logging
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 import asyncpg
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,48 @@ def _secret_key() -> str:
     return os.environ.get("SUPABASE_SECRET_KEY", "")
 
 
+_http_client: httpx.AsyncClient | None = None
+
+
+async def get_http_client() -> httpx.AsyncClient:
+    """Shared keep-alive HTTP client for all Supabase HTTPS calls.
+
+    A fresh client per call pays a full TLS handshake every time and turns any
+    transient network hiccup into an error; a shared pool reuses connections
+    and recovers automatically (see _with_retries).
+    """
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=15.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10,
+                                keepalive_expiry=120),
+        )
+    return _http_client
+
+
+async def _with_retries(run, *, idempotent: bool):
+    """Retry Supabase HTTPS calls on transient transport errors.
+
+    Idempotent calls (GET/PATCH/DELETE, and storage operations on
+    deterministic paths) retry on any transport failure. Non-idempotent
+    POSTs only retry when the connection failed before the request was
+    sent (ConnectError), so a lost response can never duplicate a row.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(4):
+        try:
+            return await run()
+        except httpx.ConnectError as exc:  # request never left the wire
+            last_exc = exc
+        except httpx.TransportError as exc:
+            if not idempotent:
+                raise
+            last_exc = exc
+        await asyncio.sleep(0.4 * (2 ** attempt))
+    raise last_exc  # type: ignore[misc]
+
+
 async def _rest(
     method: str,
     table: str,
@@ -75,7 +119,6 @@ async def _rest(
     json_body: Any = None,
     prefer: str | None = None,
 ) -> list[dict]:
-    import httpx
     url = f"{os.environ.get('SUPABASE_URL', '').rstrip('/')}/rest/v1/{table}"
     headers = {
         "apikey": _secret_key(),
@@ -85,10 +128,14 @@ async def _rest(
     }
     if prefer:
         headers["Prefer"] = prefer
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.request(
+    client = await get_http_client()
+
+    async def call() -> httpx.Response:
+        return await client.request(
             method, url, params=params, json=json_body, headers=headers,
         )
+
+    resp = await _with_retries(call, idempotent=(method.upper() != "POST"))
     if resp.status_code >= 400:
         raise RuntimeError(
             f"Supabase REST {method} {table} failed: {resp.status_code} {resp.text[:300]}"
