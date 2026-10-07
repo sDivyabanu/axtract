@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AnswerCard from "@/components/rag/AnswerCard";
 import EvidenceViewer, { type Highlight } from "@/components/EvidenceViewer";
-import { askStream, rag, type Answer, type Citation, type Operand, type RagDoc } from "@/lib/rag";
+import { askStream, rag, type Answer, type Citation, type DocSuggestions, type Operand, type RagDoc } from "@/lib/rag";
 
 interface Turn {
   id: number;
@@ -30,6 +30,7 @@ function AskPageInner() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<DocSuggestions[]>([]);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
   const [scope, setScope] = useState<Set<string>>(new Set());
   const bottom = useRef<HTMLDivElement>(null);
@@ -38,6 +39,9 @@ function AskPageInner() {
   useEffect(() => {
     rag.getWorkspace(id).then((w) => setDocs(w.documents)).catch(() => setDocs([]));
   }, [id]);
+  useEffect(() => {
+    rag.get<DocSuggestions[]>(`/workspaces/${id}/suggestions`).then(setSuggestions).catch(() => setSuggestions([]));
+  }, [id, docs.length]);
   const byId = useMemo(() => new Map(docs.map((d) => [d.doc_id, d])), [docs]);
   const readyDocs = docs.filter((d) => d.status === "ready");
 
@@ -103,6 +107,24 @@ function AskPageInner() {
             No documents are ready yet. Upload files in the Data Room tab and wait for them to finish indexing.
           </p>
         )}
+        {turns.length === 0 && suggestions.length > 0 && (
+          <div data-suggestions className="mb-4 space-y-3">
+            <div className="text-sm font-semibold text-gray-700">Suggested questions</div>
+            {suggestions.map((d) => (
+              <div key={d.doc_id}>
+                <div className="mb-1 text-xs text-gray-500">{d.filename}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {d.suggestions.map((q) => (
+                    <button key={q.question} type="button" onClick={() => ask(q.question)} disabled={busy}
+                      className="rounded-full border border-gray-300 bg-white px-3 py-1 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      {q.question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="space-y-5">
           {turns.map((t) => (
             <div key={t.id}>
@@ -164,7 +186,7 @@ function AskPageInner() {
 
       {viewer && (
         <div className="sticky top-4 hidden h-[calc(100vh-2rem)] min-w-0 lg:block">
-          <EvidenceViewer {...viewer} onClose={() => setViewer(null)} />
+          <EvidenceViewer {...viewer} workspaceId={id} onClose={() => setViewer(null)} />
         </div>
       )}
     </div>

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from models.errors import AppError
-from rag import baseline, config, db, diligence, exports, index, ingest, llm, maturity, packs, qa, workspaces
+from rag import baseline, config, corrections, db, diligence, evidence, exports, index, ingest, llm, maturity, packs, qa, suggestions, workspaces
 from utils.files import get_extension, remove_temp_file, sanitize_filename, save_upload_to_temp
 
 router = APIRouter(prefix="/api", tags=["deallens"])
@@ -203,6 +203,83 @@ def get_quarantine(workspace_id: str) -> list[dict[str, Any]]:
         "kind": r["kind"], "page": r["page"], "bbox": db.jload(r["bbox_json"]), "snippet": r["snippet"],
         "preview_pages": docs.get(r["doc_id"], {}).get("preview_pages", 0),
     } for r in rows]
+
+
+@router.post("/answers/{answer_id}/evidence-pack")
+def evidence_pack(answer_id: str) -> Response:
+    """A PDF a third party can check: question, answer, receipts, cropped source regions, hashes, versions, timestamp."""
+    with db.connect() as c:
+        row = c.execute("SELECT json FROM answers WHERE answer_id=?", (answer_id,)).fetchone()
+    if row is None:
+        raise AppError("ANSWER_NOT_FOUND", "Unknown answer.", status_code=404)
+    pdf, manifest_sha, pdf_sha = evidence.build(db.jload(row["json"], {}))
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="evidence-pack-{answer_id[:8]}.pdf"',
+                             "X-Evidence-Pack-SHA256": pdf_sha, "X-Evidence-Pack-Manifest-SHA256": manifest_sha,
+                             "Access-Control-Expose-Headers": "X-Evidence-Pack-SHA256, X-Evidence-Pack-Manifest-SHA256, Content-Disposition"})
+
+
+@router.get("/workspaces/{workspace_id}/audit")
+def audit_log(workspace_id: str, limit: int = 300) -> list[dict[str, Any]]:
+    """Who/what/when: events with ids, hashes and timings. Never document text."""
+    workspaces.require(workspace_id)
+    with db.connect() as c:
+        rows = c.execute("SELECT * FROM audit WHERE workspace_id=? ORDER BY ts DESC LIMIT ?", (workspace_id, min(limit, 1000))).fetchall()
+    return [{"id": r["id"], "ts": r["ts"], "event": r["event"], "ref": r["ref"], "detail": db.jload(r["detail_json"], {})} for r in rows]
+
+
+class CorrectionBody(BaseModel):
+    table_id: str
+    row: int = Field(ge=0)
+    col: int = Field(ge=1)
+    value: str = Field(min_length=1, max_length=40)
+
+
+@router.post("/workspaces/{workspace_id}/corrections")
+def correct_cell(workspace_id: str, body: CorrectionBody) -> dict[str, Any]:
+    """Fix one table cell and return everything that changed because of it (the correction ripple)."""
+    return corrections.apply(workspace_id, body.table_id, body.row, body.col, body.value)
+
+
+@router.get("/workspaces/{workspace_id}/tables")
+def list_tables(workspace_id: str) -> list[dict[str, Any]]:
+    """Typed tables with their cells (for the correction UI)."""
+    workspaces.require(workspace_id)
+    with db.connect() as c:
+        rows = c.execute("SELECT table_id, doc_id, title, page, unit, currency, grid_json FROM tables_store WHERE workspace_id=? AND kind='table'", (workspace_id,)).fetchall()
+    out = []
+    for r in rows:
+        g = db.jload(r["grid_json"], {})
+        out.append({"table_id": r["table_id"], "doc_id": r["doc_id"], "title": r["title"], "page": r["page"], "unit": r["unit"], "currency": r["currency"],
+                    "cols": g["col_paths"], "rows": [{"ridx": i, "label": x["label"], "is_total": x["is_total"],
+                                                      "cells": [{"raw": cl["raw"], "corrected": bool(cl.get("corrected"))} for cl in x["cells"]]} for i, x in enumerate(g["rows"])]})
+    return out
+
+
+@router.get("/workspaces/{workspace_id}/suggestions")
+def suggested_questions(workspace_id: str) -> list[dict[str, Any]]:
+    workspaces.require(workspace_id)
+    return suggestions.for_workspace(workspace_id)
+
+
+@router.get("/workspaces/{workspace_id}/documents/{doc_id}/blocks")
+def document_blocks(workspace_id: str, doc_id: str, page: int | None = None) -> list[dict[str, Any]]:
+    """Blocks with their preview position, confidence and flags (for the confidence heatmap)."""
+    workspaces.document(workspace_id, doc_id)
+    out = []
+    with db.connect() as c:
+        for r in c.execute("SELECT json FROM blocks WHERE doc_id=? ORDER BY ord", (doc_id,)):
+            b = db.jload(r["json"], {})
+            prev = (b.get("metadata") or {}).get("preview") or {}
+            pg = int(prev.get("page") or b.get("page") or 1)
+            bbox = prev.get("bbox") or b.get("bbox")
+            if (page is not None and pg != page) or not bbox or b.get("type") in ("header", "footer"):
+                continue
+            flags = list((b.get("metadata") or {}).get("flags") or [])
+            out.append({"id": b["id"], "type": b["type"], "page": pg, "bbox": bbox, "confidence": b.get("confidence"),
+                        "extractor": b.get("extractor"), "requires_review": bool(b.get("requires_review")), "flags": flags,
+                        "snippet": " ".join((b.get("content") or "").split())[:90]})
+    return out
 
 
 @router.get("/eval/latest")

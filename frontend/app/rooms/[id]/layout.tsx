@@ -15,6 +15,7 @@ const TABS = [
   { slug: "maturity", label: "Maturity Wall" },
   { slug: "quarantine", label: "Quarantine" },
   { slug: "eval", label: "Eval" },
+  { slug: "audit", label: "Audit" },
 ];
 
 function RoomShell({ children }: { children: React.ReactNode }) {

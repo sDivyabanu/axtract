@@ -391,3 +391,30 @@ export interface EvalResult {
   questions: EvalQuestion[];
   limitations: string[];
 }
+
+export interface HeatBlock {
+  id: string;
+  type: string;
+  page: number;
+  bbox: [number, number, number, number];
+  confidence: number | null;
+  extractor: string | null;
+  requires_review: boolean;
+  flags: string[];
+  snippet: string;
+}
+
+export interface AuditEvent {
+  id: number;
+  ts: number;
+  event: string;
+  ref: string | null;
+  detail: Record<string, unknown>;
+}
+
+export interface DocSuggestions {
+  doc_id: string;
+  filename: string;
+  doc_type: string;
+  suggestions: { question: string; page: number | null; kind: string }[];
+}

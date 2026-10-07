@@ -243,3 +243,39 @@ CIM FY2023 revenue ₹385 Cr — each in under a second.
 - ✅ **Document type detection improved** — "agreement/contract/deed" → contract, "audited/financials" → financial statement,
   "debt schedule" → debt schedule.
 - ✅ **UI**: Contradictions, Diligence Packs, Seller Questions and Maturity Wall tabs (verified in a real browser with Playwright).
+
+## Phase 5 — Evaluation, demo data & demo script  ✅
+
+- ✅ **Project Falcon demo data room** (`demo/project_falcon/`, regenerate with `scripts/make_demo_dataroom.py`) — 6 files that plant
+  every behaviour on purpose: a CIM deck (inflated revenue/EBITDA, a chart), audited financials (the truth), a 50-row debt schedule
+  split over two pages, a loan agreement (change of control, governing law, a reference to a missing "Schedule 3", hidden white
+  text), a management-accounts workbook (hardcoded cell, wrong typed total, hidden sheet) and a board-minutes note.
+- ✅ **Golden question set** (`eval/golden_qa.yaml`) — 27 questions across lookup, numeric, chart, cross-document, contradiction,
+  unanswerable and injection traps, each with the expected value/phrases, document and page. Ground-truth figures are listed once at the top.
+- ✅ **Mechanical evaluation harness** (`scripts/run_rag_eval.py`, `rag/evalrun.py`) — runs the **same questions through the naive
+  Baseline and DealLens** and judges both with identical rules (number within tolerance, expected phrases, decline wording,
+  hidden-instruction obeyed or not). Reports accuracy, numeric exact-match, citation accuracy (right document *and* page), retrieval
+  hit rate, abstention correctness, injection resistance, injection traps answered correctly and latency. Output: `reports/rag_eval.md` + `.json`;
+  `--no-llm` produces the extractive-mode numbers in seconds (`reports/rag_eval_nollm.*`).
+- ✅ **Eval page** in the UI — the same numbers, per-question pass/fail for both pipelines, limitations listed (`GET /api/eval/latest`).
+- ✅ **Integration test** (`tests/test_rag_eval.py`) — indexes the demo room and fails the build if DealLens (extractive mode)
+  drops below 85 % accuracy, 100 % numeric match, 100 % abstention, 100 % injection resistance or 90 % citation accuracy; plus unit tests of the judge.
+- ✅ **Demo script** (`docs/DEMO_SCRIPT.md`) — a timed click-path with the exact questions and what to say.
+- ✅ **README** — architecture (Mermaid), model + licence table, how to run, evaluation summary.
+
+## Phase 6 — Polish  ✅
+
+- ✅ **Confidence heatmap** — a *Confidence* toggle in the evidence viewer colours every extracted block on the page (green ≥ 90 %,
+  amber 75–90 %, red < 75 % or flagged *requires review*); hover shows type, confidence, extractor and flags (`GET …/documents/{id}/blocks`).
+- ✅ **Evidence Pack (PDF)** — *Export Evidence Pack* on any answer produces a PDF a third party can check: question, answer,
+  grounding, every receipt operand, **a cropped image of each cited region with the box drawn**, document SHA-256 hashes, page
+  numbers (PDF and printed), parser/LLM/embedding/reranker versions, timestamp and a SHA-256 of the pack manifest. The SHA-256 of
+  the finished PDF is returned in the `X-Evidence-Pack-SHA256` header (`POST /api/answers/{id}/evidence-pack`).
+- ✅ **Live correction ripple** — fix one table cell (`POST …/corrections`) and see *everything it changes*: contradictions resolved/new/changed,
+  total-check mismatches resolved, seller-question count and the maturity-wall total, before vs after. Only derived data is
+  edited (typed grid + facts, the cell is marked *corrected* with its original value kept); the source document is never modified and the
+  correction is audited. Text passages already indexed keep the printed wording — stated in the response.
+- ✅ **Audit page** — chronological log of uploads, questions, quarantine decisions, exports, corrections and evidence packs, with
+  filters. Entries contain ids, hashes and timings only — never document text (tested).
+- ✅ **Suggested questions** — per document, generated **deterministically** from its headings, debt-maturity tables and charts (no LLM,
+  so they are instant and can never be hallucinated); clicking one asks it (`GET …/suggestions`).

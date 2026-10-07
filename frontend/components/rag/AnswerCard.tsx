@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { API_BASE_URL } from "@/lib/api";
 import type { Answer, Citation, Operand } from "@/lib/rag";
 import CropPreview from "./CropPreview";
 import GlassBox from "./GlassBox";
@@ -43,6 +44,27 @@ export default function AnswerCard({
   const byN = new Map(answer.citations.map((c) => [c.n, c]));
   const g = answer.grounding;
   const allVerified = g != null && g.verified === g.total;
+  const [packBusy, setPackBusy] = useState(false);
+  const [packSha, setPackSha] = useState<string | null>(null);
+
+  async function downloadPack() {
+    setPackBusy(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/answers/${answer.answer_id}/evidence-pack`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setPackSha(res.headers.get("X-Evidence-Pack-SHA256"));
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `evidence-pack-${answer.answer_id.slice(0, 8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setPackSha("failed");
+    } finally {
+      setPackBusy(false);
+    }
+  }
 
   return (
     <div data-answer className="rounded-lg border border-gray-200 bg-white p-4">
@@ -134,6 +156,15 @@ export default function AnswerCard({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {!answer.pipeline && (
+        <div className="mt-3 flex items-center gap-2 text-xs">
+          <button type="button" onClick={downloadPack} disabled={packBusy}
+            className="rounded border border-gray-300 px-2 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            {packBusy ? "Building…" : "Export Evidence Pack (PDF)"}
+          </button>
+          {packSha && <span className="text-gray-500">{packSha === "failed" ? "Export failed" : `SHA-256 ${packSha.slice(0, 16)}…`}</span>}
         </div>
       )}
       <GlassBox answer={answer} />
