@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const { signIn, signUp, loading } = useAuth();
+  const router = useRouter();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,12 +21,14 @@ export default function LoginPage() {
     setSubmitting(true);
 
     if (mode === "signup") {
-      const { error: err } = await signUp(email, password);
+      const { error: err, confirmed } = await signUp(email, password);
       if (err) setError(err);
+      else if (confirmed) router.push("/");
       else setMessage("Check your email to confirm your account.");
     } else {
       const { error: err } = await signIn(email, password);
       if (err) setError(err);
+      else router.push("/");
     }
 
     setSubmitting(false);
