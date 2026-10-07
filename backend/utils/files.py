@@ -2,11 +2,12 @@
 
 import logging
 import re
-import shutil
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
+
+from models.errors import AppError
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +65,28 @@ def validate_magic_bytes(data: bytes, extension: str) -> bool:
 
 
 def save_upload_to_temp(upload: UploadFile, extension: str) -> Path:
-    """Stream the upload to uploads/ under a generated name."""
+    """Stream the upload to uploads/ under a generated name.
+
+    Stops (and removes the partial file) as soon as MAX_UPLOAD_BYTES is exceeded, so an
+    oversized upload cannot fill the disk before the size check runs.
+    """
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     path = UPLOAD_DIR / f"{uuid4().hex}.{extension}"
-    with path.open("wb") as out:
-        shutil.copyfileobj(upload.file, out)
+    written = 0
+    try:
+        with path.open("wb") as out:
+            while chunk := upload.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise AppError(
+                        "FILE_TOO_LARGE",
+                        f"File exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                        status_code=413,
+                    )
+                out.write(chunk)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
     return path
 
 

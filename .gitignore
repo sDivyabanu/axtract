@@ -29,3 +29,8 @@ generated/
 .DS_Store
 Thumbs.db
 *.log
+
+# Model weights are fetched by scripts/fetch_models.py, never committed
+backend/model_weights/**/*.onnx
+reports/previews/
+reports/c[0-9]_report.*

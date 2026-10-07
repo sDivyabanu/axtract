@@ -78,8 +78,9 @@ export function parsePageInput(input: string, maxPage: number): number[] | null 
     } else if (rangeParts.length === 2) {
       const start = parseInt(rangeParts[0], 10);
       const end = parseInt(rangeParts[1], 10);
-      if (!isNaN(start) && !isNaN(end) && start >= 1 && end <= maxPage && start <= end) {
-        for (let i = start; i <= end; i++) pages.add(i);
+      if (!isNaN(start) && !isNaN(end) && start >= 1 && start <= end && start <= maxPage) {
+        // Clamp the end of a range to the last page ("5-100" on a 10-page file is 5-10).
+        for (let i = start; i <= Math.min(end, maxPage); i++) pages.add(i);
       }
     }
   }
@@ -245,7 +246,9 @@ export function generateFilteredMarkdown(blocks: DocumentBlock[]): string {
       }
       currentPage = block.page;
     }
-    const md = blockToMarkdown(block);
+    // The backend renders each block's Markdown (metadata.markdown): one source of truth.
+    const rendered = block.metadata?.markdown;
+    const md = typeof rendered === "string" ? rendered : blockToMarkdown(block);
     if (md) {
       parts.push(md);
       parts.push("");

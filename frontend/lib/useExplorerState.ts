@@ -90,20 +90,33 @@ export function useExplorerState(result: DocumentResponse) {
     setFilters((f) => ({ ...f, review: r }));
   }, []);
 
+  const cancelPendingQuery = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
   const clearFilters = useCallback(() => {
+    cancelPendingQuery();
     setFilters(createInitialFilters());
     setDebouncedQuery("");
     setCurrentMatchIndex(0);
-  }, []);
+  }, [cancelPendingQuery]);
 
   const removeFilter = useCallback(
     (key: string) => {
+      if (key === "query") {
+        // A pending debounce would otherwise re-apply the query we just removed.
+        cancelPendingQuery();
+        setDebouncedQuery("");
+        setCurrentMatchIndex(0);
+      }
       setFilters((f) => {
         const next = { ...f };
         switch (key) {
           case "query":
             next.query = "";
-            setDebouncedQuery("");
             break;
           case "pages":
             next.pageInput = "";
@@ -125,7 +138,7 @@ export function useExplorerState(result: DocumentResponse) {
         return next;
       });
     },
-    [],
+    [cancelPendingQuery],
   );
 
   const effectiveFilters = useMemo<FilterState>(

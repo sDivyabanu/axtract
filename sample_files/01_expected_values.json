@@ -1,0 +1,1117 @@
+{
+ "description": "Expected parsed values for 01_cross_page_table.pdf (merged table, header + data rows). Row format: raw strings in PDF, then expected parsed numbers.",
+ "columns": [
+  "Line Item",
+  "FY2024 ($)",
+  "FY2023",
+  "Change (%)"
+ ],
+ "rows": [
+  {
+   "raw": [
+    "Product Sales - North America",
+    "$690,487",
+    "529,464",
+    "30.4%"
+   ],
+   "parsed": [
+    "Product Sales - North America",
+    690487,
+    529464,
+    0.304
+   ]
+  },
+  {
+   "raw": [
+    "Product Sales - Europe",
+    "$797,572",
+    "689,913",
+    "15.6%"
+   ],
+   "parsed": [
+    "Product Sales - Europe",
+    797572,
+    689913,
+    0.156
+   ]
+  },
+  {
+   "raw": [
+    "Product Sales - APAC",
+    "$254,053",
+    "199,107",
+    "27.6%"
+   ],
+   "parsed": [
+    "Product Sales - APAC",
+    254053,
+    199107,
+    0.276
+   ]
+  },
+  {
+   "raw": [
+    "Product Sales - LATAM",
+    "$127,473",
+    "140,987",
+    "-9.6%"
+   ],
+   "parsed": [
+    "Product Sales - LATAM",
+    127473,
+    140987,
+    -0.096
+   ]
+  },
+  {
+   "raw": [
+    "Product Sales - MEA",
+    "$591,858",
+    "445,173",
+    "33.0%"
+   ],
+   "parsed": [
+    "Product Sales - MEA",
+    591858,
+    445173,
+    0.33
+   ]
+  },
+  {
+   "raw": [
+    "Product Sales - Online",
+    "$462,417",
+    "332,510",
+    "39.1%"
+   ],
+   "parsed": [
+    "Product Sales - Online",
+    462417,
+    332510,
+    0.391
+   ]
+  },
+  {
+   "raw": [
+    "Service Revenue - North America",
+    "$118,246",
+    "98,284",
+    "20.3%"
+   ],
+   "parsed": [
+    "Service Revenue - North America",
+    118246,
+    98284,
+    0.203
+   ]
+  },
+  {
+   "raw": [
+    "Service Revenue - Europe",
+    "$549,903",
+    "583,563",
+    "-5.8%"
+   ],
+   "parsed": [
+    "Service Revenue - Europe",
+    549903,
+    583563,
+    -0.057999999999999996
+   ]
+  },
+  {
+   "raw": [
+    "Service Revenue Adjustments - APAC",
+    "($608,508)",
+    "498,552",
+    "-222.1%"
+   ],
+   "parsed": [
+    "Service Revenue Adjustments - APAC",
+    -608508,
+    498552,
+    -2.221
+   ]
+  },
+  {
+   "raw": [
+    "Service Revenue - LATAM",
+    "$701,453",
+    "786,185",
+    "-10.8%"
+   ],
+   "parsed": [
+    "Service Revenue - LATAM",
+    701453,
+    786185,
+    -0.10800000000000001
+   ]
+  },
+  {
+   "raw": [
+    "Service Revenue - MEA",
+    "$459,898",
+    "382,756",
+    "20.2%"
+   ],
+   "parsed": [
+    "Service Revenue - MEA",
+    459898,
+    382756,
+    0.20199999999999999
+   ]
+  },
+  {
+   "raw": [
+    "Service Revenue - Online",
+    "$637,889",
+    "552,995",
+    "15.4%"
+   ],
+   "parsed": [
+    "Service Revenue - Online",
+    637889,
+    552995,
+    0.154
+   ]
+  },
+  {
+   "raw": [
+    "Subscription Fees - North America",
+    "$26,814",
+    "30,977",
+    "-13.4%"
+   ],
+   "parsed": [
+    "Subscription Fees - North America",
+    26814,
+    30977,
+    -0.134
+   ]
+  },
+  {
+   "raw": [
+    "Subscription Fees - Europe",
+    "$187,414",
+    "209,694",
+    "-10.6%"
+   ],
+   "parsed": [
+    "Subscription Fees - Europe",
+    187414,
+    209694,
+    -0.106
+   ]
+  },
+  {
+   "raw": [
+    "Subscription Fees - APAC",
+    "$376,778",
+    "326,562",
+    "15.4%"
+   ],
+   "parsed": [
+    "Subscription Fees - APAC",
+    376778,
+    326562,
+    0.154
+   ]
+  },
+  {
+   "raw": [
+    "Subscription Fees - LATAM",
+    "$245,772",
+    "313,194",
+    "-21.5%"
+   ],
+   "parsed": [
+    "Subscription Fees - LATAM",
+    245772,
+    313194,
+    -0.215
+   ]
+  },
+  {
+   "raw": [
+    "Subscription Fees - MEA",
+    "$372,944",
+    "283,932",
+    "31.3%"
+   ],
+   "parsed": [
+    "Subscription Fees - MEA",
+    372944,
+    283932,
+    0.313
+   ]
+  },
+  {
+   "raw": [
+    "Subscription Fees Adjustments - Online",
+    "($418,382)",
+    "317,146",
+    "-231.9%"
+   ],
+   "parsed": [
+    "Subscription Fees Adjustments - Online",
+    -418382,
+    317146,
+    -2.319
+   ]
+  },
+  {
+   "raw": [
+    "Licensing Income - North America",
+    "$380,663",
+    "404,353",
+    "-5.9%"
+   ],
+   "parsed": [
+    "Licensing Income - North America",
+    380663,
+    404353,
+    -0.059000000000000004
+   ]
+  },
+  {
+   "raw": [
+    "Licensing Income - Europe",
+    "$866,335",
+    "629,020",
+    "37.7%"
+   ],
+   "parsed": [
+    "Licensing Income - Europe",
+    866335,
+    629020,
+    0.377
+   ]
+  },
+  {
+   "raw": [
+    "Licensing Income - APAC",
+    "$501,741",
+    "512,647",
+    "-2.1%"
+   ],
+   "parsed": [
+    "Licensing Income - APAC",
+    501741,
+    512647,
+    -0.021
+   ]
+  },
+  {
+   "raw": [
+    "Licensing Income - LATAM",
+    "$416,922",
+    "311,557",
+    "33.8%"
+   ],
+   "parsed": [
+    "Licensing Income - LATAM",
+    416922,
+    311557,
+    0.33799999999999997
+   ]
+  },
+  {
+   "raw": [
+    "Licensing Income - MEA",
+    "$327,419",
+    "392,131",
+    "-16.5%"
+   ],
+   "parsed": [
+    "Licensing Income - MEA",
+    327419,
+    392131,
+    -0.165
+   ]
+  },
+  {
+   "raw": [
+    "Licensing Income - Online",
+    "$668,564",
+    "823,183",
+    "-18.8%"
+   ],
+   "parsed": [
+    "Licensing Income - Online",
+    668564,
+    823183,
+    -0.188
+   ]
+  },
+  {
+   "raw": [
+    "Consulting - North America",
+    "$399,201",
+    "417,728",
+    "-4.4%"
+   ],
+   "parsed": [
+    "Consulting - North America",
+    399201,
+    417728,
+    -0.044000000000000004
+   ]
+  },
+  {
+   "raw": [
+    "Consulting - Europe",
+    "$758,797",
+    "562,824",
+    "34.8%"
+   ],
+   "parsed": [
+    "Consulting - Europe",
+    758797,
+    562824,
+    0.348
+   ]
+  },
+  {
+   "raw": [
+    "Consulting Adjustments - APAC",
+    "($713,384)",
+    "596,916",
+    "-219.5%"
+   ],
+   "parsed": [
+    "Consulting Adjustments - APAC",
+    -713384,
+    596916,
+    -2.195
+   ]
+  },
+  {
+   "raw": [
+    "Consulting - LATAM",
+    "$323,445",
+    "417,610",
+    "-22.5%"
+   ],
+   "parsed": [
+    "Consulting - LATAM",
+    323445,
+    417610,
+    -0.225
+   ]
+  },
+  {
+   "raw": [
+    "Consulting - MEA",
+    "$264,098",
+    "322,170",
+    "-18.0%"
+   ],
+   "parsed": [
+    "Consulting - MEA",
+    264098,
+    322170,
+    -0.18
+   ]
+  },
+  {
+   "raw": [
+    "Consulting - Online",
+    "$418,591",
+    "362,828",
+    "15.4%"
+   ],
+   "parsed": [
+    "Consulting - Online",
+    418591,
+    362828,
+    0.154
+   ]
+  },
+  {
+   "raw": [
+    "Maintenance Contracts - North America",
+    "$686,563",
+    "824,195",
+    "-16.7%"
+   ],
+   "parsed": [
+    "Maintenance Contracts - North America",
+    686563,
+    824195,
+    -0.16699999999999998
+   ]
+  },
+  {
+   "raw": [
+    "Maintenance Contracts - Europe",
+    "$190,555",
+    "175,712",
+    "8.4%"
+   ],
+   "parsed": [
+    "Maintenance Contracts - Europe",
+    190555,
+    175712,
+    0.084
+   ]
+  },
+  {
+   "raw": [
+    "Maintenance Contracts - APAC",
+    "$239,684",
+    "264,156",
+    "-9.3%"
+   ],
+   "parsed": [
+    "Maintenance Contracts - APAC",
+    239684,
+    264156,
+    -0.09300000000000001
+   ]
+  },
+  {
+   "raw": [
+    "Maintenance Contracts - LATAM",
+    "$755,911",
+    "953,954",
+    "-20.8%"
+   ],
+   "parsed": [
+    "Maintenance Contracts - LATAM",
+    755911,
+    953954,
+    -0.20800000000000002
+   ]
+  },
+  {
+   "raw": [
+    "Maintenance Contracts - MEA",
+    "$699,514",
+    "519,628",
+    "34.6%"
+   ],
+   "parsed": [
+    "Maintenance Contracts - MEA",
+    699514,
+    519628,
+    0.34600000000000003
+   ]
+  },
+  {
+   "raw": [
+    "Maintenance Contracts Adjustments - Online",
+    "($685,822)",
+    "550,497",
+    "-224.6%"
+   ],
+   "parsed": [
+    "Maintenance Contracts Adjustments - Online",
+    -685822,
+    550497,
+    -2.246
+   ]
+  },
+  {
+   "raw": [
+    "Hardware - North America",
+    "$784,544",
+    "664,419",
+    "18.1%"
+   ],
+   "parsed": [
+    "Hardware - North America",
+    784544,
+    664419,
+    0.18100000000000002
+   ]
+  },
+  {
+   "raw": [
+    "Hardware - Europe",
+    "$504,714",
+    "468,209",
+    "7.8%"
+   ],
+   "parsed": [
+    "Hardware - Europe",
+    504714,
+    468209,
+    0.078
+   ]
+  },
+  {
+   "raw": [
+    "Hardware - APAC",
+    "$691,088",
+    "769,109",
+    "-10.1%"
+   ],
+   "parsed": [
+    "Hardware - APAC",
+    691088,
+    769109,
+    -0.10099999999999999
+   ]
+  },
+  {
+   "raw": [
+    "Hardware - LATAM",
+    "$250,283",
+    "278,006",
+    "-10.0%"
+   ],
+   "parsed": [
+    "Hardware - LATAM",
+    250283,
+    278006,
+    -0.1
+   ]
+  },
+  {
+   "raw": [
+    "Hardware - MEA",
+    "$825,635",
+    "962,360",
+    "-14.2%"
+   ],
+   "parsed": [
+    "Hardware - MEA",
+    825635,
+    962360,
+    -0.142
+   ]
+  },
+  {
+   "raw": [
+    "Hardware - Online",
+    "$260,174",
+    "310,408",
+    "-16.2%"
+   ],
+   "parsed": [
+    "Hardware - Online",
+    260174,
+    310408,
+    -0.162
+   ]
+  },
+  {
+   "raw": [
+    "Cloud Hosting - North America",
+    "$864,151",
+    "768,465",
+    "12.5%"
+   ],
+   "parsed": [
+    "Cloud Hosting - North America",
+    864151,
+    768465,
+    0.125
+   ]
+  },
+  {
+   "raw": [
+    "Cloud Hosting - Europe",
+    "$300,746",
+    "222,465",
+    "35.2%"
+   ],
+   "parsed": [
+    "Cloud Hosting - Europe",
+    300746,
+    222465,
+    0.35200000000000004
+   ]
+  },
+  {
+   "raw": [
+    "Cloud Hosting Adjustments - APAC",
+    "($614,731)",
+    "753,549",
+    "-181.6%"
+   ],
+   "parsed": [
+    "Cloud Hosting Adjustments - APAC",
+    -614731,
+    753549,
+    -1.8159999999999998
+   ]
+  },
+  {
+   "raw": [
+    "Cloud Hosting - LATAM",
+    "$349,963",
+    "289,620",
+    "20.8%"
+   ],
+   "parsed": [
+    "Cloud Hosting - LATAM",
+    349963,
+    289620,
+    0.20800000000000002
+   ]
+  },
+  {
+   "raw": [
+    "Cloud Hosting - MEA",
+    "$543,481",
+    "509,447",
+    "6.7%"
+   ],
+   "parsed": [
+    "Cloud Hosting - MEA",
+    543481,
+    509447,
+    0.067
+   ]
+  },
+  {
+   "raw": [
+    "Cloud Hosting - Online",
+    "$694,079",
+    "676,942",
+    "2.5%"
+   ],
+   "parsed": [
+    "Cloud Hosting - Online",
+    694079,
+    676942,
+    0.025
+   ]
+  },
+  {
+   "raw": [
+    "Training - North America",
+    "$297,746",
+    "233,366",
+    "27.6%"
+   ],
+   "parsed": [
+    "Training - North America",
+    297746,
+    233366,
+    0.276
+   ]
+  },
+  {
+   "raw": [
+    "Training - Europe",
+    "$801,177",
+    "830,677",
+    "-3.6%"
+   ],
+   "parsed": [
+    "Training - Europe",
+    801177,
+    830677,
+    -0.036000000000000004
+   ]
+  },
+  {
+   "raw": [
+    "Training - APAC",
+    "$295,504",
+    "339,300",
+    "-12.9%"
+   ],
+   "parsed": [
+    "Training - APAC",
+    295504,
+    339300,
+    -0.129
+   ]
+  },
+  {
+   "raw": [
+    "Training - LATAM",
+    "$469,245",
+    "581,250",
+    "-19.3%"
+   ],
+   "parsed": [
+    "Training - LATAM",
+    469245,
+    581250,
+    -0.193
+   ]
+  },
+  {
+   "raw": [
+    "Training - MEA",
+    "$438,801",
+    "402,467",
+    "9.0%"
+   ],
+   "parsed": [
+    "Training - MEA",
+    438801,
+    402467,
+    0.09
+   ]
+  },
+  {
+   "raw": [
+    "Training Adjustments - Online",
+    "($165,051)",
+    "165,994",
+    "-199.4%"
+   ],
+   "parsed": [
+    "Training Adjustments - Online",
+    -165051,
+    165994,
+    -1.994
+   ]
+  },
+  {
+   "raw": [
+    "Royalties - North America",
+    "$115,325",
+    "133,023",
+    "-13.3%"
+   ],
+   "parsed": [
+    "Royalties - North America",
+    115325,
+    133023,
+    -0.133
+   ]
+  },
+  {
+   "raw": [
+    "Royalties - Europe",
+    "$134,975",
+    "106,860",
+    "26.3%"
+   ],
+   "parsed": [
+    "Royalties - Europe",
+    134975,
+    106860,
+    0.263
+   ]
+  },
+  {
+   "raw": [
+    "Royalties - APAC",
+    "$187,753",
+    "220,656",
+    "-14.9%"
+   ],
+   "parsed": [
+    "Royalties - APAC",
+    187753,
+    220656,
+    -0.149
+   ]
+  },
+  {
+   "raw": [
+    "Royalties - LATAM",
+    "$462,666",
+    "489,429",
+    "-5.5%"
+   ],
+   "parsed": [
+    "Royalties - LATAM",
+    462666,
+    489429,
+    -0.055
+   ]
+  },
+  {
+   "raw": [
+    "Royalties - MEA",
+    "$423,457",
+    "393,379",
+    "7.6%"
+   ],
+   "parsed": [
+    "Royalties - MEA",
+    423457,
+    393379,
+    0.076
+   ]
+  },
+  {
+   "raw": [
+    "Royalties - Online",
+    "$510,785",
+    "519,707",
+    "-1.7%"
+   ],
+   "parsed": [
+    "Royalties - Online",
+    510785,
+    519707,
+    -0.017
+   ]
+  },
+  {
+   "raw": [
+    "Advertising - North America",
+    "$600,099",
+    "730,001",
+    "-17.8%"
+   ],
+   "parsed": [
+    "Advertising - North America",
+    600099,
+    730001,
+    -0.17800000000000002
+   ]
+  },
+  {
+   "raw": [
+    "Advertising - Europe",
+    "$32,038",
+    "35,503",
+    "-9.8%"
+   ],
+   "parsed": [
+    "Advertising - Europe",
+    32038,
+    35503,
+    -0.098
+   ]
+  },
+  {
+   "raw": [
+    "Advertising Adjustments - APAC",
+    "($140,116)",
+    "155,392",
+    "-190.2%"
+   ],
+   "parsed": [
+    "Advertising Adjustments - APAC",
+    -140116,
+    155392,
+    -1.902
+   ]
+  },
+  {
+   "raw": [
+    "Advertising - LATAM",
+    "$583,054",
+    "670,819",
+    "-13.1%"
+   ],
+   "parsed": [
+    "Advertising - LATAM",
+    583054,
+    670819,
+    -0.131
+   ]
+  },
+  {
+   "raw": [
+    "Advertising - MEA",
+    "$825,934",
+    "895,789",
+    "-7.8%"
+   ],
+   "parsed": [
+    "Advertising - MEA",
+    825934,
+    895789,
+    -0.078
+   ]
+  },
+  {
+   "raw": [
+    "Advertising - Online",
+    "$136,970",
+    "119,999",
+    "14.1%"
+   ],
+   "parsed": [
+    "Advertising - Online",
+    136970,
+    119999,
+    0.141
+   ]
+  },
+  {
+   "raw": [
+    "Partner Commissions - North America",
+    "$185,840",
+    "180,680",
+    "2.9%"
+   ],
+   "parsed": [
+    "Partner Commissions - North America",
+    185840,
+    180680,
+    0.028999999999999998
+   ]
+  },
+  {
+   "raw": [
+    "Partner Commissions - Europe",
+    "$777,168",
+    "952,428",
+    "-18.4%"
+   ],
+   "parsed": [
+    "Partner Commissions - Europe",
+    777168,
+    952428,
+    -0.184
+   ]
+  },
+  {
+   "raw": [
+    "Partner Commissions - APAC",
+    "$296,183",
+    "380,042",
+    "-22.1%"
+   ],
+   "parsed": [
+    "Partner Commissions - APAC",
+    296183,
+    380042,
+    -0.221
+   ]
+  },
+  {
+   "raw": [
+    "Partner Commissions - LATAM",
+    "$818,975",
+    "661,069",
+    "23.9%"
+   ],
+   "parsed": [
+    "Partner Commissions - LATAM",
+    818975,
+    661069,
+    0.239
+   ]
+  },
+  {
+   "raw": [
+    "Partner Commissions - MEA",
+    "$131,579",
+    "160,830",
+    "-18.2%"
+   ],
+   "parsed": [
+    "Partner Commissions - MEA",
+    131579,
+    160830,
+    -0.182
+   ]
+  },
+  {
+   "raw": [
+    "Partner Commissions Adjustments - Online",
+    "($332,942)",
+    "401,195",
+    "-183.0%"
+   ],
+   "parsed": [
+    "Partner Commissions Adjustments - Online",
+    -332942,
+    401195,
+    -1.83
+   ]
+  },
+  {
+   "raw": [
+    "Other Income - North America",
+    "$552,323",
+    "588,435",
+    "-6.1%"
+   ],
+   "parsed": [
+    "Other Income - North America",
+    552323,
+    588435,
+    -0.061
+   ]
+  },
+  {
+   "raw": [
+    "Other Income - Europe",
+    "$180,263",
+    "166,625",
+    "8.2%"
+   ],
+   "parsed": [
+    "Other Income - Europe",
+    180263,
+    166625,
+    0.08199999999999999
+   ]
+  },
+  {
+   "raw": [
+    "Other Income - APAC",
+    "$189,396",
+    "193,870",
+    "-2.3%"
+   ],
+   "parsed": [
+    "Other Income - APAC",
+    189396,
+    193870,
+    -0.023
+   ]
+  },
+  {
+   "raw": [
+    "Other Income - LATAM",
+    "$836,449",
+    "1,048,455",
+    "-20.2%"
+   ],
+   "parsed": [
+    "Other Income - LATAM",
+    836449,
+    1048455,
+    -0.20199999999999999
+   ]
+  },
+  {
+   "raw": [
+    "Other Income - MEA",
+    "$20,599",
+    "21,821",
+    "-5.6%"
+   ],
+   "parsed": [
+    "Other Income - MEA",
+    20599,
+    21821,
+    -0.055999999999999994
+   ]
+  },
+  {
+   "raw": [
+    "Other Income - Online",
+    "$532,340",
+    "378,858",
+    "40.5%"
+   ],
+   "parsed": [
+    "Other Income - Online",
+    532340,
+    378858,
+    0.405
+   ]
+  },
+  {
+   "raw": [
+    "TOTAL",
+    "$27,725,540",
+    "34,593,021",
+    "-19.9%"
+   ],
+   "parsed": [
+    "TOTAL",
+    27725540,
+    34593021,
+    -0.19899999999999998
+   ]
+  }
+ ]
+}

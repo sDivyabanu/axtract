@@ -43,7 +43,11 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
         footer_blocks: list[DocumentBlock] = []
 
         for block in page_blocks:
-            if block.bbox is not None:
+            # Running headers/footers only exist on real pages. Slides, standalone
+            # images and charts have no such zones, so only PDF page content (which
+            # the router tags with a "route") is classified by position.
+            is_page_content = "route" in block.metadata
+            if block.bbox is not None and is_page_content:
                 _, y1, _, y2 = block.bbox
                 mid_y = (y1 + y2) / 2
 
@@ -56,8 +60,10 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
                 else:
                     body_blocks.append(block)
             else:
-                # No bbox — can't determine position, treat as body
                 body_blocks.append(block)
+
+        header_blocks.sort(key=lambda b: (b.bbox[1], b.bbox[0]))
+        footer_blocks.sort(key=lambda b: (b.bbox[1], b.bbox[0]))
 
         # Detect columns among body blocks
         columns = _detect_columns(body_blocks)

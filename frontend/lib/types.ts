@@ -45,6 +45,16 @@ export interface DocumentResponse {
   blocks: DocumentBlock[];
   markdown: string;
   errors: DocumentError[];
+  // Optional preview info. A failed preview never fails the parse.
+  preview_available?: boolean;
+  preview_pages?: number;
+  preview_error?: string | null;
+}
+
+// Where a block sits in the preview pages (set for Office formats).
+export interface BlockPreview {
+  page: number;
+  bbox: BBox | null;
 }
 
 export interface ErrorResponse {

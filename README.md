@@ -287,3 +287,58 @@ The route and service do not need to change.
 | Task queue | Not implemented |
 | Cloud storage | Not implemented |
 | Chatbot / LLM integration | Not implemented (future feature) |
+
+---
+
+## Charts, equations and previews (local, no network at runtime)
+
+**Setup (one time)**
+
+```bash
+cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cd .. && backend/.venv/bin/python scripts/fetch_models.py   # formula weights, checksummed
+# LibreOffice is needed only to preview DOCX/PPTX/XLSX (and EMF/WMF pictures):
+#   macOS: download from libreoffice.org, or put `soffice` on PATH
+```
+
+Without the formula weights the server still runs: formula regions are flagged
+`formula_model_unavailable`. Without LibreOffice, Office previews are reported in the optional
+`preview_error` field; the parse itself still succeeds.
+
+**How regions are read** (`services/region_router.py`)
+
+| Region | Source | Method | Values |
+|---|---|---|---|
+| Office native chart | `word|ppt/charts/chartN.xml` | cached series in the XML | exact |
+| PDF vector chart | drawing primitives (pdfplumber) | axis ticks → values | exact |
+| Chart in a picture (PDF/DOCX/PPTX/JPG/PNG) | raster | OpenCV + OCR tick calibration | `values_estimated` unless printed labels agree |
+| Word/PowerPoint equation | OMML | built-in OMML→LaTeX | exact |
+| Equation image / scanned formula | crop | local ONNX formula model, validated + OCR cross-check | confidence ≤ 0.75, flagged when unverified |
+| Inline text math (`x^2 + y^2 = r^2`) | text layer | deterministic conversion | validated |
+
+Nothing is invented: unreadable values are `null`, unverified LaTeX is flagged
+(`requires_review`, `metadata.flags`), and charts whose printed numbers contradict the
+measurement are flagged `data_labels_disagree_with_measurement`.
+
+**Optional response fields added** (schema otherwise unchanged): `preview_available`,
+`preview_pages`, `preview_error`. Block `metadata` gains `preview` (page + bbox in the preview
+pages, Office formats), `chart_data`, `latex`, `flags`, `needs_review`, `markdown`, `page_size_pt`.
+
+**Components and licences**
+
+| Component | Used for | Licence |
+|---|---|---|
+| pypdfium2 | page rendering | BSD-3 / Apache-2.0 |
+| pdfplumber | PDF vector chart primitives | MIT |
+| rapid-layout (+ bundled CDLA ONNX layout model) | formula/figure regions | Apache-2.0 (model weights: verify before commercial shipping) |
+| rapid-latex-ocr (pix2tex ONNX export) | image → LaTeX | Apache-2.0 code; pix2tex MIT; weights: verify |
+| latex2mathml | LaTeX syntax check | MIT |
+| defusedxml | safe parsing of chart parts | PSF |
+| OpenCV (via rapidocr) | chart geometry | Apache-2.0 |
+| KaTeX (frontend) | equation rendering | MIT |
+| LibreOffice (external, optional) | Office → PDF preview | MPL-2.0 |
+| **PyMuPDF** | PDF text/tables (existing) | **AGPL-3.0: replace or license before commercial distribution** |
+
+Tests: `cd backend && .venv/bin/python -m pytest` (LibreOffice / formula tests skip if absent).
+Reports: `backend/.venv/bin/python scripts/run_samples.py --tag after` → `reports/after_report.md`
+and annotated pages in `reports/previews/`.

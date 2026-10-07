@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BlockType } from "@/lib/types";
 import type { ConfidenceFilter, ReviewFilter } from "@/lib/filters";
 import type { DocumentBlock } from "@/lib/types";
@@ -210,14 +210,26 @@ function Dropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  function handleBlur(e: React.FocusEvent) {
-    if (ref.current && !ref.current.contains(e.relatedTarget as Node)) {
-      setOpen(false);
-    }
-  }
+  // Close on outside click / Escape. (Blur-based closing breaks in Safari and Firefox on
+  // macOS, where buttons and checkboxes do not take focus when clicked.)
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   return (
-    <div className="relative" ref={ref} onBlur={handleBlur}>
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(!open)}

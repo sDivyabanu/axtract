@@ -59,3 +59,7 @@ class DocumentResponse(BaseModel):
     blocks: list[DocumentBlock]
     markdown: str = ""
     errors: list[DocumentError] = Field(default_factory=list)
+    # Optional preview info. A failed preview never fails the parse: it sets preview_error.
+    preview_available: bool = False
+    preview_pages: int = 0
+    preview_error: str | None = None

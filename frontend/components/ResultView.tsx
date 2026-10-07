@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import katex from "katex";
 import type { DocumentBlock, DocumentResponse } from "@/lib/types";
 import { generateFilteredMarkdown } from "@/lib/filters";
 import { useExplorerState } from "@/lib/useExplorerState";
@@ -15,21 +16,23 @@ const BLOCKS_PER_PAGE = 100;
 
 interface ResultViewProps {
   result: DocumentResponse;
-  sourceFile?: File | null;
 }
 
-export default function ResultView({ result, sourceFile }: ResultViewProps) {
+export default function ResultView({ result }: ResultViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("blocks");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [sourceViewerOpen, setSourceViewerOpen] = useState(false);
   const explorer = useExplorerState(result);
+  // Filters can shrink the match list under the current index: clamp it.
+  const safeMatchIndex =
+    explorer.totalMatches > 0 ? Math.min(explorer.currentMatchIndex, explorer.totalMatches - 1) : 0;
 
   const selectedBlock = useMemo(
     () => result.blocks.find((b) => b.id === selectedBlockId) ?? null,
     [result.blocks, selectedBlockId],
   );
 
-  const canShowSource = sourceFile != null && (result.file_type === "pdf" || result.file_type === "jpg" || result.file_type === "jpeg" || result.file_type === "png");
+  const canShowSource = result.preview_available === true && (result.preview_pages ?? 0) > 0;
 
   function handleSelectBlock(block: DocumentBlock) {
     setSelectedBlockId(block.id);
@@ -133,7 +136,7 @@ export default function ResultView({ result, sourceFile }: ResultViewProps) {
           />
           {explorer.debouncedQuery && (
             <MatchNavigator
-              currentIndex={explorer.currentMatchIndex}
+              currentIndex={safeMatchIndex}
               totalMatches={explorer.totalMatches}
               matchPages={explorer.matchPages}
               query={explorer.debouncedQuery}
@@ -185,7 +188,7 @@ export default function ResultView({ result, sourceFile }: ResultViewProps) {
             blocks={explorer.filtered}
             query={explorer.debouncedQuery}
             matchInfo={explorer.matchInfo}
-            currentMatchIndex={explorer.currentMatchIndex}
+            currentMatchIndex={safeMatchIndex}
             selectedBlockId={selectedBlockId}
             onSelectBlock={handleSelectBlock}
           />
@@ -210,26 +213,30 @@ export default function ResultView({ result, sourceFile }: ResultViewProps) {
     </section>
   );
 
-  if (sourceViewerOpen && sourceFile && canShowSource) {
-    return (
-      <div className="flex gap-0 -mx-6 px-6" style={{ width: "calc(100vw - 2rem)", maxWidth: "100vw" }}>
-        <div className="w-1/2 min-w-0 pr-3 overflow-y-auto" style={{ maxHeight: "calc(100vh - 120px)" }}>
-          {explorerContent}
-        </div>
-        <div className="w-1/2 min-w-0 sticky top-0" style={{ height: "calc(100vh - 120px)" }}>
+  const viewerOpen = sourceViewerOpen && canShowSource;
+
+  return (
+    <div className={viewerOpen ? "grid grid-cols-1 gap-3 lg:grid-cols-2" : ""}>
+      <div className="min-w-0">
+        {!canShowSource && result.preview_error && (
+          <p className="mb-2 rounded border border-yellow-300 bg-yellow-50 p-2 text-xs text-yellow-800">
+            Preview unavailable: {result.preview_error}
+          </p>
+        )}
+        {explorerContent}
+      </div>
+      {viewerOpen && (
+        <div className="sticky top-4 hidden h-[calc(100vh-2rem)] min-w-0 lg:block">
           <SourceViewer
-            file={sourceFile}
-            fileType={result.file_type}
-            pageCount={result.page_count}
+            documentId={result.document_id}
+            pageCount={result.preview_pages ?? 1}
             selectedBlock={selectedBlock}
             onClose={handleCloseSource}
           />
         </div>
-      </div>
-    );
-  }
-
-  return explorerContent;
+      )}
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -503,6 +510,10 @@ function BlockCard({
       {/* Content */}
       {block.type === "table" ? (
         <TableRenderer block={block} query={query} />
+      ) : block.type === "chart" ? (
+        <ChartRenderer block={block} />
+      ) : block.type === "equation" ? (
+        <EquationRenderer block={block} />
       ) : (
         <div className="whitespace-pre-wrap text-sm">
           <HighlightedText text={block.content} query={query} />
@@ -516,33 +527,49 @@ function BlockCard({
 /* Highlighted Text                                                    */
 /* ------------------------------------------------------------------ */
 
-function HighlightedText({ text, query }: { text: string; query: string }) {
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Highlights every case-insensitive occurrence of `query`. `activeIndex` marks the nth
+ * match (0-based, counted from `startOffset`) as the current one.
+ */
+function HighlightedText({
+  text,
+  query,
+  activeIndex = -1,
+}: {
+  text: string;
+  query: string;
+  activeIndex?: number;
+}) {
   if (!query) return <>{text}</>;
-
-  const lower = text.toLowerCase();
-  const lowerQ = query.toLowerCase();
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let pos = lower.indexOf(lowerQ);
-
-  while (pos !== -1) {
-    if (pos > lastIndex) parts.push(text.slice(lastIndex, pos));
-    parts.push(
-      <mark key={pos} className="bg-amber-200 rounded-sm px-0.5">
-        {text.slice(pos, pos + query.length)}
-      </mark>,
-    );
-    lastIndex = pos + query.length;
-    pos = lower.indexOf(lowerQ, lastIndex);
-  }
-
-  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
-  return <>{parts}</>;
+  const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 0) return part;
+        const active = (i - 1) / 2 === activeIndex; // matches sit at odd indices
+        return (
+          <mark
+            key={i}
+            id={active ? "active-text-match" : undefined}
+            className={`rounded-sm px-0.5 ${active ? "bg-orange-400 text-white" : "bg-amber-200"}`}
+          >
+            {part}
+          </mark>
+        );
+      })}
+    </>
+  );
 }
 
 /* ------------------------------------------------------------------ */
 /* Table Renderer                                                      */
 /* ------------------------------------------------------------------ */
+
+type MergedRegion = [number, number, number, number]; // row, col, rowspan, colspan
 
 function TableRenderer({
   block,
@@ -551,7 +578,7 @@ function TableRenderer({
   block: DocumentBlock;
   query: string;
 }) {
-  const rows = block.metadata?.rows as string[][] | undefined;
+  const rows = block.metadata?.rows as (string | null)[][] | undefined;
 
   if (!rows || rows.length === 0) {
     return (
@@ -561,33 +588,156 @@ function TableRenderer({
     );
   }
 
+  // Merged cells: the extractor reports the regions; covered cells arrive as null.
+  const merged = (block.metadata?.merged_cells as { merged_regions?: MergedRegion[] } | undefined)
+    ?.merged_regions ?? [];
+  const origins = new Map<string, [number, number]>();
+  const covered = new Set<string>();
+  for (const [r, c, rs, cs] of merged) {
+    origins.set(`${r},${c}`, [rs, cs]);
+    for (let i = r; i < r + rs; i++)
+      for (let j = c; j < c + cs; j++) if (i !== r || j !== c) covered.add(`${i},${j}`);
+  }
+  const headerRows = Math.max(
+    1,
+    Number((block.metadata?.multi_row_header as { header_row_count?: number } | undefined)?.header_row_count ?? 1),
+  );
+
+  const renderCell = (cell: string | null, ri: number, ci: number, header: boolean) => {
+    if (covered.has(`${ri},${ci}`)) return null;
+    const span = origins.get(`${ri},${ci}`);
+    const Tag = header ? "th" : "td";
+    return (
+      <Tag
+        key={ci}
+        rowSpan={span?.[0]}
+        colSpan={span?.[1]}
+        className={`border border-gray-300 px-3 py-1.5 ${header ? "bg-gray-50 text-left font-medium" : ""}`}
+      >
+        <HighlightedText text={cell == null ? "" : String(cell)} query={query} />
+      </Tag>
+    );
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr>
-            {rows[0].map((cell, i) => (
-              <th
-                key={i}
-                className="border border-gray-300 bg-gray-50 px-3 py-1.5 text-left font-medium"
-              >
-                <HighlightedText text={String(cell)} query={query} />
-              </th>
-            ))}
-          </tr>
+          {rows.slice(0, headerRows).map((row, ri) => (
+            <tr key={ri}>{row.map((cell, ci) => renderCell(cell, ri, ci, true))}</tr>
+          ))}
         </thead>
         <tbody>
-          {rows.slice(1).map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td key={ci} className="border border-gray-300 px-3 py-1.5">
-                  <HighlightedText text={String(cell)} query={query} />
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.slice(headerRows).map((row, i) => {
+            const ri = i + headerRows;
+            return <tr key={ri}>{row.map((cell, ci) => renderCell(cell, ri, ci, false))}</tr>;
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Chart + Equation renderers                                          */
+/* ------------------------------------------------------------------ */
+
+interface ChartSeries {
+  name: string;
+  values: (number | null)[];
+  x_values?: (number | null)[];
+}
+interface ChartData {
+  title?: string;
+  chart_type?: string;
+  categories?: string[];
+  series?: ChartSeries[];
+  x_label?: string;
+  y_label?: string;
+  extraction_method?: string;
+  values_estimated?: boolean;
+}
+
+const fmt = (v: number | null | undefined) => (v == null ? "—" : Number(v.toPrecision(7)).toString());
+
+function ChartRenderer({ block }: { block: DocumentBlock }) {
+  const data = block.metadata?.chart_data as ChartData | undefined;
+  const flags = (block.metadata?.flags as string[] | undefined) ?? [];
+  if (!data?.series?.length) {
+    return <div className="text-sm text-gray-500">{block.content}</div>;
+  }
+  const scatter = data.series.some((s) => s.x_values?.length);
+  const n = Math.max(...data.series.map((s) => s.values.length));
+  return (
+    <div className="text-sm">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span className="font-medium">{data.title || "Chart"}</span>
+        <span className="rounded bg-pink-50 px-1.5 py-0.5 text-xs text-pink-700">{data.chart_type}</span>
+        <span className="text-xs text-gray-400">{data.extraction_method}</span>
+        {data.values_estimated && (
+          <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800">values estimated</span>
+        )}
+        {flags.map((f) => (
+          <span key={f} className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">{f}</span>
+        ))}
+      </div>
+      {(data.x_label || data.y_label) && (
+        <div className="mb-1 text-xs text-gray-500">
+          {data.x_label && <>x: {data.x_label}</>} {data.y_label && <>y: {data.y_label}</>}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 bg-gray-50 px-2 py-1 text-left">{scatter ? "x" : ""}</th>
+              {data.series.map((s, i) => (
+                <th key={i} className="border border-gray-300 bg-gray-50 px-2 py-1 text-left">{s.name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: n }, (_, i) => (
+              <tr key={i}>
+                <td className="border border-gray-300 px-2 py-1 font-medium">
+                  {scatter ? fmt(data.series?.[0].x_values?.[i]) : data.categories?.[i] || i + 1}
+                </td>
+                {data.series?.map((s, k) => (
+                  <td key={k} className="border border-gray-300 px-2 py-1 tabular-nums">{fmt(s.values[i])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EquationRenderer({ block }: { block: DocumentBlock }) {
+  const latex = (block.metadata?.latex as string | undefined) ?? block.content;
+  const flags = (block.metadata?.flags as string[] | undefined) ?? [];
+  const html = useMemo(() => {
+    try {
+      return katex.renderToString(latex, { displayMode: true, throwOnError: false, trust: false });
+    } catch {
+      return null;
+    }
+  }, [latex]);
+  return (
+    <div className="text-sm">
+      {html ? (
+        <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <div className="text-red-600">Could not render this LaTeX.</div>
+      )}
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">{latex}</code>
+        <span className="text-gray-400">{String(block.metadata?.latex_method ?? "")}</span>
+        {flags.map((f) => (
+          <span key={f} className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">{f}</span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -617,28 +767,13 @@ function MarkdownTab({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <TextMatchNav text={markdown} query={query} />
-          {hasFilters && (
-            <span className="text-xs text-gray-400">
-              Showing filtered Markdown
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => navigator.clipboard?.writeText(markdown)}
-          className="rounded border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50"
-        >
-          Copy
-        </button>
-      </div>
-      <pre className="max-h-[600px] overflow-auto rounded-lg bg-gray-50 p-4 text-sm whitespace-pre-wrap">
-        <HighlightedText text={markdown} query={query} />
-      </pre>
-    </div>
+    <SearchableText
+      text={markdown}
+      query={query}
+      note={hasFilters ? "Showing filtered Markdown" : undefined}
+      copyText={markdown}
+      preClassName="max-h-[600px] overflow-auto rounded-lg bg-gray-50 p-4 text-sm whitespace-pre-wrap"
+    />
   );
 }
 
@@ -672,106 +807,118 @@ function JsonTab({
     return JSON.stringify({ ...result, blocks: filtered }, null, 2);
   }, [result, filtered, viewMode]);
 
-  const displayStr = jsonStr.length > 500000 ? jsonStr.slice(0, 500000) + "\n\n... (truncated for display, use Copy for full JSON)" : jsonStr;
+  const displayStr =
+    jsonStr.length > 500000
+      ? jsonStr.slice(0, 500000) + "\n\n... (truncated for display, use Copy for full JSON)"
+      : jsonStr;
+
+  const toggle = hasFilters ? (
+    <div className="flex items-center gap-1 text-xs">
+      {(["filtered", "full"] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setViewMode(mode)}
+          className={`rounded px-2 py-1 ${
+            viewMode === mode ? "bg-gray-900 text-white" : "border border-gray-300 hover:bg-gray-50"
+          }`}
+        >
+          {mode === "filtered" ? "Filtered" : "Full"}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  return (
+    <SearchableText
+      text={displayStr}
+      query={query}
+      leading={toggle}
+      copyText={jsonStr}
+      preClassName="max-h-[600px] overflow-auto rounded-lg bg-gray-50 p-4 text-xs"
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Searchable text: highlights matches and really navigates between them */
+/* ------------------------------------------------------------------ */
+
+function SearchableText({
+  text,
+  query,
+  copyText,
+  preClassName,
+  note,
+  leading,
+}: {
+  text: string;
+  query: string;
+  copyText: string;
+  preClassName: string;
+  note?: string;
+  leading?: React.ReactNode;
+}) {
+  const matchCount = useMemo(() => {
+    if (!query) return 0;
+    return text.split(new RegExp(escapeRegExp(query), "gi")).length - 1;
+  }, [text, query]);
+
+  const [rawIndex, setRawIndex] = useState(0);
+  const [trackedQuery, setTrackedQuery] = useState(query);
+  if (trackedQuery !== query) {
+    setTrackedQuery(query);
+    setRawIndex(0);
+  }
+  const index = matchCount > 0 ? Math.min(rawIndex, matchCount - 1) : 0;
+
+  useEffect(() => {
+    if (matchCount === 0) return;
+    document.getElementById("active-text-match")?.scrollIntoView({ block: "center" });
+  }, [index, matchCount, query]);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {hasFilters && (
-            <div className="flex items-center gap-1 text-xs">
+          {leading}
+          {query && matchCount === 0 && <span className="text-xs text-gray-400">No matches</span>}
+          {matchCount > 0 && (
+            <div className="flex items-center gap-1 text-xs text-gray-500">
               <button
                 type="button"
-                onClick={() => setViewMode("filtered")}
-                className={`rounded px-2 py-1 ${
-                  viewMode === "filtered"
-                    ? "bg-gray-900 text-white"
-                    : "border border-gray-300 hover:bg-gray-50"
-                }`}
+                onClick={() => setRawIndex((index - 1 + matchCount) % matchCount)}
+                className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50"
+                aria-label="Previous match"
               >
-                Filtered
+                &larr;
               </button>
+              <span>
+                {index + 1} / {matchCount}
+              </span>
               <button
                 type="button"
-                onClick={() => setViewMode("full")}
-                className={`rounded px-2 py-1 ${
-                  viewMode === "full"
-                    ? "bg-gray-900 text-white"
-                    : "border border-gray-300 hover:bg-gray-50"
-                }`}
+                onClick={() => setRawIndex((index + 1) % matchCount)}
+                className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50"
+                aria-label="Next match"
               >
-                Full
+                &rarr;
               </button>
             </div>
           )}
-          <TextMatchNav text={displayStr} query={query} />
+          {note && <span className="text-xs text-gray-400">{note}</span>}
         </div>
         <button
           type="button"
-          onClick={() => navigator.clipboard?.writeText(jsonStr)}
+          onClick={() => navigator.clipboard?.writeText(copyText)}
           className="rounded border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50"
         >
           Copy
         </button>
       </div>
-      <pre className="max-h-[600px] overflow-auto rounded-lg bg-gray-50 p-4 text-xs">
-        {query ? (
-          <HighlightedText text={displayStr} query={query} />
-        ) : (
-          displayStr
-        )}
+      <pre className={preClassName}>
+        <HighlightedText text={text} query={query} activeIndex={index} />
       </pre>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Text Match Navigator (reusable for Markdown + JSON)                 */
-/* ------------------------------------------------------------------ */
-
-function TextMatchNav({ text, query }: { text: string; query: string }) {
-  if (!query) return null;
-
-  const lower = text.toLowerCase();
-  const lowerQ = query.toLowerCase();
-  let matchCount = 0;
-  let pos = lower.indexOf(lowerQ);
-  while (pos !== -1) {
-    matchCount++;
-    pos = lower.indexOf(lowerQ, pos + 1);
-  }
-
-  if (matchCount === 0) {
-    return <span className="text-xs text-gray-400">No matches</span>;
-  }
-
-  return <TextMatchNavInner key={`${query}|${text.length}`} matchCount={matchCount} />;
-}
-
-function TextMatchNavInner({ matchCount }: { matchCount: number }) {
-  const [matchIndex, setMatchIndex] = useState(0);
-
-  return (
-    <div className="flex items-center gap-1 text-xs text-gray-500">
-      <button
-        type="button"
-        onClick={() =>
-          setMatchIndex((i) => (i - 1 + matchCount) % matchCount)
-        }
-        className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50"
-      >
-        &larr;
-      </button>
-      <span>
-        {matchIndex + 1} / {matchCount}
-      </span>
-      <button
-        type="button"
-        onClick={() => setMatchIndex((i) => (i + 1) % matchCount)}
-        className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50"
-      >
-        &rarr;
-      </button>
     </div>
   );
 }

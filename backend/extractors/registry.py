@@ -40,37 +40,20 @@ class _PDFRouterWrapper:
         return PDFRouter().extract(file_path)
 
 
-# Registered extractors (order doesn't matter; lookup is by extension).
-_EXTRACTORS: list[Extractable] = [
-    _PDFRouterWrapper(),  # PDF → adaptive routing (digital + OCR)
-    DocxExtractor(),
-    PptxExtractor(),
-    XlsxExtractor(),
-    OCRExtractor(),  # standalone images (jpg/jpeg/png)
-]
+_pdf = _PDFRouterWrapper()
+_ocr = OCRExtractor()
 
+# One explicit mapping: extension -> extractor. PDFs go through the adaptive router so
+# scanned pages get OCR; images use OCR directly.
 _BY_EXTENSION: dict[str, Extractable] = {
-    ext: extractor
-    for extractor in _EXTRACTORS
-    for ext in (
-        getattr(extractor, "supported_extensions", frozenset())
-        if isinstance(extractor, BaseExtractor)
-        else frozenset()
-    )
+    "pdf": _pdf,
+    "docx": DocxExtractor(),
+    "pptx": PptxExtractor(),
+    "xlsx": XlsxExtractor(),
+    "jpg": _ocr,
+    "jpeg": _ocr,
+    "png": _ocr,
 }
-
-# Register PDF router for "pdf" extension
-_BY_EXTENSION["pdf"] = _EXTRACTORS[0]  # _PDFRouterWrapper
-
-# Register image extensions for OCR
-_ocr = next(e for e in _EXTRACTORS if isinstance(e, OCRExtractor))
-for ext in ("jpg", "jpeg", "png"):
-    _BY_EXTENSION[ext] = _ocr
-
-# Register office formats
-_BY_EXTENSION["docx"] = next(e for e in _EXTRACTORS if isinstance(e, DocxExtractor))
-_BY_EXTENSION["pptx"] = next(e for e in _EXTRACTORS if isinstance(e, PptxExtractor))
-_BY_EXTENSION["xlsx"] = next(e for e in _EXTRACTORS if isinstance(e, XlsxExtractor))
 
 
 def get_extractor(extension: str) -> Extractable | None:
