@@ -226,6 +226,16 @@ class PyMuPDFExtractor(BaseExtractor):
             text_lines.append(" | ".join(cells))
         content = "\n".join(text_lines)
 
+        # Per-cell boxes (normalized, top-left origin) so a single value can be highlighted.
+        cell_bboxes: list[list] = []
+        try:
+            for row in table.rows:
+                cell_bboxes.append([
+                    list(_normalize_bbox(*c, pw, ph)) if c is not None else None for c in row.cells
+                ])
+        except Exception:  # noqa: BLE001 - cell geometry is a nicety, never fatal
+            cell_bboxes = []
+
         return DocumentBlock(
             id=f"p{page_number}-b{block_counter}",
             type=BlockType.TABLE,
@@ -239,6 +249,8 @@ class PyMuPDFExtractor(BaseExtractor):
                 "row_count": len(rows),
                 "col_count": table.col_count,
                 "header": rows[0] if rows else [],
+                "cell_bboxes": cell_bboxes if len(cell_bboxes) == len(rows) else [],
+                "row_pages": [page_number] * len(rows),
             },
         )
 

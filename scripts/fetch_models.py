@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -44,7 +45,16 @@ def main() -> int:
             print(f"ok       {name}")
             continue
         print(f"fetching {name} ...")
-        urllib.request.urlretrieve(f"{BASE}/{name}", target)
+        for attempt in range(1, 6):  # the release host occasionally resets connections
+            try:
+                urllib.request.urlretrieve(f"{BASE}/{name}", target)
+                break
+            except OSError as exc:
+                print(f"  attempt {attempt} failed: {exc}")
+                time.sleep(2 * attempt)
+        else:
+            print(f"could not download {name}", file=sys.stderr)
+            return 1
         if sha256(target) != digest:
             target.unlink(missing_ok=True)
             print(f"CHECKSUM MISMATCH for {name}; file removed", file=sys.stderr)

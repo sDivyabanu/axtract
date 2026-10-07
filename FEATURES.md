@@ -49,3 +49,66 @@
   `tests/gauntlet/make_gauntlet.py` (no real malware; all locally generated at
   safe sizes). Single command scores all controls: error code, time, peak memory,
   PASS/FAIL per file. Covers all controls above.
+
+---
+
+# DealLens — retrieval-augmented, auditable Q&A (RAG layer)
+
+> *"It doesn't just read the data room. It audits it — and every answer comes with a receipt."*
+> Self-hosted: local LLM (Ollama), local embeddings/reranker (ONNX), SQLite. Design: `docs/RAG_DESIGN.md`.
+> Status legend: ✅ implemented and tested · 🟡 partial · ⏳ planned (later phase).
+
+## Phase 1 — Core grounded Q&A  ✅
+
+- ✅ **Data rooms (workspaces)** — create a data room per deal; every document, chunk, table, fact and query is scoped to
+  its workspace (tested: a query in room A never returns room B's chunks; a document of A is not addressable via B).
+- ✅ **Multi-file upload with live status** — drag & drop several files; each shows *queued → parsing → indexing → ready*
+  (or the structured error), doc-type badge, page count, chunk count, review-flag count and quarantined count.
+  Byte-identical re-uploads are de-duplicated by SHA-256; rejected files are listed, never fatal.
+- ✅ **Document-type detection** — financial statement / CIM / contract / debt schedule / bank statement / presentation /
+  spreadsheet from filename + content keywords.
+- ✅ **Structure-aware chunking** — sections split by heading (target ~450 tokens, long paragraphs split on sentence
+  boundaries only); **tables, lists and equations are never split**; every chunk carries `heading_path`, `block_ids`,
+  `pages`, **printed page labels** (e.g. `F-3`, read from running headers/footers), per-block `bboxes`, `min_confidence`
+  and flags (`needs_review`, `values_estimated`, `low_ocr_confidence`).
+- ✅ **Three representations per table** — (a) Markdown chunk, (b) deterministic natural-language summary chunk (columns,
+  row labels, periods, unit — no LLM), (c) a **typed table store**: header paths with merged headers spread over the
+  columns they span, row labels, numeric values, unit/scale/currency, and **per-cell page + bounding box** (PDF).
+  Cross-page tables keep one box per page they occupy.
+- ✅ **Unit / period / currency detection** — "₹ in crore", "USD in millions", FY2025 / FY24 / 2024-25 / Q2 FY25 /
+  "year ended March 31, 2025" normalised to canonical periods; unit statements carried forward to following tables.
+- ✅ **Charts and equations are indexed** — chart title + categories + series values (with `values_estimated`), equation
+  LaTeX with its surrounding sentence.
+- ✅ **Incremental indexing** — chunks whose content hash is unchanged are not re-embedded.
+- ✅ **Hybrid retrieval** — own Okapi BM25 + dense embeddings (`BAAI/bge-small-en-v1.5`, MIT) fused with Reciprocal
+  Rank Fusion, then a local **cross-encoder reranker** (`ms-marco-MiniLM-L-6-v2`, Apache-2.0). Filters by document,
+  document type and period. Quarantined chunks are excluded from retrieval.
+- ✅ **Sentence-level citations** — every sentence ends with `[n]`; each citation resolves to document, page(s), printed
+  page, heading path and the exact block bounding boxes.
+- ✅ **Abstention** — weak evidence (cross-encoder score + lexical-overlap guard) or an LLM `NOT_FOUND` →
+  "Not found in this data room" plus *what was searched* (documents, passage count, closest sections). Never guesses.
+- ✅ **Confidence-aware answers** — if a cited source is OCR-low-confidence, `needs_review` or chart-estimated, the answer
+  shows amber badges (`needs review`, `estimated values`, `low OCR confidence`, …) and the citation chip turns amber.
+- ✅ **Answer verifier + grounding score** — every number and proper-noun claim in an answer must appear in a cited
+  chunk; unsupported sentences are marked *unverified* (red wavy underline) and the answer shows
+  "Grounding k/n claims verified". (Verified live: the LLM adding up 79 table rows itself scored 0/6 and was flagged.)
+- ✅ **Streaming pipeline** — Server-Sent Events: `Routing → Retrieving → Reranking → Generating → Verifying`, live
+  token stream, then the structured answer object.
+- ✅ **LLM never required** — if Ollama is down or the model is missing, answers fall back to **extractive mode**
+  (best cited passages / matching table rows, no generation) with a visible "LLM offline – extractive mode" badge.
+- ✅ **Query router** — `lookup | numeric | list | compare`, shown in the glass box.
+- ✅ **Ask page** — chat with clickable citation chips; **clicking a citation opens the original page with every cited box
+  highlighted** (multi-box, scrolls into view, works for PDF/DOCX/PPTX/XLSX/images); **hover shows a cropped preview**
+  of the cited region.
+- ✅ **Glass-box panel** — route, LLM/extractive mode, model, stage timings, every retrieved chunk with BM25 / dense /
+  RRF / rerank scores and which were used, abstention thresholds.
+- ✅ **Audit trail** — every upload, index and answer is logged with ids, hashes and timings only (no document text).
+- 🟡 **Persisted previews for data-room documents** — stored permanently (not TTL) so citations always resolve.
+
+**Models & licences:** LLM `qwen3:4b-instruct` via Ollama (Apache-2.0; fits 8 GB RAM; swap with
+`DEALLENS_LLM_MODEL`), embeddings `BAAI/bge-small-en-v1.5` (MIT), reranker `Xenova/ms-marco-MiniLM-L-6-v2`
+(Apache-2.0), `fastembed` (Apache-2.0), `pypdf` (BSD-3). Weights are downloaded once by `scripts/setup_rag.sh`
+(SHA-256 manifest) and the app then runs offline. No new PyMuPDF usage.
+
+**Measured on this machine (M1, 8 GB, CPU):** 5 sample files indexed in ~20–26 s; retrieval 20–60 ms; rerank ~0.8–1.2 s;
+extractive answer ≈ 1.3 s; LLM answer (short, grounded) ≈ 4 s, ~20 tokens/s.

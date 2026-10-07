@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from models.errors import AppError, ErrorInfo, ErrorResponse
-from routers import health, parse, preview
+from routers import health, parse, preview, rag
 
 logger = logging.getLogger("parseanything")
 
@@ -45,6 +45,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(parse.router)
 app.include_router(preview.router)
+app.include_router(rag.router)
 
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:

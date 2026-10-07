@@ -11,7 +11,11 @@ from models.errors import AppError
 
 logger = logging.getLogger(__name__)
 
+import os
+
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+# Persistent app data (RAG database, stored data-room files and their previews). Gitignored.
+DATA_DIR = Path(os.environ.get("DEALLENS_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 _MAX_FILENAME_LENGTH = 255

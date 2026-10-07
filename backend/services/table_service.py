@@ -260,6 +260,14 @@ def merge_two_tables(table1: DocumentBlock, table2: DocumentBlock) -> DocumentBl
         skip += 1
     merged_rows = rows1 + rows2[skip:]
 
+    # keep per-row page and per-cell boxes aligned with the merged rows
+    pages1 = list(table1.metadata.get("row_pages") or [table1.page] * len(rows1))
+    pages2 = list(table2.metadata.get("row_pages") or [table2.page] * len(rows2))
+    boxes1 = table1.metadata.get("cell_bboxes") or []
+    boxes2 = table2.metadata.get("cell_bboxes") or []
+    row_pages = pages1 + pages2[skip:]
+    cell_bboxes = (boxes1 + boxes2[skip:]) if (len(boxes1) == len(rows1) and len(boxes2) == len(rows2)) else []
+
     merged_content = table1.content + "\n" + "\n".join(
         line for i, line in enumerate(table2.content.split("\n")) if i >= skip
     )
@@ -275,6 +283,8 @@ def merge_two_tables(table1: DocumentBlock, table2: DocumentBlock) -> DocumentBl
         {
             "rows": merged_rows,
             "row_count": len(merged_rows),
+            "row_pages": row_pages,
+            "cell_bboxes": cell_bboxes,
             "is_cross_page_merged": True,
             "merged_from_pages": parts,
             "merged_table_ids": ids,
