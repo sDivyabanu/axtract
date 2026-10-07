@@ -17,7 +17,8 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import UploadFile
-
+from security.pipeline import pre_scan,scan_blocks,scan_hidden_content
+from security.output_safety import sanitise_block_text, sanitise_markdown
 from extractors.registry import get_extractor
 from models.document import DocumentResponse
 from models.errors import AppError
@@ -35,6 +36,7 @@ from utils.files import (
     save_upload_to_temp,
     validate_magic_bytes,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +92,23 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
                 "File content does not match the expected format.",
                 status_code=422,
             )
+        security_findings = pre_scan(
+            temp_path,
+            file_type,
+            )
+        hidden_content, hidden_findings = scan_hidden_content(
+             temp_path,
+             file_type,
+             )
+        security_findings.extend(hidden_findings)
 
         # 4. Extract
         result = extractor.extract(temp_path)
-
-        # 4a. Charts, equations and figures: route every region to its reader
+        # 4a. Security scan of extracted content
+        security_findings.extend(
+            scan_blocks(result.blocks)
+            )
+        # 4a1. Charts, equations and figures: route every region to its reader
         route_regions(result, temp_path, file_type)
 
         # 4b. Preview artifacts (never fatal). Office files are converted to PDF here,
@@ -113,7 +127,10 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
 
     # 5. Layout analysis and reading order
     ordered_blocks = assign_reading_order(result.blocks)
-
+    # 5a. Output safety sanitization
+    for block in ordered_blocks:
+        if block.content:
+            block.content = sanitise_block_text(block.content)
     # 5b. Where each block sits in the preview pages (Office formats)
     try:
         preview_service.annotate_blocks(preview, ordered_blocks, file_type)
@@ -125,7 +142,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
 
     # 6. Markdown generation
     markdown = blocks_to_markdown(ordered_blocks)
-
+    markdown = sanitise_markdown(markdown)
     return DocumentResponse(
         document_id=document_id,
         filename=filename,
@@ -136,6 +153,8 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         blocks=ordered_blocks,
         markdown=markdown,
         errors=result.errors,
+        security_findings=security_findings,
+        hidden_content=hidden_content,
         preview_available=preview.available,
         preview_pages=preview.pages,
         preview_error=preview.error,
