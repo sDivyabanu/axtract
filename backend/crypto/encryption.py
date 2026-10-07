@@ -41,7 +41,8 @@ def _get_master_key() -> bytes:
 
 
 def get_key_version() -> int:
-    return int(os.environ.get("AXTRACT_KEY_VERSION", "1"))
+    """Accepts "1" or "v1"."""
+    return int(os.environ.get("AXTRACT_KEY_VERSION", "1").strip().lstrip("vV"))
 
 
 class EncryptionResult:
