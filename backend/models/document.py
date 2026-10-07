@@ -59,5 +59,3 @@ class DocumentResponse(BaseModel):
     blocks: list[DocumentBlock]
     markdown: str = ""
     errors: list[DocumentError] = Field(default_factory=list)
-    health_report: dict[str, Any] = Field(default_factory=dict)
-    cost_summary: dict[str, Any] = Field(default_factory=dict)

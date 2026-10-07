@@ -45,8 +45,6 @@ export interface DocumentResponse {
   blocks: DocumentBlock[];
   markdown: string;
   errors: DocumentError[];
-  health_report: Record<string, unknown>;
-  cost_summary: Record<string, unknown>;
 }
 
 export interface ErrorResponse {
