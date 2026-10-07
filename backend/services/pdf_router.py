@@ -20,6 +20,7 @@ from extractors.ocr_extractor import OCRExtractor
 from extractors.pymupdf_extractor import PyMuPDFExtractor
 from models.document import BlockType, DocumentBlock
 from models.errors import AppError, DocumentError
+from utils import deadline
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,17 @@ class PDFRouter:
                     status_code=422,
                 )
 
+            if doc.page_count == 0:
+                raise AppError(
+                    "INVALID_FILE",
+                    "The PDF has no readable pages (it may be corrupt or truncated).",
+                    status_code=422,
+                )
+
             result = ExtractionResult(page_count=doc.page_count)
 
             for page_number, page in enumerate(doc, start=1):
+                deadline.check()
                 try:
                     analysis = PyMuPDFExtractor.analyze_page(page)
                     route = self._decide_route(analysis)
@@ -123,7 +132,17 @@ class PDFRouter:
                 if not b.metadata.get("_internal_meta")
             ]
 
+            self._assign_heading_levels(result.blocks)
             return result
+
+    @staticmethod
+    def _assign_heading_levels(blocks: list[DocumentBlock]) -> None:
+        """Document-level heading levels: larger font -> shallower level (max 4)."""
+        headings = [b for b in blocks if b.type == BlockType.HEADING and b.metadata.get("font_size")]
+        sizes = sorted({round(b.metadata["font_size"]) for b in headings}, reverse=True)
+        for b in headings:
+            level = sizes.index(round(b.metadata["font_size"])) + 1
+            b.metadata["heading_level"] = min(level, 4)
 
     def _decide_route(self, analysis: dict) -> str:
         """Decide extraction route based on page analysis."""

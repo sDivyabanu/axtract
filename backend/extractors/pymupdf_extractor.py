@@ -17,6 +17,13 @@ from models.errors import AppError, DocumentError
 _TEXT_BLOCK = 0
 _IMAGE_BLOCK = 1
 
+# Fonts that carry typeset math (Computer Modern math, Symbol, Cambria Math, ...).
+_MATH_FONT = re.compile(r"cmmi|cmsy|cmex|msbm|msam|symbol|mathematicalpi|cambria\s*math|stix", re.I)
+# Strong math operators / symbols (Unicode math operators + a few common ones).
+_MATH_CHARS = frozenset(
+    "∑∏∫∬∭∮√∛∞∂∇±∓×÷≈≠≡≤≥≪≫∈∉⊂⊆⊃⊇∪∩∧∨¬→⇒⇔↔∀∃∴∵∝ℝℕℤℚℂ"
+)
+
 
 def _normalize_bbox(
     x0: float, y0: float, x1: float, y1: float, page_w: float, page_h: float
@@ -96,14 +103,16 @@ class PyMuPDFExtractor(BaseExtractor):
         except Exception:
             pass  # Table extraction failure is non-fatal
 
-        # 2. Text blocks (excluding table regions)
-        font_sizes: list[float] = []
+        # 2. Text and image blocks (excluding table regions).
+        # NOTE: do not pass custom `flags` here: that replaces PyMuPDF's defaults and
+        # silently drops image blocks and the mediabox clip.
         raw_blocks: list[dict] = []
+        span_sizes: list[tuple[float, int]] = []
 
-        for item in page.get_text("dict", flags=pymupdf.TEXT_PRESERVE_WHITESPACE)["blocks"]:
+        for item in page.get_text("dict")["blocks"]:
+            bbox_raw = (item["bbox"][0], item["bbox"][1], item["bbox"][2], item["bbox"][3])
+
             if item.get("type", -1) == _IMAGE_BLOCK:
-                # Image blocks → figure
-                bbox_raw = (item["bbox"][0], item["bbox"][1], item["bbox"][2], item["bbox"][3])
                 if not self._overlaps_tables(bbox_raw, table_rects):
                     blocks.append(
                         DocumentBlock(
@@ -125,72 +134,74 @@ class PyMuPDFExtractor(BaseExtractor):
 
             if item.get("type", -1) != _TEXT_BLOCK:
                 continue
-
-            bbox_raw = (item["bbox"][0], item["bbox"][1], item["bbox"][2], item["bbox"][3])
             if self._overlaps_tables(bbox_raw, table_rects):
                 continue
 
-            # Collect font sizes for heading detection
             lines = item.get("lines", [])
-            text_parts: list[str] = []
-            max_font_size = 0.0
-            is_bold = False
-
-            for line in lines:
-                for span in line.get("spans", []):
-                    text_parts.append(span.get("text", ""))
-                    fs = span.get("size", 0)
-                    if fs > max_font_size:
-                        max_font_size = fs
-                    flags = span.get("flags", 0)
-                    if flags & 2 ** 4:  # bold flag
-                        is_bold = True
-
-            content = " ".join("".join(text_parts).split()).strip()
+            content = self._join_lines(lines)
             if not content:
                 continue
 
-            font_sizes.append(max_font_size)
+            max_font_size = 0.0
+            bold_chars = 0
+            total_chars = 0
+            math_font = False
+            for line in lines:
+                for span in line.get("spans", []):
+                    n = len(span.get("text", "").strip())
+                    if n == 0:
+                        continue
+                    size = float(span.get("size", 0))
+                    max_font_size = max(max_font_size, size)
+                    span_sizes.append((size, n))
+                    total_chars += n
+                    if span.get("flags", 0) & 16 or "bold" in span.get("font", "").lower():
+                        bold_chars += n
+                    if _MATH_FONT.search(span.get("font", "")):
+                        math_font = True
+
             raw_blocks.append({
                 "content": content,
                 "bbox": bbox_raw,
                 "max_font_size": max_font_size,
-                "is_bold": is_bold,
+                "all_bold": total_chars > 0 and bold_chars / total_chars >= 0.9,
+                "line_count": len(lines),
+                "math_font": math_font,
                 "block_counter": block_counter,
             })
             block_counter += 1
 
-        # Determine heading threshold: font size > median * 1.2 or bold and short
-        median_size = sorted(font_sizes)[len(font_sizes) // 2] if font_sizes else 12.0
+        body_size = self._body_font_size(span_sizes)
 
         for rb in raw_blocks:
-            is_heading = False
-            fs = rb["max_font_size"]
             content = rb["content"]
+            fs = rb["max_font_size"]
+            short = len(content) <= 200 and rb["line_count"] <= 3
 
-            # Heading heuristics: larger font, or bold+short, or starts with numbering
-            if fs > median_size * 1.2:
-                is_heading = True
-            elif rb["is_bold"] and len(content) < 120 and "\n" not in content:
-                is_heading = True
+            is_heading = short and fs > body_size * 1.15
+            if not is_heading and rb["all_bold"] and len(content) < 100 and rb["line_count"] <= 2:
+                is_heading = not content.endswith((".", ",", ";"))
 
-            # Check for mathematical equations
-            is_equation = self._is_math_equation(content)
-            block_type = BlockType.HEADING if is_heading else (BlockType.EQUATION if is_equation else BlockType.PARAGRAPH)
+            metadata = {
+                "font_size": round(fs, 2),
+                "is_bold": rb["all_bold"],
+                "body_font_size": round(body_size, 2),
+            }
+            if not is_heading and self._is_formula_candidate(content, rb["math_font"]):
+                # Text-layer math is unreliable; the region router re-reads the rendered
+                # crop with the formula model before this becomes an equation block.
+                metadata["formula_candidate"] = True
 
             blocks.append(
                 DocumentBlock(
                     id=f"p{page_number}-b{rb['block_counter']}",
-                    type=block_type,
+                    type=BlockType.HEADING if is_heading else BlockType.PARAGRAPH,
                     content=content,
                     page=page_number,
                     bbox=_normalize_bbox(*rb["bbox"], pw, ph),
                     confidence=None,
                     extractor=self.name,
-                    metadata={
-                        "font_size": rb["max_font_size"],
-                        "is_bold": rb["is_bold"],
-                    },
+                    metadata=metadata,
                 )
             )
 
@@ -249,28 +260,51 @@ class PyMuPDFExtractor(BaseExtractor):
         return False
 
     @staticmethod
-    def _is_math_equation(text: str) -> bool:
-        """Detect if text is likely a mathematical equation using heuristics."""
-        if not text or len(text) > 500:
+    def _join_lines(lines: list[dict]) -> str:
+        """Join the lines of a text block: spans concatenate, lines are space-separated,
+        and a hyphen at a line end is merged with the next lowercase word."""
+        parts: list[str] = []
+        for line in lines:
+            text = "".join(span.get("text", "") for span in line.get("spans", [])).strip()
+            if not text:
+                continue
+            if (
+                parts
+                and len(parts[-1]) > 1
+                and parts[-1].endswith("-")
+                and parts[-1][-2].isalpha()
+                and text[0].islower()
+            ):
+                parts[-1] = parts[-1][:-1] + text
+            else:
+                parts.append(text)
+        return " ".join(" ".join(parts).split())
+
+    @staticmethod
+    def _body_font_size(span_sizes: list[tuple[float, int]]) -> float:
+        """Character-weighted median span size: the page's body text size."""
+        if not span_sizes:
+            return 12.0
+        ordered = sorted(span_sizes)
+        half = sum(n for _, n in ordered) / 2
+        acc = 0
+        for size, n in ordered:
+            acc += n
+            if acc >= half:
+                return size or 12.0
+        return ordered[-1][0] or 12.0
+
+    @staticmethod
+    def _is_formula_candidate(text: str, math_font: bool) -> bool:
+        """Cheap pre-filter: does this block look like it carries typeset math?
+
+        Deliberately conservative and NOT used to type the block as an equation.
+        It only decides which blocks are worth re-reading with the formula model.
+        """
+        if not text or len(text) > 160:
             return False
-
-        # Count mathematical symbols
-        math_symbols = ['=', '+', '-', '*', '/', '≠', '≤', '≥', '∞', '√', '∑', '∫', 'π', 'θ', 'α', 'β', 'Δ']
-        symbol_count = sum(1 for c in text if c in math_symbols)
-
-        # Check for common equation patterns
-        patterns = [
-            r'[a-zA-Z]\s*[=]\s*[0-9a-zA-Z]+',  # variable = value
-            r'[0-9]+\s*[=]\s*[0-9]+',  # number = number
-            r'[a-zA-Z]\s*[+\-*/]\s*[a-zA-Z0-9]+',  # operations
-            r'\([^)]*[=+\-*/][^)]*\)',  # parenthesized expressions
-            r'\\[a-zA-Z]+',  # LaTeX-like commands
-        ]
-
-        pattern_count = sum(1 for pattern in patterns if re.search(pattern, text))
-
-        # Heuristic: needs at least 2 math symbols OR 1 pattern match
-        return symbol_count >= 2 or pattern_count >= 1
+        math_chars = sum(1 for c in text if c in _MATH_CHARS)
+        return math_font or math_chars >= 1
 
     # ------------------------------------------------------------------
     # Page analysis (used by routing)

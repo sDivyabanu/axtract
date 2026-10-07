@@ -35,15 +35,15 @@ class TestLayoutService:
         blocks = [
             DocumentBlock(
                 id="h", type=BlockType.PARAGRAPH, content="Page header",
-                page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test",
+                page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test", metadata={"route": "digital"},
             ),
             DocumentBlock(
                 id="b", type=BlockType.PARAGRAPH, content="Body text",
-                page=1, bbox=(0.1, 0.3, 0.9, 0.5), extractor="test",
+                page=1, bbox=(0.1, 0.3, 0.9, 0.5), extractor="test", metadata={"route": "digital"},
             ),
             DocumentBlock(
                 id="f", type=BlockType.PARAGRAPH, content="Page 1",
-                page=1, bbox=(0.4, 0.95, 0.6, 0.98), extractor="test",
+                page=1, bbox=(0.4, 0.95, 0.6, 0.98), extractor="test", metadata={"route": "digital"},
             ),
         ]
         ordered = assign_reading_order(blocks)
@@ -51,6 +51,16 @@ class TestLayoutService:
         assert types["h"] == BlockType.HEADER
         assert types["b"] == BlockType.PARAGRAPH
         assert types["f"] == BlockType.FOOTER
+
+    def test_no_header_footer_for_non_page_content(self):
+        """Slides / standalone images have no running headers, whatever their position."""
+        blocks = [
+            DocumentBlock(
+                id="t", type=BlockType.PARAGRAPH, content="Slide subtitle",
+                page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test",
+            ),
+        ]
+        assert assign_reading_order(blocks)[0].type == BlockType.PARAGRAPH
 
     def test_multi_column_ordering(self):
         # Two-column layout with enough blocks for detection

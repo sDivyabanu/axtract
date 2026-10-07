@@ -26,6 +26,7 @@ from services.equation_service import enhance_equation_block
 from services.layout_service import assign_reading_order
 from services.markdown_service import blocks_to_markdown
 from services.table_service import enhance_table_block, merge_cross_page_tables
+from utils import deadline
 from utils.files import (
     MAX_UPLOAD_BYTES,
     get_extension,
@@ -45,6 +46,8 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     Synchronous on purpose: extractors are CPU/IO bound, so the route runs
     this in a threadpool.
     """
+    deadline.start()
+
     # 1. Validate upload
     if upload is None or not upload.filename:
         raise AppError("MISSING_FILE", "No file was provided.", status_code=400)
