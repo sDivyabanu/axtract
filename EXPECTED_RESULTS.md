@@ -2,7 +2,7 @@
 
 Upload each file to POST /api/parse (or the site) and compare. Values below were checked against PyMuPDF `find_tables`, RapidOCR and python-docx on the generated files. Items marked **(depends on your code)** are things your docs don't pin down, so treat a mismatch there as "investigate", not automatically a bug.
 
-Placeholders you should currently see: chart data is a placeholder, equation LaTeX is the placeholder `x^2 + y^2 = r^2`.
+**Update:** charts and equations are now really extracted (no placeholders). See `reports/after_report.md`; expected values for the charts are the ground truth listed under 04, equations under 05. Model-read LaTeX is flagged when unverified.
 
 ---
 
@@ -72,13 +72,13 @@ Note: the columns "Raw text in PDF" and "Expected parsed value" both live in the
 | 4 Ad Spend vs Sales Scatter Plot | 2 | 1.40 | `chart`, type `scatter` |
 | 5 Company Banner | 3 | 6.00 | stays `figure` (outside 0.5-3.0), not flagged |
 
-Chart type comes from the caption heading just above each image. Data returned is the placeholder structure (low/no real confidence).
+Charts are read from the images: bar/line/pie/scatter with their series values (`values_estimated` unless printed labels agree). The banner stays a `figure`.
 Ground truth for when you plug in a vision LLM: bar Q1-Q4 = 120, 145, 160, 190 ($M); line Jan-Jun = 1.2, 1.5, 1.9, 2.4, 2.8, 3.5 (M users); pie Alpha 40 / Beta 30 / Gamma 20 / Other 10; scatter x=10..80 step 10, y = 25, 38, 52, 61, 79, 88, 104, 118.
 
 ## 05_equations.pdf
 2 pages: one inline text line (`x^2 + y^2 = r^2`) and 4 equation images ("Equation 1" ... "Equation 4" headings).
 - Ground-truth LaTeX: `E = mc^2`; `\int_0^\infty e^{-x^2}\, dx = \frac{\sqrt{\pi}}{2}`; `\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}`; `x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`.
-- Currently expected: any block typed `equation` gets the placeholder `x^2 + y^2 = r^2` (method placeholder), validated as LaTeX.
+- Expected now: 5 `equation` blocks: the inline text equation (`x^{2} + y^{2} = r^{2}`) and the four images, read by the local formula model (validated + OCR cross-checked; the integral and the series sum are typically flagged for review).
 - **Depends on your code:** your notes don't say what makes the PDF extractor emit a block of type `equation`. These images will most likely come out as `figure` blocks, in which case no equation enhancement runs. That would mean equation *detection* is a gap, separate from the LaTeX placeholder.
 
 ## 06_mixed_digital_scanned.pdf (adaptive routing)
