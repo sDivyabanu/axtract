@@ -13,6 +13,6 @@
     "outDir": "dist"
   },
   "include": [
-    "**/*.ts"
+    "prisma.config.ts"
   ]
 }
