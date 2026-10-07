@@ -4,6 +4,9 @@ import type { DocumentResponse } from "./types";
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
+  if (!supabase) {
+    throw new ApiError("AUTH_REQUIRED", "Authentication is not configured.");
+  }
   const {
     data: { session },
   } = await supabase.auth.getSession();

@@ -7,13 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { createClient } from "./supabase";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import { createClient, isSupabaseConfigured } from "./supabase";
 
 interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  configured: boolean;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -21,15 +22,26 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const noopAuth: AuthState = {
+  user: null,
+  session: null,
+  loading: false,
+  configured: false,
+  signUp: async () => ({ error: "Supabase not configured" }),
+  signIn: async () => ({ error: "Supabase not configured" }),
+  signOut: async () => {},
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isSupabaseConfigured);
 
   useEffect(() => {
     const supabase = createClient();
+    if (!supabase) return;
 
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(({ data: { session: s } }: { data: { session: Session | null } }) => {
       setSession(s);
       setUser(s?.user ?? null);
       setLoading(false);
@@ -37,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, s: Session | null) => {
       setSession(s);
       setUser(s?.user ?? null);
       setLoading(false);
@@ -46,14 +58,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  if (!isSupabaseConfigured) {
+    return (
+      <AuthContext value={noopAuth}>
+        {children}
+      </AuthContext>
+    );
+  }
+
   async function signUp(email: string, password: string) {
     const supabase = createClient();
+    if (!supabase) return { error: "Supabase not configured" };
     const { error } = await supabase.auth.signUp({ email, password });
     return { error: error?.message ?? null };
   }
 
   async function signIn(email: string, password: string) {
     const supabase = createClient();
+    if (!supabase) return { error: "Supabase not configured" };
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -63,11 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     const supabase = createClient();
+    if (!supabase) return;
     await supabase.auth.signOut();
   }
 
   return (
-    <AuthContext value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext value={{ user, session, loading, configured: true, signUp, signIn, signOut }}>
       {children}
     </AuthContext>
   );
