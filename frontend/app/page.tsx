@@ -86,7 +86,7 @@ export default function Home() {
         </div>
       </div>
 
-      {result && <ResultView result={result} />}
+      {result && <ResultView result={result} sourceFile={selectedFile} />}
     </main>
   );
 }

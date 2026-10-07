@@ -139,6 +139,7 @@ class OCRExtractor(BaseExtractor):
                     requires_review=requires_review,
                     metadata={
                         "ocr_engine": "rapidocr",
+                        "confidence_source": "rapidocr_recognition",
                         "image_width": img_w,
                         "image_height": img_h,
                     },
