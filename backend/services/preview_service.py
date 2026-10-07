@@ -354,6 +354,25 @@ def _range_box(pdf: pdfium.PdfDocument, pi: int, start: int, end: int) -> BBox |
     )
 
 
+def _image_boxes(pdf: pdfium.PdfDocument) -> list[tuple[int, BBox]]:
+    """Every image object of the converted PDF in reading order: (page_index, normalized box)."""
+    import pypdfium2.raw as pdfium_c
+
+    out: list[tuple[int, BBox]] = []
+    for pi in range(len(pdf)):
+        page = pdf[pi]
+        w, h = page.get_size()
+        found = []
+        for obj in page.get_objects(filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE]):
+            l, b, r, t = obj.get_bounds()
+            if r - l < 4 or t - b < 4:
+                continue
+            found.append((round(1 - t / h, 6), round(l / w, 6), round(r / w, 6), round(1 - b / h, 6)))
+        for top, l, r, bottom in sorted(found):
+            out.append((pi, (l, top, r, bottom)))
+    return out
+
+
 def _union(a: BBox, b: BBox) -> BBox:
     return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
 
@@ -378,8 +397,40 @@ def annotate_blocks(info: PreviewInfo, blocks: list[DocumentBlock], file_type: s
         pdf = pdfium.PdfDocument(str(info.pdf_path))
         try:
             page_cursor, char_cursor = 0, 0  # blocks are in document order: search forward
+            pictures = iter(_image_boxes(pdf)) if file_type == "docx" else iter(())
             for b in blocks:
                 deadline.check()
+                if b.metadata.get("media") == "picture" and file_type == "docx":
+                    # pictures are image objects in the converted PDF, in document order
+                    hit = next(pictures, None)
+                    if hit:
+                        b.metadata["preview"] = {"page": hit[0] + 1, "bbox": list(hit[1])}
+                        page_cursor = max(page_cursor, hit[0])
+                    else:
+                        b.metadata["preview"] = {"page": min(page_cursor + 1, info.pages), "bbox": None}
+                    continue
+                if b.type == BlockType.CHART and b.metadata.get("media") == "native_chart":
+                    title = (b.metadata.get("chart_title") or "").strip()
+                    found = _find(pdf, title, page_cursor, 0) if title else None
+                    ext = b.metadata.get("extent_pt")
+                    if found and ext:
+                        pi = found[0]
+                        w, h = pdf[pi].get_size()
+                        tb = _range_box(pdf, pi, found[1], found[2])
+                        if tb:
+                            cx = (tb[0] + tb[2]) / 2
+                            bw, bh = min(1.0, ext[0] / w), min(1.0, ext[1] / h)
+                            x0 = min(max(0.0, cx - bw / 2), 1 - bw)
+                            y0 = max(0.0, tb[1] - 0.01)
+                            b.metadata["preview"] = {"page": pi + 1, "bbox": [x0, y0, x0 + bw, min(1.0, y0 + bh)],
+                                                     "bbox_approximate": True}
+                            page_cursor = pi
+                            continue
+                    b.metadata["preview"] = {"page": min(page_cursor + 1, info.pages), "bbox": None}
+                    continue
+                if b.type in (BlockType.FIGURE, BlockType.CHART, BlockType.EQUATION) and not b.content.strip():
+                    b.metadata["preview"] = {"page": min(page_cursor + 1, info.pages), "bbox": None}
+                    continue
                 if b.type in (BlockType.FIGURE, BlockType.CHART):
                     b.metadata["preview"] = {"page": min(page_cursor + 1, info.pages), "bbox": None}
                     continue

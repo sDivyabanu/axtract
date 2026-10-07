@@ -115,7 +115,13 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     ordered_blocks = assign_reading_order(result.blocks)
 
     # 5b. Where each block sits in the preview pages (Office formats)
-    preview_service.annotate_blocks(preview, ordered_blocks, file_type)
+    try:
+        preview_service.annotate_blocks(preview, ordered_blocks, file_type)
+    except AppError:
+        raise
+    except Exception:  # noqa: BLE001 - locating blocks in the preview must never fail a parse
+        logger.exception("preview annotation failed")
+        preview.error = preview.error or "Block positions could not be located in the preview."
 
     # 6. Markdown generation
     markdown = blocks_to_markdown(ordered_blocks)

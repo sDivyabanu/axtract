@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import io
 import logging
+import threading
 from pathlib import Path
 from typing import ClassVar
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from extractors.base import BaseExtractor, ExtractionResult
 from models.document import BBox, BlockType, DocumentBlock
@@ -21,14 +22,17 @@ logger = logging.getLogger(__name__)
 
 # Lazy-initialized singleton
 _ocr_engine = None
+_ocr_init_lock = threading.Lock()
 
 
 def _get_ocr():
-    """Lazy-load RapidOCR to avoid import cost on startup."""
+    """Lazy-load RapidOCR (thread-safe: requests run in a thread pool)."""
     global _ocr_engine
     if _ocr_engine is None:
-        from rapidocr_onnxruntime import RapidOCR
-        _ocr_engine = RapidOCR()
+        with _ocr_init_lock:
+            if _ocr_engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+                _ocr_engine = RapidOCR()
     return _ocr_engine
 
 
@@ -66,6 +70,7 @@ class OCRExtractor(BaseExtractor):
         try:
             img = Image.open(file_path)
             img.load()
+            img = ImageOps.exif_transpose(img)  # phone photos carry rotation in EXIF
         except Exception as exc:
             from models.errors import AppError
             raise AppError(
@@ -88,8 +93,13 @@ class OCRExtractor(BaseExtractor):
         errors: list[DocumentError] = []
         blocks: list[DocumentBlock] = []
 
-        # Convert to RGB if needed
-        if img.mode not in ("RGB", "L"):
+        # Convert to RGB; flatten transparency onto white (a black fill hides dark text)
+        if img.mode in ("RGBA", "LA", "P"):
+            rgba = img.convert("RGBA")
+            flat = Image.new("RGB", rgba.size, "white")
+            flat.paste(rgba, mask=rgba.split()[-1])
+            img = flat
+        elif img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
 
         img_w, img_h = img.size
