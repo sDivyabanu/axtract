@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import type { DocumentBlock, DocumentResponse } from "@/lib/types";
-import ProvenanceOverlay from "./ProvenanceOverlay";
 
-type Tab = "blocks" | "markdown" | "json" | "provenance";
+type Tab = "blocks" | "markdown" | "json";
 
 interface ResultViewProps {
   result: DocumentResponse;
@@ -17,7 +16,6 @@ export default function ResultView({ result }: ResultViewProps) {
     { key: "blocks", label: "Blocks" },
     { key: "markdown", label: "Markdown" },
     { key: "json", label: "JSON" },
-    { key: "provenance", label: "Provenance" },
   ];
 
   return (
@@ -73,16 +71,6 @@ export default function ResultView({ result }: ResultViewProps) {
         </div>
       )}
 
-      {/* Health report */}
-      {result.health_report && Object.keys(result.health_report).length > 0 && (
-        <HealthReportCard healthReport={result.health_report} />
-      )}
-
-      {/* Cost summary */}
-      {result.cost_summary && Object.keys(result.cost_summary).length > 0 && (
-        <CostSummaryCard costSummary={result.cost_summary} />
-      )}
-
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
         {tabs.map((tab) => (
@@ -106,7 +94,6 @@ export default function ResultView({ result }: ResultViewProps) {
         {activeTab === "blocks" && <BlocksTab blocks={result.blocks} />}
         {activeTab === "markdown" && <MarkdownTab markdown={result.markdown} />}
         {activeTab === "json" && <JsonTab result={result} />}
-        {activeTab === "provenance" && <ProvenanceTab blocks={result.blocks} />}
       </div>
     </section>
   );
@@ -280,140 +267,6 @@ function JsonTab({ result }: { result: DocumentResponse }) {
       <pre className="max-h-[600px] overflow-auto rounded-lg bg-gray-50 p-4 text-xs">
         {jsonStr}
       </pre>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Provenance Tab                                                      */
-/* ------------------------------------------------------------------ */
-
-function ProvenanceTab({ blocks }: { blocks: DocumentBlock[] }) {
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-gray-600">
-        Click on any block in the list to highlight its bounding box on the page.
-        Click on the canvas to select blocks by location.
-      </p>
-      <ProvenanceOverlay blocks={blocks} />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Health Report Card                                                  */
-/* ------------------------------------------------------------------ */
-
-function HealthReportCard({
-  healthReport,
-}: {
-  healthReport: Record<string, unknown>;
-}) {
-  const overallHealth = healthReport.overall_health as string;
-  const flaggedItems = healthReport.flagged_items_count as number;
-  const hiddenWarnings = healthReport.hidden_content_warnings as unknown[];
-  const promptWarnings = healthReport.prompt_injection_warnings as unknown[];
-
-  const healthColors: Record<string, string> = {
-    healthy: "bg-green-100 text-green-800 border-green-300",
-    warning: "bg-yellow-100 text-yellow-800 border-yellow-300",
-    critical: "bg-red-100 text-red-800 border-red-300",
-  };
-
-  return (
-    <div
-      className={`rounded-lg border p-4 ${
-        healthColors[overallHealth] || healthColors.warning
-      }`}
-    >
-      <h3 className="mb-2 font-semibold">Document Health Report</h3>
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <span className="font-medium">Overall Health:</span>{" "}
-          <span className="capitalize">{overallHealth}</span>
-        </div>
-        <div>
-          <span className="font-medium">Flagged Items:</span> {flaggedItems}
-        </div>
-        <div>
-          <span className="font-medium">Pages Scanned:</span>{" "}
-          {healthReport.scanned_page_count as number}
-        </div>
-        <div>
-          <span className="font-medium">Blocks Requiring Review:</span>{" "}
-          {healthReport.blocks_requiring_review as number}
-        </div>
-      </div>
-
-      {hiddenWarnings.length > 0 && (
-        <div className="mt-3">
-          <h4 className="mb-1 font-medium">Hidden Content Warnings:</h4>
-          <ul className="list-disc pl-5 text-xs">
-            {hiddenWarnings.slice(0, 3).map((warning, i) => (
-              <li key={i}>{JSON.stringify(warning)}</li>
-            ))}
-            {hiddenWarnings.length > 3 && (
-              <li>...and {hiddenWarnings.length - 3} more</li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {promptWarnings.length > 0 && (
-        <div className="mt-3">
-          <h4 className="mb-1 font-medium text-red-700">
-            ⚠️ Prompt Injection Warnings:
-          </h4>
-          <ul className="list-disc pl-5 text-xs text-red-600">
-            {promptWarnings.map((warning, i) => (
-              <li key={i}>{JSON.stringify(warning)}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Cost Summary Card                                                   */
-/* ------------------------------------------------------------------ */
-
-function CostSummaryCard({
-  costSummary,
-}: {
-  costSummary: Record<string, unknown>;
-}) {
-  const costUsd = costSummary.cost_estimate_usd as number;
-  const throughput = costSummary.throughput_pages_per_second as number;
-  const costPerPage = costSummary.cost_per_page as number;
-  const fileSizeMb = costSummary.file_size_mb as number;
-
-  return (
-    <div className="rounded-lg border border-blue-300 bg-blue-50 p-4">
-      <h3 className="mb-2 font-semibold text-blue-900">Processing Cost Summary</h3>
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <span className="font-medium">Estimated Cost:</span> ${costUsd.toFixed(6)}
-        </div>
-        <div>
-          <span className="font-medium">Cost per Page:</span> ${costPerPage.toFixed(6)}
-        </div>
-        <div>
-          <span className="font-medium">Throughput:</span> {throughput.toFixed(2)} pages/sec
-        </div>
-        <div>
-          <span className="font-medium">File Size:</span> {fileSizeMb} MB
-        </div>
-        <div>
-          <span className="font-medium">Processing Time:</span>{" "}
-          {costSummary.processing_time_ms as number}ms
-        </div>
-        <div>
-          <span className="font-medium">Blocks Extracted:</span>{" "}
-          {costSummary.blocks_extracted as number}
-        </div>
-      </div>
     </div>
   );
 }
