@@ -35,15 +35,15 @@ class TestLayoutService:
         blocks = [
             DocumentBlock(
                 id="h", type=BlockType.PARAGRAPH, content="Page header",
-                page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test",
+                page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test", metadata={"route": "digital"},
             ),
             DocumentBlock(
                 id="b", type=BlockType.PARAGRAPH, content="Body text",
-                page=1, bbox=(0.1, 0.3, 0.9, 0.5), extractor="test",
+                page=1, bbox=(0.1, 0.3, 0.9, 0.5), extractor="test", metadata={"route": "digital"},
             ),
             DocumentBlock(
                 id="f", type=BlockType.PARAGRAPH, content="Page 1",
-                page=1, bbox=(0.4, 0.95, 0.6, 0.98), extractor="test",
+                page=1, bbox=(0.4, 0.95, 0.6, 0.98), extractor="test", metadata={"route": "digital"},
             ),
         ]
         ordered = assign_reading_order(blocks)
@@ -51,6 +51,16 @@ class TestLayoutService:
         assert types["h"] == BlockType.HEADER
         assert types["b"] == BlockType.PARAGRAPH
         assert types["f"] == BlockType.FOOTER
+
+    def test_no_header_footer_for_non_page_content(self):
+        """Slides / standalone images have no running headers, whatever their position."""
+        blocks = [
+            DocumentBlock(
+                id="t", type=BlockType.PARAGRAPH, content="Slide subtitle",
+                page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test",
+            ),
+        ]
+        assert assign_reading_order(blocks)[0].type == BlockType.PARAGRAPH
 
     def test_multi_column_ordering(self):
         # Two-column layout with enough blocks for detection
@@ -185,3 +195,65 @@ class TestMarkdownService:
         ]
         md = blocks_to_markdown(blocks)
         assert "![" in md
+
+
+class TestConfidenceClassification:
+    """Verify confidence value handling in DocumentBlock model."""
+
+    def test_null_confidence_is_not_zero(self):
+        block = DocumentBlock(
+            id="1", type=BlockType.PARAGRAPH, content="Text",
+            page=1, extractor="pymupdf", confidence=None,
+        )
+        assert block.confidence is None
+        data = block.model_dump()
+        assert data["confidence"] is None
+        json_data = block.model_dump_json()
+        assert '"confidence":null' in json_data.replace(" ", "")
+
+    def test_float_confidence_preserved(self):
+        block = DocumentBlock(
+            id="1", type=BlockType.PARAGRAPH, content="Text",
+            page=1, extractor="rapidocr", confidence=0.93,
+        )
+        assert block.confidence == 0.93
+        data = block.model_dump()
+        assert data["confidence"] == 0.93
+
+    def test_confidence_validation_range(self):
+        with pytest.raises(Exception):
+            DocumentBlock(
+                id="1", type=BlockType.PARAGRAPH, content="Text",
+                page=1, extractor="test", confidence=1.5,
+            )
+        with pytest.raises(Exception):
+            DocumentBlock(
+                id="1", type=BlockType.PARAGRAPH, content="Text",
+                page=1, extractor="test", confidence=-0.1,
+            )
+
+    def test_boundary_values(self):
+        for val in [0.0, 0.5, 0.85, 1.0]:
+            block = DocumentBlock(
+                id="1", type=BlockType.PARAGRAPH, content="Text",
+                page=1, extractor="test", confidence=val,
+            )
+            assert block.confidence == val
+
+    def test_json_roundtrip(self):
+        block = DocumentBlock(
+            id="1", type=BlockType.PARAGRAPH, content="OCR text",
+            page=1, extractor="rapidocr", confidence=0.9321,
+        )
+        json_str = block.model_dump_json()
+        restored = DocumentBlock.model_validate_json(json_str)
+        assert restored.confidence == 0.9321
+
+    def test_null_json_roundtrip(self):
+        block = DocumentBlock(
+            id="1", type=BlockType.PARAGRAPH, content="Text",
+            page=1, extractor="pymupdf", confidence=None,
+        )
+        json_str = block.model_dump_json()
+        restored = DocumentBlock.model_validate_json(json_str)
+        assert restored.confidence is None

@@ -1,0 +1,285 @@
+[
+  {
+    "file": "01_cross_page_table.pdf",
+    "detected_format": "pdf",
+    "status": "success",
+    "error_code": null,
+    "pages": 4,
+    "block_counts": {
+      "heading": 3,
+      "paragraph": 2,
+      "table": 2
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 0.32
+  },
+  {
+    "file": "02_merged_cells_multirow_header.pdf",
+    "detected_format": "pdf",
+    "status": "success",
+    "error_code": null,
+    "pages": 1,
+    "block_counts": {
+      "heading": 1,
+      "paragraph": 1,
+      "table": 1
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 0.02
+  },
+  {
+    "file": "03_financial_number_formats.pdf",
+    "detected_format": "pdf",
+    "status": "success",
+    "error_code": null,
+    "pages": 1,
+    "block_counts": {
+      "heading": 1,
+      "paragraph": 1,
+      "table": 1
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 0.03
+  },
+  {
+    "file": "04_charts.pdf",
+    "detected_format": "pdf",
+    "status": "success",
+    "error_code": null,
+    "pages": 3,
+    "block_counts": {
+      "heading": 6,
+      "chart": 4,
+      "figure": 1,
+      "paragraph": 1
+    },
+    "charts_detected": 4,
+    "charts_with_values": 4,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 6.0
+  },
+  {
+    "file": "05_equations.pdf",
+    "detected_format": "pdf",
+    "status": "success",
+    "error_code": null,
+    "pages": 2,
+    "block_counts": {
+      "heading": 5,
+      "paragraph": 1,
+      "equation": 5
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 5,
+    "equations_with_latex": 5,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 4.92
+  },
+  {
+    "file": "06_mixed_digital_scanned.pdf",
+    "detected_format": "pdf",
+    "status": "success",
+    "error_code": null,
+    "pages": 3,
+    "block_counts": {
+      "heading": 2,
+      "paragraph": 12
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 1.08
+  },
+  {
+    "file": "07_report.docx",
+    "detected_format": "docx",
+    "status": "success",
+    "error_code": null,
+    "pages": 1,
+    "block_counts": {
+      "heading": 5,
+      "paragraph": 3,
+      "list": 6,
+      "table": 1,
+      "chart": 1
+    },
+    "charts_detected": 1,
+    "charts_with_values": 1,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 4.41
+  },
+  {
+    "file": "08_deck.pptx",
+    "detected_format": "pptx",
+    "status": "success",
+    "error_code": null,
+    "pages": 4,
+    "block_counts": {
+      "heading": 4,
+      "paragraph": 4,
+      "table": 1,
+      "chart": 1
+    },
+    "charts_detected": 1,
+    "charts_with_values": 1,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 3.65
+  },
+  {
+    "file": "09_financials.xlsx",
+    "detected_format": "xlsx",
+    "status": "success",
+    "error_code": null,
+    "pages": 2,
+    "block_counts": {
+      "table": 2
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 2.22
+  },
+  {
+    "file": "10_invoice_ocr.png",
+    "detected_format": "png",
+    "status": "success",
+    "error_code": null,
+    "pages": 1,
+    "block_counts": {
+      "paragraph": 16
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 1.04
+  },
+  {
+    "file": "10b_scanned_memo.png",
+    "detected_format": "png",
+    "status": "success",
+    "error_code": null,
+    "pages": 1,
+    "block_counts": {
+      "paragraph": 8
+    },
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 2.09
+  },
+  {
+    "file": "11_chart_image.jpg",
+    "detected_format": "jpeg",
+    "status": "success",
+    "error_code": null,
+    "pages": 1,
+    "block_counts": {
+      "chart": 1
+    },
+    "charts_detected": 1,
+    "charts_with_values": 1,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": true,
+    "preview_error": "",
+    "traceback": "",
+    "time_s": 1.49
+  },
+  {
+    "file": "12_not_really_a_pdf.pdf",
+    "detected_format": "unknown",
+    "status": "HTTP 422",
+    "error_code": "INVALID_FILE",
+    "pages": null,
+    "block_counts": {},
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": null,
+    "preview_error": "n/a (file rejected by parse)",
+    "traceback": "",
+    "time_s": 0.0
+  },
+  {
+    "file": "13_corrupt_truncated.pdf",
+    "detected_format": "pdf",
+    "status": "HTTP 422",
+    "error_code": "INVALID_FILE",
+    "pages": null,
+    "block_counts": {},
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": null,
+    "preview_error": "n/a (file rejected by parse)",
+    "traceback": "",
+    "time_s": 0.0
+  },
+  {
+    "file": "14_unsupported_format.txt",
+    "detected_format": "unknown",
+    "status": "HTTP 415",
+    "error_code": "UNSUPPORTED_FORMAT",
+    "pages": null,
+    "block_counts": {},
+    "charts_detected": 0,
+    "charts_with_values": 0,
+    "equations_detected": 0,
+    "equations_with_latex": 0,
+    "preview_ok": null,
+    "preview_error": "n/a (file rejected by parse)",
+    "traceback": "",
+    "time_s": 0.0
+  }
+]
