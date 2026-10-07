@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+config({ path: 'backend/.env' });
 import { definePrismaConfig } from '@prisma/cli-engine';
 import { defineConfig as ormConfig, prisma7Schema } from '@prisma/orm-postgres/config';
 
