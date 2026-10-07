@@ -30,7 +30,7 @@ export default function SourceViewer({
 
   const showHighlight = selectedBlock && viewerPage === selectedBlock.page;
 
-  const isPdf = false; // Disabled due to pdfjs-dist compatibility issues
+  const isPdf = fileType === "pdf";
   const isImage = fileType === "jpg" || fileType === "jpeg" || fileType === "png";
 
   function handleGoToPage() {
@@ -145,9 +145,12 @@ export default function SourceViewer({
       {/* Content area */}
       <div className="flex-1 overflow-auto p-2 bg-gray-100">
         {isPdf && (
-          <div className="p-4 text-sm text-gray-500">
-            PDF preview is not available due to library compatibility issues. Please use an image file (JPG, PNG) for source viewing.
-          </div>
+          <PdfPageViewer
+            file={file}
+            pageNumber={viewerPage}
+            selectedBBox={showHighlight ? selectedBlock?.bbox ?? null : null}
+            blockLabel={showHighlight ? `${selectedBlock?.type} ${selectedBlock?.id}` : undefined}
+          />
         )}
         {isImage && (
           <ImageSourceViewer
@@ -158,10 +161,118 @@ export default function SourceViewer({
         )}
         {!isPdf && !isImage && (
           <div className="flex items-center justify-center h-full text-sm text-gray-500">
-            Visual source highlighting is currently available for image inputs (JPG, PNG).
+            Visual source highlighting is currently available for PDF and image inputs.
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* PDF Page Viewer                                                     */
+/* ------------------------------------------------------------------ */
+
+function PdfPageViewer({
+  file,
+  pageNumber,
+  selectedBBox,
+  blockLabel,
+}: {
+  file: File;
+  pageNumber: number;
+  selectedBBox: [number, number, number, number] | null;
+  blockLabel?: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const fileUrlRef = useRef<string | null>(null);
+  const pdfDocRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    fileUrlRef.current = URL.createObjectURL(file);
+    return () => {
+      if (fileUrlRef.current) URL.revokeObjectURL(fileUrlRef.current);
+    };
+  }, [file]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderPage() {
+      if (!fileUrlRef.current || !canvasRef.current) return;
+      setLoading(true);
+      setError(null);
+
+      try {
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+        if (!pdfDocRef.current) {
+          const loadingTask = pdfjsLib.getDocument({ url: fileUrlRef.current! });
+          pdfDocRef.current = await loadingTask.promise;
+        }
+
+        const pdfDoc = pdfDocRef.current as any;
+        const page = await pdfDoc.getPage(pageNumber);
+
+        const containerWidth = containerRef.current?.clientWidth ?? 600;
+        const unscaledViewport = page.getViewport({ scale: 1 });
+        const scale = containerWidth / unscaledViewport.width;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = canvasRef.current;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas context unavailable");
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        if (!cancelled) {
+          setDimensions({ width: viewport.width, height: viewport.height });
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to render PDF page");
+          setLoading(false);
+        }
+      }
+    }
+
+    renderPage();
+    return () => { cancelled = true; };
+  }, [file, pageNumber]);
+
+  return (
+    <div ref={containerRef} className="relative inline-block">
+      {loading && (
+        <div className="flex items-center justify-center py-12 text-sm text-gray-500">
+          Rendering page {pageNumber}...
+        </div>
+      )}
+      {error && (
+        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+      <canvas
+        ref={canvasRef}
+        className={`block max-w-full ${loading ? "invisible" : ""}`}
+      />
+      {!loading && selectedBBox && (
+        <SourceHighlight
+          bbox={selectedBBox}
+          containerWidth={dimensions.width}
+          containerHeight={dimensions.height}
+          label={blockLabel}
+        />
+      )}
     </div>
   );
 }
@@ -185,8 +296,7 @@ function ImageSourceViewer({
 
   useEffect(() => {
     const objectUrl = URL.createObjectURL(file);
-    // Object URL creation is a side effect requiring cleanup — setState is intentional
-    setUrl(objectUrl); // eslint-disable-line react-hooks/set-state-in-effect
+    setUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
 
@@ -201,14 +311,15 @@ function ImageSourceViewer({
 
   return (
     <div className="relative inline-block">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        ref={imgRef}
-        src={url}
-        alt="Original document"
-        className="block max-w-full"
-        onLoad={handleLoad}
-      />
+      {url && (
+        <img
+          ref={imgRef}
+          src={url}
+          alt="Original document"
+          className="block max-w-full"
+          onLoad={handleLoad}
+        />
+      )}
       {dimensions.width > 0 && selectedBBox && (
         <SourceHighlight
           bbox={selectedBBox}

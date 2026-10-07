@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import ClassVar
 
@@ -173,7 +174,9 @@ class PyMuPDFExtractor(BaseExtractor):
             elif rb["is_bold"] and len(content) < 120 and "\n" not in content:
                 is_heading = True
 
-            block_type = BlockType.HEADING if is_heading else BlockType.PARAGRAPH
+            # Check for mathematical equations
+            is_equation = self._is_math_equation(content)
+            block_type = BlockType.HEADING if is_heading else (BlockType.EQUATION if is_equation else BlockType.PARAGRAPH)
 
             blocks.append(
                 DocumentBlock(
@@ -244,6 +247,30 @@ class PyMuPDFExtractor(BaseExtractor):
                 if overlap_area / block_area > 0.5:
                     return True
         return False
+
+    @staticmethod
+    def _is_math_equation(text: str) -> bool:
+        """Detect if text is likely a mathematical equation using heuristics."""
+        if not text or len(text) > 500:
+            return False
+
+        # Count mathematical symbols
+        math_symbols = ['=', '+', '-', '*', '/', '≠', '≤', '≥', '∞', '√', '∑', '∫', 'π', 'θ', 'α', 'β', 'Δ']
+        symbol_count = sum(1 for c in text if c in math_symbols)
+
+        # Check for common equation patterns
+        patterns = [
+            r'[a-zA-Z]\s*[=]\s*[0-9a-zA-Z]+',  # variable = value
+            r'[0-9]+\s*[=]\s*[0-9]+',  # number = number
+            r'[a-zA-Z]\s*[+\-*/]\s*[a-zA-Z0-9]+',  # operations
+            r'\([^)]*[=+\-*/][^)]*\)',  # parenthesized expressions
+            r'\\[a-zA-Z]+',  # LaTeX-like commands
+        ]
+
+        pattern_count = sum(1 for pattern in patterns if re.search(pattern, text))
+
+        # Heuristic: needs at least 2 math symbols OR 1 pattern match
+        return symbol_count >= 2 or pattern_count >= 1
 
     # ------------------------------------------------------------------
     # Page analysis (used by routing)
