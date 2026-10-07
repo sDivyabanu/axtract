@@ -12,6 +12,9 @@ class ExtractionResult:
     page_count: int
     blocks: list[DocumentBlock] = field(default_factory=list)
     errors: list[DocumentError] = field(default_factory=list)
+    # block id -> (image bytes, extension). Internal side channel for pictures embedded in
+    # Office files so the region router can read charts/equations from them. Never serialized.
+    assets: dict[str, tuple[bytes, str]] = field(default_factory=dict)
 
 
 class BaseExtractor(ABC):

@@ -91,14 +91,14 @@ def _block_to_markdown(block: DocumentBlock) -> str:
             return f"![Figure on page {block.page}](figure-p{block.page})"
 
         case BlockType.CHART:
-            chart_type = block.metadata.get("chart_type", "chart")
-            return f"*[{chart_type}: {content}]*"
+            return _chart_to_markdown(block)
 
         case BlockType.EQUATION:
-            # Wrap in LaTeX delimiters if it looks like LaTeX
-            if "\\" in content or "{" in content:
-                return f"$$\n{content}\n$$"
-            return f"$${content}$$"
+            if block.metadata.get("inline") and block.metadata.get("parent_block_id"):
+                return ""  # already part of its paragraph's text
+            latex = block.metadata.get("latex") or content
+            suffix = "  <!-- needs review -->" if block.requires_review else ""
+            return f"$$\n{latex}\n$${suffix}"
 
         case BlockType.HEADER:
             return f"*{content}*"
@@ -172,4 +172,47 @@ def _table_to_markdown(block: DocumentBlock) -> str:
             sep = "| " + " | ".join("---" for _ in display_cells) + " |"
             lines.append(sep)
 
+    return "\n".join(lines)
+
+
+def _fmt(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float):
+        return f"{v:g}"
+    return str(v)
+
+
+def _chart_to_markdown(block: DocumentBlock) -> str:
+    """A chart as its title plus the data table (values are what downstream models need)."""
+    data = block.metadata.get("chart_data") or {}
+    series = data.get("series") or []
+    title = data.get("title") or "Chart"
+    kind = data.get("chart_type") or "chart"
+    note = ""
+    if data.get("values_estimated"):
+        note = " (values estimated from the image)"
+    if block.requires_review:
+        note += " (needs review)"
+    head = f"**{title}** — {kind} chart{note}"
+    if not series:
+        return head
+
+    cats = data.get("categories") or []
+    lines = [head, ""]
+    if any(s.get("x_values") for s in series):  # scatter: x / y pairs
+        for s in series:
+            lines += [f"| x | {s['name']} |", "| --- | --- |"]
+            for x, y in zip(s.get("x_values") or [], s["values"]):
+                lines.append(f"| {_fmt(x)} | {_fmt(y)} |")
+            lines.append("")
+        return "\n".join(lines).rstrip()
+
+    n = max(len(s["values"]) for s in series)
+    labels = [cats[i] if i < len(cats) and cats[i] else str(i + 1) for i in range(n)]
+    lines.append("| | " + " | ".join(s["name"] for s in series) + " |")
+    lines.append("| --- |" + " --- |" * len(series))
+    for i in range(n):
+        row = [_fmt(s["values"][i]) if i < len(s["values"]) else "" for s in series]
+        lines.append(f"| {labels[i]} | " + " | ".join(row) + " |")
     return "\n".join(lines)

@@ -21,8 +21,7 @@ from fastapi import UploadFile
 from extractors.registry import get_extractor
 from models.document import DocumentResponse
 from models.errors import AppError
-from services.chart_service import detect_charts_in_page, enhance_chart_block
-from services.equation_service import enhance_equation_block
+from services.region_router import route_regions
 from services.layout_service import assign_reading_order
 from services import preview_service
 from services.markdown_service import blocks_to_markdown
@@ -95,6 +94,9 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         # 4. Extract
         result = extractor.extract(temp_path)
 
+        # 4a. Charts, equations and figures: route every region to its reader
+        route_regions(result, temp_path, file_type)
+
         # 4b. Preview artifacts (never fatal). Office files are converted to PDF here,
         # while the upload still exists.
         preview = preview_service.prepare(document_id, temp_path, file_type)
@@ -102,18 +104,9 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     finally:
         remove_temp_file(temp_path)
 
-    # 4.5. Detect charts (reclassify figures)
-    chart_detected_blocks = detect_charts_in_page(result.blocks)
-    result.blocks = chart_detected_blocks
-    
     # 4.6. Enhance tables (merged cells, financial parsing)
-    enhanced_blocks = [enhance_table_block(block) for block in result.blocks]
-    result.blocks = enhanced_blocks
-    
-    # 4.7. Enhance equations (LaTeX extraction)
-    equation_enhanced_blocks = [enhance_equation_block(block) for block in result.blocks]
-    result.blocks = equation_enhanced_blocks
-    
+    result.blocks = [enhance_table_block(block) for block in result.blocks]
+
     # 4.8. Merge cross-page tables
     merged_blocks = merge_cross_page_tables(result.blocks)
     result.blocks = merged_blocks

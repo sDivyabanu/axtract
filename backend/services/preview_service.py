@@ -208,6 +208,39 @@ def render_pdf_page(pdf_path: Path, page: int, dpi: int = DEFAULT_DPI) -> bytes:
     return buf.getvalue()
 
 
+def render_page_pil(pdf_path: Path, page: int, dpi: int = 200):
+    """Render a 1-based PDF page to a PIL image (used by the region router)."""
+    with _pdfium_lock:
+        pdf = pdfium.PdfDocument(str(pdf_path))
+        try:
+            return pdf[page - 1].render(scale=dpi / 72, may_draw_forms=False).to_pil().convert("RGB")
+        finally:
+            pdf.close()
+
+
+def convert_media_to_png(blob: bytes, ext: str, timeout: float = 25.0) -> bytes | None:
+    """Convert EMF/WMF/other vector pictures to PNG with headless LibreOffice. None on failure."""
+    soffice = find_soffice()
+    if soffice is None or not blob:
+        return None
+    with tempfile.TemporaryDirectory(prefix="media-") as tmp:
+        src = Path(tmp) / f"media.{ext or 'emf'}"
+        src.write_bytes(blob)
+        out = Path(tmp) / "out"
+        out.mkdir()
+        with tempfile.TemporaryDirectory(prefix="lo-profile-") as profile:
+            try:
+                subprocess.run(
+                    [soffice, f"-env:UserInstallation=file://{profile}", "--headless", "--norestore",
+                     "--convert-to", "png", "--outdir", str(out), str(src)],
+                    capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL,
+                )
+            except subprocess.TimeoutExpired:
+                return None
+        png = out / "media.png"
+        return png.read_bytes() if png.exists() else None
+
+
 def render_image(src: Path) -> bytes:
     from PIL import Image, ImageOps
 

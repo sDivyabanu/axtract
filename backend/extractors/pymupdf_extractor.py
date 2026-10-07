@@ -205,6 +205,9 @@ class PyMuPDFExtractor(BaseExtractor):
                 )
             )
 
+        for b in blocks:
+            # bbox is normalized (top-left origin); bbox_pt = bbox * page_size_pt
+            b.metadata["page_size_pt"] = [round(pw, 2), round(ph, 2)]
         return blocks
 
     # ------------------------------------------------------------------
