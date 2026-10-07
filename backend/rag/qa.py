@@ -31,6 +31,7 @@ USED_WINDOW = 9.0  # keep chunks within this many logits of the best
 # idf-weighted share of the question's terms present in the top passages (see scripts/calibrate_abstain.py)
 COVER_STRONG = 0.30  # with a strong rerank score
 COVER_WEAK = 0.40    # with a moderate rerank score
+HARD_FLOOR = -6.0    # below this cross-encoder score no amount of shared common words counts as evidence
 COVER_ALONE = 0.55   # lexical coverage alone is enough (the cross-encoder is weak on 'summarise ...' questions)
 
 
@@ -324,7 +325,7 @@ def ask_stream(
                                  [index.chunk_row(workspace_id, h.chunk_id)["text"] + " " + " ".join(index.chunk_row(workspace_id, h.chunk_id)["heading_path"])
                                   for h in ranked[:3]]) if ranked else 0.0
     evidence_ok = best is not None and ((best >= STRONG_ABOVE and top_overlap >= COVER_STRONG) or
-                                        (best >= ABSTAIN_BELOW and top_overlap >= COVER_WEAK) or top_overlap >= COVER_ALONE)
+                                        (best >= ABSTAIN_BELOW and top_overlap >= COVER_WEAK) or (top_overlap >= COVER_ALONE and best >= HARD_FLOOR))
     missing_ref = missing_reference(workspace_id, question, docs)
     if missing_ref:
         evidence_ok = False
