@@ -329,10 +329,10 @@ def llm_plan(question: str, tables: dict[str, Table]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def plan_and_run(question: str, tables: dict[str, Table]) -> dict[str, Any]:
+def plan_and_run(question: str, tables: dict[str, Table], allow_llm: bool = True) -> dict[str, Any]:
     """{'result': Result|None, 'plan': dict|None, 'planner': 'rules'|'llm'|None, 'error': str|None, 'refused': bool}"""
     attempts: list[tuple[str, dict[str, Any] | None]] = [("rules", p) for p in rule_plans(question, tables)]
-    if llm.status()["available"]:
+    if allow_llm and llm.status()["available"]:
         attempts.append(("llm", None))
     last_error: str | None = None
     for kind, plan in attempts:

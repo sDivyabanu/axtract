@@ -13,7 +13,7 @@
 > | S11 Office macro / DDE / OLE | ✅ | VBA project, DDE/DDEAUTO field instructions, embedded OLE objects; nothing executed |
 > | S12 remote template / external links | ✅ | `TargetMode="External"` relationships reported (attachedTemplate flagged as remote template); zero network requests |
 > | F28 formula integrity | ✅ | XLSX extractor: `manual_override_suspected` for typed numbers on Total / EBITDA / Revenue / Net income / Gross profit / Operating income lines in formula-driven sheets; `formulas_without_cached_values` |
-> | S17 XSS-safe output & formula-injection prevention | 🟡 | The React UI escapes all text; CSV/XLSX export guard is implemented with the Phase 4 exports. Markdown output of the parser is not HTML-escaped |
+> | S17 XSS-safe output & formula-injection prevention | ✅/🟡 | ✅ CSV/XLSX/DOCX exports of DealLens neutralise cells starting with `= + - @` (tab/CR too) with a leading `'` and force text type (tested). The React UI escapes all text. 🟡 The parser's Markdown output is not HTML-escaped |
 > | S19 schema validation on every response | 🟡 | Parser endpoints are validated by Pydantic response models; DealLens endpoints return typed dicts (not yet model-validated) |
 > | F34 security gauntlet | ⏳ | `tests/gauntlet/make_gauntlet.py` does not exist yet. Equivalent coverage exists as unit/integration tests (`backend/tests/test_rag_security.py`) |
 
@@ -208,3 +208,38 @@ CIM FY2023 revenue ₹385 Cr — each in under a second.
   25–55 s and cannot produce the exact page-split total that DealLens computes in under 2 s. (It does *not* hallucinate on
   the unanswerable and chart questions with this model: it says "cannot be determined"; the gap there is receipts,
   provenance and speed, not invention.)
+
+
+## Phase 4 — Diligence intelligence  ✅
+
+- ✅ **Fact store** — revenue, EBITDA (reported and adjusted), net debt, total debt, cash, profit after tax and gross profit are
+  extracted from every table, chart and from unambiguous sentences ("Total borrowings stood at Rs 385.6 crore"), each with
+  period (FY25 / 2024-25 / Q2 FY25 normalised), currency, scale, **value in base units**, and the exact page + cell box + confidence.
+- ✅ **Contradiction Finder** — same concept + period + currency compared across documents with a **0.5 % / rounding-aware
+  tolerance** (12 vs 12.4 printed to the nearest unit is *not* a contradiction). Severity from the gap (≥5 % high, ≥1 % medium),
+  one level lower when one side is *adjusted*. Both sides are named by authority (audited statements beat a spreadsheet or a
+  CIM) and are clickable. Example on Project Falcon: **Revenue FY2024: CIM ₹480.0 Cr (p.7) vs Audited FS ₹452.0 Cr (p.F-2) — 6.2 % gap**; EBITDA
+  FY2024 84.0 vs 69.0 (adjusted-vs-reported note). Figures that agree everywhere (total debt ₹385.6 Cr) raise no alarm.
+- ✅ **Table totals that do not add up** — every "Total" row is checked against the sum of the rows above it (rounding-aware,
+  per column, repeating blocks): the planted typed total of 449.0 against months that sum to 452.0 is found, while the two-page,
+  50-row debt schedule correctly passes.
+- ✅ **Referenced-but-missing documents** — "Schedule 3" cited in the loan agreement but never provided is listed (also used to
+  abstain on questions about it).
+- ✅ **Seller Question List** — an auto-drafted, numbered, severity-ranked list built from: contradictions, total mismatches, missing
+  schedules, hardcoded financial lines, uncached formulas, low-quality scans, estimated chart values, **hidden or injected content
+  (merged into one item per page, not one per finding)**, hidden sheets/rows/columns, active content and diligence-pack topics that no
+  document answers. Each item has the question, *why*, and clickable evidence. Questions are **editable and deletable in the UI** and
+  exportable to **DOCX, CSV, Markdown**.
+- ✅ **Diligence Packs** (one click, matrix rows = questions, columns = documents; every cell a cited value or "Not found"):
+  *Financials* (revenue, EBITDA, net debt, total debt, cash, PAT, revenue growth latest-vs-prior — from the fact store),
+  *Contracts* (parties, term/maturity, termination, change of control, governing law, assignment — retrieval, no generation),
+  *Debt* (facilities & amounts, maturities, interest-rate range from the typed tables; covenants by retrieval). Cells open the source box.
+  Packs run in about 1–2 s and generate no text. **Export XLSX / CSV** with formula-injection protection.
+- ✅ **Debt Maturity Wall** — bar chart of debt maturing per year from the debt table, **each bar backed by a Number Receipt**
+  (click a bar → receipt → click an operand → exact cell). Project Falcon: 2026 ₹104.8 Cr, 2027 ₹37.9 Cr, 2028 ₹137.5 Cr … total ₹385.6 Cr.
+- ✅ **Deal Timeline** — dated events (maturities, expiries, renewals, notice periods, terminations) from sentences and from the
+  maturity column of debt tables, each cited and clickable; same-day maturities are grouped ("17 facilities mature …").
+  Malformed dates ("31 Feb 2026") are ignored, never fatal.
+- ✅ **Document type detection improved** — "agreement/contract/deed" → contract, "audited/financials" → financial statement,
+  "debt schedule" → debt schedule.
+- ✅ **UI**: Contradictions, Diligence Packs, Seller Questions and Maturity Wall tabs (verified in a real browser with Playwright).

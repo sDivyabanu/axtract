@@ -43,7 +43,7 @@ CREATE INDEX IF NOT EXISTS ix_tab_ws ON tables_store(workspace_id);
 CREATE TABLE IF NOT EXISTS facts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, doc_id TEXT NOT NULL, concept TEXT NOT NULL,
   value REAL NOT NULL, unit TEXT, scale REAL, currency TEXT, period TEXT, block_id TEXT, page INTEGER,
-  bbox_json TEXT, confidence REAL, label TEXT);
+  bbox_json TEXT, confidence REAL, label TEXT, raw TEXT);
 CREATE INDEX IF NOT EXISTS ix_fact_ws ON facts(workspace_id, concept, period);
 CREATE TABLE IF NOT EXISTS quarantine (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, doc_id TEXT NOT NULL, chunk_id TEXT, block_id TEXT,
@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS answers (
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, workspace_id TEXT, event TEXT NOT NULL,
   ref TEXT, detail_json TEXT);
+CREATE TABLE IF NOT EXISTS pack_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, pack TEXT NOT NULL, ts REAL NOT NULL, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS corrections (
   id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id TEXT NOT NULL, doc_id TEXT NOT NULL, table_id TEXT,
   row_idx INTEGER, col_idx INTEGER, old_value TEXT, new_value TEXT, ts REAL NOT NULL);
@@ -69,6 +71,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col, ddl in (("printed_json", "TEXT"), ("conf", "REAL"), ("estimated", "INTEGER DEFAULT 0"), ("kind", "TEXT DEFAULT 'table'")):
         if col not in have:
             conn.execute(f"ALTER TABLE tables_store ADD COLUMN {col} {ddl}")
+    have_f = {r["name"] for r in conn.execute("PRAGMA table_info(facts)")}
+    if "raw" not in have_f:
+        conn.execute("ALTER TABLE facts ADD COLUMN raw TEXT")
     conn.commit()
 
 

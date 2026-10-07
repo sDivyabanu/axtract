@@ -117,8 +117,15 @@ def guess_doc_type(filename: str, text_sample: str, file_type: str) -> str:
     scores = Counter()
     for kind, words in _DOC_TYPE_HINTS.items():
         scores[kind] = sum(hay.count(w) for w in words)
-    if "cim" in filename.lower().split("."):
+    low = filename.lower()
+    if "cim" in re.split(r"[^a-z]+", low):
         scores["cim"] += 3
+    if any(w in low for w in ("agreement", "contract", "deed", "indenture")):
+        scores["contract"] += 4
+    if any(w in low for w in ("debt_schedule", "debt schedule", "maturity")):
+        scores["debt_schedule"] += 4
+    if any(w in low for w in ("audited", "financial_statement", "financials", "annual_report")):
+        scores["financial_statement"] += 4
     kind, score = scores.most_common(1)[0]
     if score >= 2:
         return kind

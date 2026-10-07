@@ -61,6 +61,7 @@ class TableOut:
     conf: float | None = None
     estimated: bool = False
     kind: str = "table"
+    period: str | None = None
 
 
 @dataclass
@@ -263,8 +264,10 @@ def build_chunks(blocks: list[DocumentBlock], doc_type: str, filename: str) -> B
             if grid:
                 periods = [p for p in grid["col_periods"] if p]
                 tpages = [int(p["page"]) for p in (b.metadata.get("part_bboxes") or [])] or [loc(b)["page"]]
+                tper = M.normalize_period(" ".join([title, caption] + hp[-2:])) if re.search(r"(?:FY|Q[1-4]|20\d\d)", " ".join([title, caption] + hp[-2:]), re.I) else None
                 built.tables.append(TableOut(b.id, title, loc(b)["page"], unit[0], unit[1], unit[2], statement, grid,
-                                             {str(p): pmap[p] for p in tpages if p in pmap}, b.confidence))
+                                             {str(p): pmap[p] for p in tpages if p in pmap}, b.confidence, False, "table",
+                                             tper or cur_period))
                 summary = table_summary(grid, title, unit[0], unit[2], loc(b)["page"])
             else:
                 periods, summary = [], f"Table on page {loc(b)['page']}."

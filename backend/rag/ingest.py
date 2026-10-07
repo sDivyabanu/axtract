@@ -18,7 +18,7 @@ import numpy as np
 
 from models.document import DocumentBlock
 from models.errors import AppError
-from rag import chunker, config, db, embed, index, meta, security
+from rag import chunker, config, db, embed, facts as facts_mod, index, meta, security
 from services.parse_service import parse_path
 from utils.files import (
     MAX_UPLOAD_BYTES,
@@ -226,6 +226,25 @@ def index_document(workspace_id: str, doc_id: str, path: Path | None, filename: 
                     (db.new_id(), workspace_id, doc_id, block_to_chunk.get(bid), bid, f.reason, b.type.value, lc["page"],
                      db.jdump(lc["bbox"]), f.detail[:300], time.time()),
                 )
+        fact_rows = []
+        for t in built.tables:
+            fact_rows += facts_mod.facts_from_table(t, doc_type)
+        for ch in built.chunks:
+            if ch.kind == "section" and ch.bboxes:
+                fact_rows += facts_mod.facts_from_text(ch.text, ch.pages[0] if ch.pages else 1, ch.bboxes[0].get("bbox"),
+                                                       ch.block_ids[0] if ch.block_ids else "", " ".join(ch.heading_path))
+        c.execute("DELETE FROM facts WHERE doc_id=?", (doc_id,))
+        seen_f = set()
+        for f in fact_rows:
+            k = (f["concept"], f["period"], round(f["value"], 6), f["page"])
+            if k in seen_f:
+                continue
+            seen_f.add(k)
+            c.execute(
+                "INSERT INTO facts (workspace_id, doc_id, concept, value, unit, scale, currency, period, block_id, page, bbox_json,"
+                " confidence, label, raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (workspace_id, doc_id, f["concept"], f["value"], f["unit"], f["scale"], f["currency"], f["period"], f["block_id"],
+                 f["page"], db.jdump(f["bbox"]), f["confidence"], f["label"], f["raw"]))
         c.execute(
             "UPDATE documents SET doc_type=?, status='ready', stage='Ready', progress=1.0, indexed_at=?, block_count=?,"
             " chunk_count=?, quarantined_count=?, flag_count=?, flags_json=?, error=NULL WHERE id=?",

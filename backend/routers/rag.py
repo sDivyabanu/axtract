@@ -6,12 +6,12 @@ import json
 from typing import Any, Iterator
 
 from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from models.errors import AppError
-from rag import baseline, config, db, index, ingest, llm, qa, workspaces
+from rag import baseline, config, db, diligence, exports, index, ingest, llm, maturity, packs, qa, workspaces
 from utils.files import get_extension, remove_temp_file, sanitize_filename, save_upload_to_temp
 
 router = APIRouter(prefix="/api", tags=["deallens"])
@@ -108,6 +108,76 @@ def compare(workspace_id: str, body: CompareIn) -> dict[str, Any]:
     db.audit("compare", workspace_id, final["answer_id"] if final else None,
              {"baseline_ms": base["total_ms"], "dealLens_ms": final["total_ms"] if final else None})
     return {"question": body.question, "baseline": base, "dealLens": final}
+
+
+@router.get("/workspaces/{workspace_id}/contradictions")
+def contradictions(workspace_id: str) -> list[dict[str, Any]]:
+    workspaces.require(workspace_id)
+    return diligence.find_contradictions(workspace_id)
+
+
+@router.get("/workspaces/{workspace_id}/seller-questions")
+def seller_questions(workspace_id: str) -> list[dict[str, Any]]:
+    workspaces.require(workspace_id)
+    return diligence.seller_questions(workspace_id)
+
+
+class SellerExport(BaseModel):
+    format: str = Field(pattern="^(docx|csv|md)$")
+    items: list[dict[str, Any]]
+    title: str = "Seller question list"
+
+
+@router.post("/workspaces/{workspace_id}/seller-questions/export")
+def export_seller_questions(workspace_id: str, body: SellerExport) -> Response:
+    """Export the (possibly edited) list. CSV cells are protected against spreadsheet formula injection."""
+    workspaces.require(workspace_id)
+    rows = [[i.get("n", ""), i.get("severity", ""), i.get("question", ""), i.get("why", ""),
+             "; ".join(f"{e.get('filename', '')} p.{e.get('page') or '?'}" for e in i.get("evidence", []))] for i in body.items]
+    if body.format == "csv":
+        data, mime = exports.csv_bytes(["#", "Severity", "Question", "Why", "Evidence"], rows), "text/csv"
+    elif body.format == "docx":
+        data, mime = exports.seller_docx(body.title, body.items), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    else:
+        data, mime = exports.seller_markdown(body.title, body.items), "text/markdown"
+    db.audit("export.seller", workspace_id, None, {"format": body.format, "items": len(body.items)})
+    return Response(content=data, media_type=mime, headers={"Content-Disposition": f'attachment; filename="seller-questions.{body.format}"'})
+
+
+@router.get("/workspaces/{workspace_id}/maturity-wall")
+def maturity_wall(workspace_id: str) -> dict[str, Any]:
+    workspaces.require(workspace_id)
+    return {"walls": maturity.maturity_wall(workspace_id), "events": maturity.timeline(workspace_id)}
+
+
+@router.get("/workspaces/{workspace_id}/packs")
+def list_packs(workspace_id: str) -> list[dict[str, Any]]:
+    workspaces.require(workspace_id)
+    return [{"pack": k, "title": v["title"], "doc_types": v["doc_types"], "questions": [r[0] for r in v["rows"]],
+             "latest": packs.latest_run(workspace_id, k)} for k, v in packs.PACKS.items()]
+
+
+@router.post("/workspaces/{workspace_id}/packs/{pack}")
+def run_pack(workspace_id: str, pack: str) -> dict[str, Any]:
+    workspaces.require(workspace_id)
+    if pack not in packs.PACKS:
+        raise AppError("PACK_NOT_FOUND", "Unknown diligence pack.", status_code=404)
+    return packs.run_pack(workspace_id, pack)
+
+
+@router.get("/workspaces/{workspace_id}/packs/{pack}/export")
+def export_pack(workspace_id: str, pack: str, format: str = "xlsx") -> Response:
+    workspaces.require(workspace_id)
+    run = packs.latest_run(workspace_id, pack)
+    if run is None or format not in ("csv", "xlsx"):
+        raise AppError("PACK_NOT_RUN", "Run the pack first (and choose csv or xlsx).", status_code=404)
+    cols, rows = packs.to_table(run)
+    if format == "csv":
+        data, mime = exports.csv_bytes(cols, rows), "text/csv"
+    else:
+        data, mime = exports.xlsx_bytes(cols, rows, run["title"]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    db.audit("export.pack", workspace_id, pack, {"format": format})
+    return Response(content=data, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{pack}-pack.{format}"'})
 
 
 @router.get("/answers/{answer_id}")

@@ -260,9 +260,10 @@ def make_management_accounts(path: Path, tmp: Path) -> None:
     base[-1] = round(452.0 - sum(base[:-1]), 1)  # months add up to audited FY2024 revenue
     for m, v in zip(months, base):
         ws.append([m, v])
+    ws.append(["Total", round(sum(base) - 3.0, 1)])  # a TYPED total that is 3.0 lower than the months above it
     s = wb.create_sheet("Summary")
     s.append(["Metric", "FY2024 (₹ crore)"])
-    s.append(["Revenue", "=SUM(Monthly!B2:B13)"])
+    s.append(["Revenue", "=SUM(Monthly!B2:B13)"])  # months only, not the typed total row
     s.append(["Cost of sales", "=Revenue*0"])  # placeholder replaced below
     s["B3"] = 383.0  # cost of sales (typed)
     s.append(["Gross profit", "=B2-B3"])
@@ -382,7 +383,7 @@ def main() -> int:
                 q["expected_pages"] = pages_with(files[q["expected_docs"][0]], needle)
     facts = {"total_debt": TOTAL_DEBT, "maturing_2026": MATURING_2026, "maturing_2027": MATURING_2027, "net_debt": NET_DEBT,
              "audited_revenue_fy2024": PNL["Revenue from operations"][1], "cim_revenue_fy2024": CIM_REVENUE["FY2024"],
-             "audited_ebitda_fy2024": EBITDA[1], "cim_ebitda_fy2024": CIM_EBITDA_FY2024, "hidden_text": HIDDEN_INJECTION}
+             "audited_ebitda_fy2024": EBITDA[1], "cim_ebitda_fy2024": CIM_EBITDA_FY2024, "monthly_total_typed_error": 3.0, "hidden_text": HIDDEN_INJECTION}
     (EVAL / "golden_qa.yaml").write_text(yaml.safe_dump({"data_room": "demo/project_falcon", "facts": facts, "questions": qa},
                                                         sort_keys=False, allow_unicode=True, width=120))
     print(f"wrote {len(files)} files to {OUT.relative_to(ROOT)} and {len(qa)} golden questions to eval/golden_qa.yaml")

@@ -267,3 +267,96 @@ export interface QuarantineItem {
   snippet: string;
   preview_pages: number;
 }
+
+export interface Side {
+  doc_id: string;
+  filename: string;
+  label: string;
+  page: number;
+  printed_page: string | null;
+  bbox: BBox | null;
+  preview_pages: number;
+  display: string;
+  value: number;
+  agrees_with_lowest: boolean;
+}
+
+export interface Contradiction {
+  id: string;
+  concept_label: string;
+  period: string;
+  sides: Side[];
+  primary: { high: Side; low: Side };
+  gap_pct: number;
+  severity: "high" | "medium" | "low";
+  note: string;
+  summary: string;
+}
+
+export interface Evidence {
+  doc_id: string;
+  filename: string;
+  page: number | null;
+  bbox: BBox | null;
+  label: string;
+  preview_pages: number;
+}
+
+export interface SellerItem {
+  id: string;
+  n: number;
+  kind: string;
+  severity: "high" | "medium" | "low";
+  question: string;
+  why: string;
+  evidence: Evidence[];
+}
+
+export interface PackCell {
+  doc_id: string;
+  status: "found" | "not_found";
+  text: string;
+  citations?: { doc_id: string; filename: string; page: number | null; printed_page: string | null; bbox: BBox | null; preview_pages: number }[];
+  badges?: Badge[];
+}
+
+export interface PackRun {
+  pack: string;
+  title: string;
+  columns: { doc_id: string; filename: string; doc_type: string; preview_pages: number }[];
+  rows: { label: string; question: string | null; cells: PackCell[] }[];
+  seconds: number;
+}
+
+export interface MaturityBar {
+  year: number;
+  value: number;
+  display: string;
+  receipt: Receipt;
+}
+
+export interface Wall {
+  title: string;
+  filename: string;
+  doc_id: string;
+  unit: string;
+  bars: MaturityBar[];
+}
+
+export interface TimelineEvent {
+  date: string;
+  label: string;
+  kind: string;
+  doc_id: string;
+  filename: string;
+  preview_pages: number;
+  page: number | null;
+  bbox: BBox | null;
+  count?: number;
+}
+
+export const SEVERITY_STYLE: Record<string, string> = {
+  high: "bg-red-100 text-red-800",
+  medium: "bg-amber-100 text-amber-800",
+  low: "bg-gray-100 text-gray-700",
+};

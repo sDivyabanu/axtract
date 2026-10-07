@@ -244,6 +244,7 @@ def ask_stream(
     doc_types: list[str] | None = None,
     periods: list[str] | None = None,
     mode: str = "dealLens",
+    use_llm: bool = True,
 ) -> Iterator[dict[str, Any]]:
     """Yield events: {'event':'stage'|'token'|'answer'|'error', ...}. The last event is 'answer'."""
     workspaces.require(workspace_id)
@@ -264,6 +265,8 @@ def ask_stream(
     docs = {d["doc_id"]: d for d in workspaces.documents(workspace_id)}
     ready = [d for d in docs.values() if d["status"] == "ready"]
     llm_state = llm.status()
+    if not use_llm:
+        llm_state = {**llm_state, "available": False}
 
     # ---- routing
     yield _ev("Routing", status="start")
@@ -296,7 +299,7 @@ def ask_stream(
         top_rows = [index.chunk_row(workspace_id, h.chunk_id) for h in ranked[:8]]
         tids = planner.candidate_table_ids(workspace_id, question, top_rows, only_docs=set(doc_ids) if doc_ids else (hinted or None))
         tables = planner.load_tables(workspace_id, tids)
-        outcome = planner.plan_and_run(question, tables) if tables else None
+        outcome = planner.plan_and_run(question, tables, allow_llm=use_llm) if tables else None
         plan_info = {"candidate_tables": [{"alias": a, "title": t.title, "document": t.filename} for a, t in tables.items()],
                      "planner": outcome["planner"] if outcome else None, "plan": outcome["plan"] if outcome else None,
                      "error": outcome["error"] if outcome else None}
