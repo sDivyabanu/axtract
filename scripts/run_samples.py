@@ -100,15 +100,53 @@ def equation_has_latex(block: dict) -> bool:
     return bool(meta.get("latex"))
 
 
+TYPE_COLORS = {
+    "heading": "#1d4ed8", "paragraph": "#6b7280", "list": "#15803d", "table": "#7e22ce",
+    "figure": "#c2410c", "chart": "#db2777", "equation": "#dc2626", "header": "#a16207",
+    "footer": "#a16207", "unknown": "#6b7280",
+}
+
+
+def draw_previews(client: TestClient, path: Path, body: dict) -> tuple[bool, str]:
+    """Fetch every preview page through the real GET endpoint and draw the block boxes.
+
+    Saved as reports/previews/<file>_p<N>.png for visual spot-checks. Returns (ok, error).
+    """
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw
+
+    if not body.get("preview_available"):
+        return False, body.get("preview_error") or "preview not available"
+    doc_id, pages = body["document_id"], int(body.get("preview_pages") or 1)
+    blocks = body.get("blocks", [])
+    PREVIEW_OUT.mkdir(parents=True, exist_ok=True)
+    for n in range(1, min(pages, 12) + 1):
+        resp = client.get(f"/api/preview/{doc_id}/pages/{n}")
+        if resp.status_code != 200:
+            return False, f"page {n}: HTTP {resp.status_code}: {resp.text[:200]}"
+        img = Image.open(BytesIO(resp.content)).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        w, h = img.size
+        for b in blocks:
+            prev = (b.get("metadata") or {}).get("preview")
+            page, bbox = (prev["page"], prev.get("bbox")) if prev else (b["page"], b.get("bbox"))
+            if page != n or not bbox:
+                continue
+            color = TYPE_COLORS.get(b["type"], "#6b7280")
+            draw.rectangle([bbox[0] * w, bbox[1] * h, bbox[2] * w, bbox[3] * h], outline=color, width=3)
+            draw.text((bbox[0] * w + 3, max(0, bbox[1] * h - 11)), b["type"], fill=color)
+        img.save(PREVIEW_OUT / f"{path.stem}_p{n}.png")
+    return True, ""
+
+
 def try_preview(client: TestClient, path: Path, ext: str) -> tuple[bool, str]:
-    """Call the real preview endpoint (page 1) and save the image on success."""
+    """Call the stateless POST /api/preview endpoint (page 1); nothing is saved."""
     resp = client.post(
-        "/api/preview?page=0",
+        "/api/preview?page=1",
         files={"file": (path.name, path.read_bytes(), MIME.get(ext, "application/octet-stream"))},
     )
     if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image/"):
-        PREVIEW_OUT.mkdir(parents=True, exist_ok=True)
-        (PREVIEW_OUT / f"{path.stem}_p1.png").write_bytes(resp.content)
         return True, ""
     return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
 
@@ -127,7 +165,7 @@ def run_file(client: TestClient, path: Path) -> dict:
         "charts_with_values": 0,
         "equations_detected": 0,
         "equations_with_latex": 0,
-        "preview_ok": False,
+        "preview_ok": None,
         "preview_error": "",
         "traceback": "",
         "time_s": 0.0,
@@ -171,7 +209,13 @@ def run_file(client: TestClient, path: Path) -> dict:
             except Exception:
                 row["traceback"] = traceback.format_exc()
 
-    row["preview_ok"], row["preview_error"] = try_preview(client, path, ext)
+    if resp.status_code == 200:
+        row["preview_ok"], row["preview_error"] = draw_previews(client, path, body)
+        stateless_ok, stateless_err = try_preview(client, path, ext)
+        if not stateless_ok:
+            row["preview_ok"], row["preview_error"] = False, f"POST /api/preview: {stateless_err}"
+    else:
+        row["preview_ok"], row["preview_error"] = None, "n/a (file rejected by parse)"
     return row
 
 
@@ -196,17 +240,17 @@ def write_reports(rows: list[dict], tag: str) -> None:
             f"| {r['file']} | {r['detected_format']} | {status} | {r['pages'] if r['pages'] is not None else '-'} "
             f"| {fmt_counts(r['block_counts'])} | {r['charts_detected']} | {r['charts_with_values']} "
             f"| {r['equations_detected']} | {r['equations_with_latex']} "
-            f"| {'yes' if r['preview_ok'] else 'NO'} | {r['time_s']} |"
+            f"| {'n/a' if r['preview_ok'] is None else ('yes' if r['preview_ok'] else 'NO')} | {r['time_s']} |"
         )
 
-    problems = [r for r in rows if r["traceback"] or (not r["preview_ok"])]
+    problems = [r for r in rows if r["traceback"] or r["preview_ok"] is False]
     if problems:
         lines += ["", "## Errors, warnings and preview failures", ""]
         for r in problems:
             lines.append(f"### {r['file']}")
             if r["traceback"]:
                 lines += ["", "```", r["traceback"].strip(), "```"]
-            if not r["preview_ok"]:
+            if r["preview_ok"] is False:
                 lines += ["", f"Preview: `{r['preview_error']}`"]
             lines.append("")
 

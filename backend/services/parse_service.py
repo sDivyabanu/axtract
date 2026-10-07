@@ -24,6 +24,7 @@ from models.errors import AppError
 from services.chart_service import detect_charts_in_page, enhance_chart_block
 from services.equation_service import enhance_equation_block
 from services.layout_service import assign_reading_order
+from services import preview_service
 from services.markdown_service import blocks_to_markdown
 from services.table_service import enhance_table_block, merge_cross_page_tables
 from utils import deadline
@@ -64,6 +65,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
 
     started = perf_counter()
     temp_path: Path | None = None
+    document_id = uuid4().hex
 
     try:
         # 2. Save and validate file
@@ -93,6 +95,10 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         # 4. Extract
         result = extractor.extract(temp_path)
 
+        # 4b. Preview artifacts (never fatal). Office files are converted to PDF here,
+        # while the upload still exists.
+        preview = preview_service.prepare(document_id, temp_path, file_type)
+
     finally:
         remove_temp_file(temp_path)
 
@@ -115,11 +121,14 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     # 5. Layout analysis and reading order
     ordered_blocks = assign_reading_order(result.blocks)
 
+    # 5b. Where each block sits in the preview pages (Office formats)
+    preview_service.annotate_blocks(preview, ordered_blocks, file_type)
+
     # 6. Markdown generation
     markdown = blocks_to_markdown(ordered_blocks)
 
     return DocumentResponse(
-        document_id=uuid4().hex,
+        document_id=document_id,
         filename=filename,
         file_type=file_type,
         page_count=result.page_count,
@@ -128,4 +137,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         blocks=ordered_blocks,
         markdown=markdown,
         errors=result.errors,
+        preview_available=preview.available,
+        preview_pages=preview.pages,
+        preview_error=preview.error,
     )

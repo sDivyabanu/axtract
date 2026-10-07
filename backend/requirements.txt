@@ -4,7 +4,9 @@ uvicorn
 python-multipart
 
 # PDF extraction
-pymupdf
+pymupdf            # AGPL-3.0 (see docs: replace before commercial distribution)
+pdfplumber         # MIT: vector chart primitives
+pypdfium2          # BSD-3 / Apache-2.0: page rendering for preview + OCR crops
 
 # Office document extraction
 python-docx
@@ -17,9 +19,18 @@ rapidocr-onnxruntime
 # Image processing
 Pillow
 
+# Region detection and formula recognition (self-hosted ONNX models)
+rapid-layout       # Apache-2.0: layout model bundled in the wheel (CDLA classes incl. equation)
+rapid-latex-ocr    # Apache-2.0: image -> LaTeX; weights fetched once by scripts/fetch_models.py
+defusedxml         # PSF: safe XML parsing for Office chart / equation parts
+latex2mathml       # MIT: LaTeX syntax validation
+requests
+
 # Text similarity for verification
 python-Levenshtein
 
 # Testing
 pytest
 httpx
+reportlab          # BSD: fixture PDFs
+matplotlib         # fixture charts / rendered equations
