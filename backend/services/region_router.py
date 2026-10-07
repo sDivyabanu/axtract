@@ -28,6 +28,7 @@ from models.errors import DocumentError
 from services import preview_service
 from services.chart_service import has_numeric_values, make_chart_block
 from services.equation_service import make_equation_block
+from services.table_service import reconstruct_table_from_ocr
 from services.vision import models
 from services.vision.chart_raster import read_chart
 from services.vision.formula import FormulaResult, recognize_formula
@@ -244,6 +245,14 @@ def _route_image(result: ExtractionResult, file_path: Path) -> None:
         return
     page = 1
     ocr_blocks = [b for b in result.blocks if b.extractor == "rapidocr"]
+
+    # a tabular structure reconstructed from OCR boxes wins over everything else
+    found = reconstruct_table_from_ocr(result.blocks, page)
+    if found is not None:
+        table_block, consumed = found
+        result.blocks = [b for b in result.blocks if b not in consumed]
+        result.blocks.append(table_block)
+        return
 
     # whole image is one chart?
     res = _classify(img) if _budget_ok() else None
@@ -522,6 +531,16 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
                                     "crop_ref": {"page": pno, "bbox": list(r.bbox)}},
                 ))
                 n_eq += 1
+
+        # 2c-bis. scanned pages: reconstruct tables from OCR boxes
+        if pno in scanned_pages and not any(
+            b.page == pno and b.type == BlockType.TABLE for b in blocks
+        ):
+            found = reconstruct_table_from_ocr(blocks, pno)
+            if found is not None:
+                table_block, consumed = found
+                blocks[:] = [b for b in blocks if b not in consumed]
+                blocks.append(table_block)
 
         # 2d. scanned / image-only pages: figure regions may be charts
         if pno in scanned_pages:
