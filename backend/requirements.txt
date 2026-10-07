@@ -1,4 +1,22 @@
+# Core API
 fastapi
 uvicorn
 python-multipart
+
+# PDF extraction
 pymupdf
+
+# Office document extraction
+python-docx
+python-pptx
+openpyxl
+
+# OCR (self-hosted, uses PaddleOCR models via ONNX Runtime)
+rapidocr-onnxruntime
+
+# Image processing
+Pillow
+
+# Testing
+pytest
+httpx
