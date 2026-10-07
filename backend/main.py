@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from models.errors import AppError, ErrorInfo, ErrorResponse
-from routers import health, parse
+from routers import health, parse, preview
 
 logger = logging.getLogger("parseanything")
 
@@ -22,6 +22,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(parse.router)
+app.include_router(preview.router)
 
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:

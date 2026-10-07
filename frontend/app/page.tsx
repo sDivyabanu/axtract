@@ -3,6 +3,7 @@
 import { useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
 import ResultView from "@/components/ResultView";
+import DocumentPreview from "@/components/DocumentPreview";
 import { ApiError, parseDocument } from "@/lib/api";
 import type { DocumentResponse } from "@/lib/types";
 
@@ -37,7 +38,7 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">AXTRACT</h1>
         <p className="text-sm text-gray-500">
@@ -45,37 +46,45 @@ export default function Home() {
         </p>
       </div>
 
-      <FileDropzone
-        selectedFile={selectedFile}
-        onFileSelected={handleFileSelected}
-        disabled={isLoading}
-      />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          <FileDropzone
+            selectedFile={selectedFile}
+            onFileSelected={handleFileSelected}
+            disabled={isLoading}
+          />
 
-      <div>
-        <button
-          type="button"
-          onClick={handleParse}
-          disabled={!selectedFile || isLoading}
-          className="rounded-md bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
-        >
-          {isLoading ? "Parsing…" : "Parse Document"}
-        </button>
-      </div>
+          <div>
+            <button
+              type="button"
+              onClick={handleParse}
+              disabled={!selectedFile || isLoading}
+              className="w-full rounded-md bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
+            >
+              {isLoading ? "Parsing…" : "Parse Document"}
+            </button>
+          </div>
 
-      {isLoading && (
-        <p className="text-sm text-gray-500">
-          Parsing document, please wait…
-        </p>
-      )}
+          {isLoading && (
+            <p className="text-sm text-gray-500">
+              Parsing document, please wait…
+            </p>
+          )}
 
-      {error && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700"
-        >
-          {error}
+          {error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700"
+            >
+              {error}
+            </div>
+          )}
         </div>
-      )}
+
+        <div>
+          <DocumentPreview file={selectedFile} />
+        </div>
+      </div>
 
       {result && <ResultView result={result} />}
     </main>
