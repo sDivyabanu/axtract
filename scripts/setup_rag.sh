@@ -6,7 +6,7 @@
 #   3. downloads embedding + reranker weights and records/verifies SHA-256 digests
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MODEL="${DEALLENS_LLM_MODEL:-qwen3:4b}"          # Apache-2.0, ~2.5 GB, fits 8 GB RAM
+MODEL="${DEALLENS_LLM_MODEL:-qwen3:4b-instruct}" # Apache-2.0, ~2.5 GB, fits 8 GB RAM (non-thinking variant)
 PY="${ROOT}/backend/.venv/bin/python"
 OLLAMA_HOME="$HOME/Applications/ollama"
 

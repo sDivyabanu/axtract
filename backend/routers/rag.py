@@ -205,6 +205,18 @@ def get_quarantine(workspace_id: str) -> list[dict[str, Any]]:
     } for r in rows]
 
 
+@router.get("/eval/latest")
+def eval_latest() -> dict[str, Any]:
+    """The most recent evaluation produced by scripts/run_rag_eval.py (never edited by hand)."""
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "reports" / "rag_eval.json"
+    if not path.exists():
+        raise AppError("EVAL_NOT_RUN", "No evaluation has been run yet. Run scripts/run_rag_eval.py.", status_code=404)
+    return json.loads(path.read_text())
+
+
 @router.get("/rag/status")
 def rag_status() -> dict[str, Any]:
     st = llm.status(force=True)

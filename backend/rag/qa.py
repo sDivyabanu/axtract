@@ -209,6 +209,22 @@ def _table_excerpt(text: str, q_terms: set[str], cite: int, max_rows: int = 3) -
     return " ".join(f"{o}. [{cite}]" if i == len(out) - 1 else f"{o}." for i, o in enumerate(out))
 
 
+def _best_sentences(question: str, q_terms: set[str], text: str, k: int) -> list[str]:
+    """The k sentences of a passage that best answer the question (lexical overlap + semantic similarity),
+    returned in their original order."""
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if len(x.strip()) > 3][:14]
+    if not sents:
+        return []
+    if len(sents) <= k:
+        return sents
+    from rag import embed
+
+    sims = embed.embed_texts(sents) @ embed.embed_query(question)
+    score = [0.5 * _overlap(q_terms, x) + 0.5 * max(0.0, float(sm)) for x, sm in zip(sents, sims)]
+    top = sorted(range(len(sents)), key=lambda i: -score[i])[:k]
+    return [sents[i] for i in sorted(top)]
+
+
 def _extractive(question: str, used: list[tuple[int, dict[str, Any]]]) -> str:
     """Best sentence(s) / table rows from the top sources, with citations. No generation."""
     q = _terms(question)
@@ -221,12 +237,9 @@ def _extractive(question: str, used: list[tuple[int, dict[str, Any]]]) -> str:
             continue
         if row["kind"] == "table_summary":
             continue
-        sents = re.split(r"(?<=[.!?])\s+", row["text"])
-        best = sorted(sents, key=lambda s: -_overlap(q, s))[:1]
-        for s in best:
-            if s.strip():
-                parts.append(f"{s.strip()} [{n}]")
-    if not parts:  # only summaries matched: fall back to the best chunk's first sentence
+        for s in _best_sentences(question, q, row["text"], 2 if n == used[0][0] else 1):
+            parts.append(f"{s} [{n}]")
+    if not parts and used:  # only summaries matched: fall back to the best chunk's first sentence
         n, row = used[0]
         parts.append(f"{row['text'].split('. ')[0].strip()} [{n}]")
     return " ".join(parts)
@@ -318,8 +331,10 @@ def ask_stream(
 
     used: list[tuple[int, dict[str, Any]]] = []
     if evidence_ok:
+        # when only the lexical coverage vouched for the evidence, the rerank floor would exclude everything
+        floor = ABSTAIN_BELOW if best >= ABSTAIN_BELOW else best - 3.0
         for h in ranked:
-            if len(used) >= config.FINAL_K or (h.rerank is not None and h.rerank < best - USED_WINDOW) or h.rerank < ABSTAIN_BELOW:
+            if len(used) >= (config.FINAL_K if best >= ABSTAIN_BELOW else 3) or (h.rerank is not None and h.rerank < best - USED_WINDOW) or h.rerank < floor:
                 continue
             row = index.chunk_row(workspace_id, h.chunk_id)
             used.append((len(used) + 1, row))

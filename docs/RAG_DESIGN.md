@@ -38,7 +38,7 @@ Colour language: green verified · amber needs review/estimated · red contradic
 | Need | Choice | Licence | Why |
 |---|---|---|---|
 | LLM runtime | Ollama (REST via httpx, BSD) | MIT | local, swappable via `DEALLENS_LLM_MODEL` / `OLLAMA_URL` |
-| LLM (default) | **qwen3:4b** (thinking off) | Apache-2.0 | fits 8 GB RAM, strong JSON/plan following. Alternatives: `phi4-mini` (MIT), `qwen2.5:7b-instruct` (Apache-2.0, needs ≥16 GB). Avoid qwen2.5-3b (research licence) |
+| LLM (default) | **qwen3:4b-instruct** (non-thinking; the hybrid `qwen3:4b` emitted its reasoning into answers and exhausted token budgets) | Apache-2.0 | fits 8 GB RAM, ~20 tok/s on an M1. Alternatives: `phi4-mini` (MIT), `qwen2.5:7b-instruct` (Apache-2.0, needs ≥16 GB). Avoid qwen2.5-3b (research licence) |
 | Embeddings | fastembed + **BAAI/bge-small-en-v1.5** | Apache-2.0 / MIT | ONNX (no PyTorch), 67 MB |
 | Reranker | fastembed + **Xenova/ms-marco-MiniLM-L-6-v2** | Apache-2.0 | cross-encoder, 80 MB. *Not* jina-v2 (CC-BY-NC) |
 | Vector index | numpy exact cosine, persisted in SQLite | BSD | data rooms are ≤ tens of thousands of chunks: exact search is faster to build, deterministic and needs no native index library |

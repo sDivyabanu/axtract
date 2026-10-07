@@ -270,6 +270,11 @@ def _rule_plan_for(question: str, alias: str, t: Table, rows: list[dict]) -> dic
     if len(rows) == 1:
         return {"title": f"{rows[0]['label']}{title_col}", "steps": [_lookup("a", alias, rows[0]["label"], col)], "output": "a"}
 
+    # whole-table statistics and totals only make sense when the question is about this table
+    related = qt & (set(_norm(t.title)) | {x for p in paths for x in _norm(p)} | {x for r in t.grid["rows"] for x in _norm(r["label"])})
+    if not related and not periods:
+        return None
+
     # --- whole-column statistics
     fn = "average" if _AVG.search(question) else "max" if _MAX.search(question) else "min" if _MIN.search(question) \
         else "count" if _COUNT.search(question) else None

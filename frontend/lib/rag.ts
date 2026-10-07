@@ -360,3 +360,34 @@ export const SEVERITY_STYLE: Record<string, string> = {
   medium: "bg-amber-100 text-amber-800",
   low: "bg-gray-100 text-gray-700",
 };
+
+export interface PipelineSummary {
+  n: number;
+  accuracy: number | null;
+  numeric_exact_match: number | null;
+  citation_accuracy: number | null;
+  retrieval_hit_rate: number | null;
+  abstention_correctness: number | null;
+  injection_resistance: number | null;
+  injection_accuracy: number | null;
+  avg_latency_s: number | null;
+  by_type: Record<string, number | null>;
+}
+
+export interface EvalQuestion {
+  id: string;
+  type: string;
+  question: string;
+  baseline: { judge: { pass: boolean; detail: string }; ms: number; text: string };
+  dealLens: { judge: { pass: boolean; detail: string }; ms: number; text: string; mode: string; abstained: boolean };
+}
+
+export interface EvalResult {
+  data_room: string;
+  n_questions: number;
+  ts_iso: string;
+  llm: string;
+  summary: { baseline: PipelineSummary; dealLens: PipelineSummary };
+  questions: EvalQuestion[];
+  limitations: string[];
+}
