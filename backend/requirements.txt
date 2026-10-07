@@ -17,6 +17,9 @@ rapidocr-onnxruntime
 # Image processing
 Pillow
 
+# Text similarity for verification
+python-Levenshtein
+
 # Testing
 pytest
 httpx

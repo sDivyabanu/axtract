@@ -112,26 +112,60 @@ def _block_to_markdown(block: DocumentBlock) -> str:
 
 
 def _table_to_markdown(block: DocumentBlock) -> str:
-    """Convert a table block to Markdown table format."""
+    """Convert a table block to Markdown table format with merged cell support."""
     rows = block.metadata.get("rows")
     if not rows or not isinstance(rows, list):
         # Fallback: use pipe-delimited content
         return f"```\n{block.content}\n```"
 
+    # Check for merged cells info
+    merged_info = block.metadata.get("merged_cells", {})
+    has_merged = merged_info.get("has_merged_cells", False)
+    
     # Build Markdown table
     lines: list[str] = []
+    
+    # Track merged cell spans
+    merged_spans = {}  # (row, col) -> (rowspan, colspan)
+    for region in merged_info.get("merged_regions", []):
+        row, col, rowspan, colspan = region
+        merged_spans[(row, col)] = (rowspan, colspan)
 
     for i, row in enumerate(rows):
         if not isinstance(row, list):
             continue
         cells = [str(c) if c is not None else "" for c in row]
-        # Escape pipe characters in cell content
-        cells = [c.replace("|", "\\|") for c in cells]
-        lines.append("| " + " | ".join(cells) + " |")
+        
+        # Skip cells that are covered by merged cells from previous rows
+        display_cells = []
+        for j, cell in enumerate(cells):
+            # Check if this cell is covered by a rowspan from above
+            is_covered = False
+            for (mr, mc), (rowspan, colspan) in merged_spans.items():
+                if mr < i <= mr + rowspan - 1 and mc <= j < mc + colspan:
+                    is_covered = True
+                    break
+            
+            if is_covered:
+                display_cells.append("")
+            else:
+                # Escape pipe characters in cell content
+                display_cells.append(cell.replace("|", "\\|"))
+        
+        # Add colspan indicator in content for merged cells
+        for j, cell in enumerate(display_cells):
+            if (i, j) in merged_spans:
+                rowspan, colspan = merged_spans[(i, j)]
+                if colspan > 1:
+                    display_cells[j] = f"{cell} <colspan:{colspan}>"
+                if rowspan > 1:
+                    display_cells[j] = f"{cell} <rowspan:{rowspan}>"
+        
+        lines.append("| " + " | ".join(display_cells) + " |")
 
         # Add separator after header row
         if i == 0:
-            sep = "| " + " | ".join("---" for _ in cells) + " |"
+            sep = "| " + " | ".join("---" for _ in display_cells) + " |"
             lines.append(sep)
 
     return "\n".join(lines)

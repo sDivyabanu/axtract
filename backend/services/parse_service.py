@@ -19,10 +19,21 @@ from uuid import uuid4
 from fastapi import UploadFile
 
 from extractors.registry import get_extractor
-from models.document import DocumentResponse
+from models.document import BlockType, DocumentResponse
 from models.errors import AppError
+from services.chart_service import detect_charts_in_page, enhance_chart_block
+from services.context_service import enrich_document_with_context
+from services.cost_service import generate_cost_summary
+from services.equation_service import enhance_equation_block
+from services.health_service import (
+    enhance_blocks_with_health_check,
+    generate_document_health_report,
+)
 from services.layout_service import assign_reading_order
 from services.markdown_service import blocks_to_markdown
+from services.spreadsheet_service import enhance_spreadsheet_block
+from services.table_service import enhance_table_block, merge_cross_page_tables
+from services.verification_service import verify_all_blocks
 from utils.files import (
     MAX_UPLOAD_BYTES,
     get_extension,
@@ -90,20 +101,71 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     finally:
         remove_temp_file(temp_path)
 
+    # 4.5. Detect charts (reclassify figures)
+    chart_detected_blocks = detect_charts_in_page(result.blocks)
+    result.blocks = chart_detected_blocks
+    
+    # 4.6. Enhance blocks based on type
+    def enhance_block(block: DocumentBlock) -> DocumentBlock:
+        if block.type == BlockType.TABLE:
+            if block.extractor == "openpyxl":
+                # Spreadsheet-specific enhancement
+                return enhance_spreadsheet_block(block)
+            else:
+                # Regular table enhancement
+                return enhance_table_block(block)
+        elif block.type == BlockType.EQUATION:
+            return enhance_equation_block(block)
+        else:
+            return block
+    
+    enhanced_blocks = [enhance_block(block) for block in result.blocks]
+    result.blocks = enhanced_blocks
+    
+    # 4.7. Merge cross-page tables
+    merged_blocks = merge_cross_page_tables(result.blocks)
+    result.blocks = merged_blocks
+    
+    # 4.8. Run verification (math consistency, cross-checks)
+    verified_blocks = verify_all_blocks(result.blocks)
+    result.blocks = verified_blocks
+    
+    # 4.9. Run health check (invisible content, prompt injection)
+    health_checked_blocks = enhance_blocks_with_health_check(result.blocks)
+    result.blocks = health_checked_blocks
+    
+    # 4.10. Enrich with financial and semantic context
+    context_enriched_blocks = enrich_document_with_context(result.blocks)
+    result.blocks = context_enriched_blocks
+
     # 5. Layout analysis and reading order
     ordered_blocks = assign_reading_order(result.blocks)
 
     # 6. Markdown generation
     markdown = blocks_to_markdown(ordered_blocks)
+    
+    # 7. Generate health report
+    health_report = generate_document_health_report(ordered_blocks, filename)
+    
+    # 8. Generate cost summary
+    processing_time_ms = round((perf_counter() - started) * 1000)
+    cost_summary = generate_cost_summary(
+        processing_time_ms=processing_time_ms,
+        page_count=result.page_count,
+        block_count=len(ordered_blocks),
+        file_size_bytes=file_size,
+    )
 
     return DocumentResponse(
         document_id=uuid4().hex,
         filename=filename,
         file_type=file_type,
         page_count=result.page_count,
-        processing_time_ms=round((perf_counter() - started) * 1000),
+        processing_time_ms=processing_time_ms,
         status="partial" if result.errors else "success",
         blocks=ordered_blocks,
         markdown=markdown,
         errors=result.errors,
+        health_report=health_report,
+        cost_summary=cost_summary,
     )
