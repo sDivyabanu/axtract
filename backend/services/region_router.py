@@ -357,6 +357,31 @@ def _native_image(doc, pno: int, bbox: BBox) -> Image.Image | None:
         return None
 
 
+def _page_content_crop(doc, pno: int, page_img: Image.Image) -> Image.Image:
+    """Crop of the rendered page covering all embedded images (the scanned content).
+
+    Falls back to the full page when the page has no embedded images.
+    """
+    import pymupdf
+
+    try:
+        page = doc[pno - 1]
+        pw, ph = page.rect.width, page.rect.height
+        rects: list = []
+        for info in page.get_images(full=True):
+            rects.extend(page.get_image_rects(info[0]))
+        if rects:
+            x0 = max(0.0, min(r.x0 for r in rects) / pw)
+            y0 = max(0.0, min(r.y0 for r in rects) / ph)
+            x1 = min(1.0, max(r.x1 for r in rects) / pw)
+            y1 = min(1.0, max(r.y1 for r in rects) / ph)
+            if x1 > x0 and y1 > y0:
+                return _crop(page_img, (x0, y0, x1, y1), pad=0.004)
+    except Exception:  # noqa: BLE001
+        pass
+    return page_img
+
+
 def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
     import pdfplumber
     import pymupdf
@@ -513,6 +538,38 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
                             f"p{pno}-chart{analyzed}", pno, r.bbox, reading.data, reading.confidence,
                             reading.flags, {"route": "scanned", "layout_class": "figure"}))
                         analyzed += 1
+
+        # 2e. last resort for scanned pages: layout found no equation, the text
+        # layer is empty and OCR only caught fragments — try the content area as
+        # one formula (same guards as the standalone-image path, so scanned text
+        # pages can never be misread as math).
+        if (
+            pno in scanned_pages and n_eq == 0 and _budget_ok()
+            and models.latex_model_available()
+            and not any(b.page == pno and b.type in (BlockType.EQUATION, BlockType.CHART, BlockType.TABLE)
+                        for b in blocks)
+        ):
+            ocr_blocks = [b for b in blocks if b.page == pno and b.extractor == "rapidocr"]
+            has_text_layer = any(
+                b.page == pno and b.extractor == "pymupdf"
+                and b.type in (BlockType.PARAGRAPH, BlockType.HEADING)
+                for b in blocks
+            )
+            ocr_chars = sum(len("".join(b.content.split())) for b in ocr_blocks)
+            if not has_text_layer and ocr_chars <= 80:
+                fr = recognize_formula(_page_content_crop(fitz_doc, pno, img))
+                if (fr.latex and fr.valid and fr.mathy and fr.agree >= 0.2
+                        and fr.confidence >= 0.45 and not fr.looks_like_prose):
+                    blocks[:] = [b for b in blocks if not (b.page == pno and b.extractor == "rapidocr")]
+                    blocks.append(make_equation_block(
+                        f"p{pno}-eq{n_eq}", pno, (0.0, 0.0, 1.0, 1.0), fr.latex,
+                        "pix2tex_onnx", fr.confidence, fr.flags,
+                        extractor="pix2tex_onnx",
+                        extra_metadata={"route": "scanned", "whole_page_formula": True,
+                                        "ocr_crosscheck_text": fr.ocr_text,
+                                        "crop_ref": {"page": pno, "bbox": [0.0, 0.0, 1.0, 1.0]}},
+                    ))
+                    n_eq += 1
 
     fitz_doc.close()
 
