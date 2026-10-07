@@ -42,8 +42,23 @@ def _get_jwks_client() -> PyJWKClient:
             "SUPABASE_JWKS_URL",
             f"{_get_supabase_url()}/auth/v1/.well-known/jwks.json",
         )
-        _jwks_client = PyJWKClient(jwks_url, cache_keys=True)
+        _jwks_client = _HttpxJWKClient(jwks_url, cache_keys=True)
     return _jwks_client
+
+
+class _HttpxJWKClient(PyJWKClient):
+    """PyJWKClient that fetches the JWKS via httpx instead of urllib.
+
+    urllib fails with CERTIFICATE_VERIFY_FAILED on Python installs without
+    a system CA bundle (common on macOS python.org installs); httpx ships
+    with certifi so the fetch always works.
+    """
+
+    def fetch_data(self):  # type: ignore[override]
+        with httpx.Client(timeout=15) as client:
+            resp = client.get(self.uri)
+            resp.raise_for_status()
+            return resp.json()
 
 
 def _get_jwt_secret() -> str | None:
