@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import type { BlockType } from "@/lib/types";
 import type { ConfidenceFilter, ReviewFilter } from "@/lib/filters";
+import type { DocumentBlock } from "@/lib/types";
+import { getConfidenceCounts } from "@/lib/filters";
 
 const BLOCK_TYPES: { value: BlockType; label: string }[] = [
   { value: "heading", label: "Heading" },
@@ -19,9 +21,9 @@ const BLOCK_TYPES: { value: BlockType; label: string }[] = [
 
 const CONFIDENCE_OPTIONS: { value: ConfidenceFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "high", label: "High (≥80%)" },
-  { value: "medium", label: "Medium (50–80%)" },
-  { value: "low", label: "Low (<50%)" },
+  { value: "high", label: "High (≥85%)" },
+  { value: "medium", label: "Medium (60–85%)" },
+  { value: "low", label: "Low (<60%)" },
   { value: "none", label: "No confidence" },
 ];
 
@@ -40,6 +42,7 @@ interface FilterToolbarProps {
   review: ReviewFilter;
   availableExtractors: string[];
   pageCount: number;
+  allBlocks: DocumentBlock[];
   onQueryChange: (q: string) => void;
   onPageInputChange: (p: string) => void;
   onToggleType: (t: BlockType) => void;
@@ -58,6 +61,7 @@ export default function FilterToolbar({
   review,
   availableExtractors,
   pageCount,
+  allBlocks,
   onQueryChange,
   onPageInputChange,
   onToggleType,
@@ -155,24 +159,11 @@ export default function FilterToolbar({
           ))}
         </Dropdown>
 
-        <Dropdown
-          label="Confidence"
-          active={confidence !== "all"}
-          summary={CONFIDENCE_OPTIONS.find((o) => o.value === confidence)?.label ?? "All"}
-        >
-          {CONFIDENCE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onConfidenceChange(opt.value)}
-              className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ${
-                confidence === opt.value ? "font-medium bg-gray-100" : ""
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </Dropdown>
+        <ConfidenceDropdown
+          confidence={confidence}
+          allBlocks={allBlocks}
+          onConfidenceChange={onConfidenceChange}
+        />
 
         <Dropdown
           label="Review"
@@ -248,5 +239,38 @@ function Dropdown({
         </div>
       )}
     </div>
+  );
+}
+
+function ConfidenceDropdown({
+  confidence,
+  allBlocks,
+  onConfidenceChange,
+}: {
+  confidence: ConfidenceFilter;
+  allBlocks: DocumentBlock[];
+  onConfidenceChange: (c: ConfidenceFilter) => void;
+}) {
+  const counts = getConfidenceCounts(allBlocks);
+  return (
+    <Dropdown
+      label="Confidence"
+      active={confidence !== "all"}
+      summary={CONFIDENCE_OPTIONS.find((o) => o.value === confidence)?.label ?? "All"}
+    >
+      {CONFIDENCE_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onConfidenceChange(opt.value)}
+          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ${
+            confidence === opt.value ? "font-medium bg-gray-100" : ""
+          }`}
+        >
+          {opt.label}{" "}
+          <span className="text-gray-400">({counts[opt.value].toLocaleString()})</span>
+        </button>
+      ))}
+    </Dropdown>
   );
 }

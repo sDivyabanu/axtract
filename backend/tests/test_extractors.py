@@ -125,6 +125,24 @@ class TestOCRExtractor:
             assert block.confidence is not None
             assert 0 <= block.confidence <= 1
 
+    def test_ocr_confidence_is_real(self, make_image):
+        """OCR confidence must come from the engine, not be fabricated."""
+        ext = OCRExtractor()
+        result = ext.extract(make_image)
+        for block in result.blocks:
+            if block.confidence is not None:
+                assert isinstance(block.confidence, float)
+                assert 0.0 <= block.confidence <= 1.0
+                assert block.metadata.get("confidence_source") == "rapidocr_recognition"
+
+    def test_ocr_low_confidence_flagged_for_review(self, make_image):
+        """Blocks with confidence below threshold should be flagged."""
+        ext = OCRExtractor()
+        result = ext.extract(make_image)
+        for block in result.blocks:
+            if block.confidence is not None and block.confidence < 0.6:
+                assert block.requires_review is True
+
     def test_normalized_bbox(self, make_image):
         ext = OCRExtractor()
         result = ext.extract(make_image)
@@ -135,3 +153,65 @@ class TestOCRExtractor:
                 assert 0 <= y1 <= 1
                 assert 0 <= x2 <= 1
                 assert 0 <= y2 <= 1
+
+
+class TestConfidencePolicy:
+    """Confidence must never be fabricated for deterministic extractors."""
+
+    def test_pymupdf_confidence_is_null(self, make_pdf):
+        ext = PyMuPDFExtractor()
+        result = ext.extract(make_pdf)
+        for block in result.blocks:
+            assert block.confidence is None, (
+                f"PyMuPDF block {block.id} should have null confidence, got {block.confidence}"
+            )
+
+    def test_docx_confidence_is_null(self, make_docx):
+        ext = DocxExtractor()
+        result = ext.extract(make_docx)
+        for block in result.blocks:
+            assert block.confidence is None, (
+                f"DOCX block {block.id} should have null confidence"
+            )
+
+    def test_pptx_confidence_is_null(self, make_pptx):
+        ext = PptxExtractor()
+        result = ext.extract(make_pptx)
+        for block in result.blocks:
+            assert block.confidence is None, (
+                f"PPTX block {block.id} should have null confidence"
+            )
+
+    def test_xlsx_confidence_is_null(self, make_xlsx):
+        ext = XlsxExtractor()
+        result = ext.extract(make_xlsx)
+        for block in result.blocks:
+            assert block.confidence is None, (
+                f"XLSX block {block.id} should have null confidence"
+            )
+
+    def test_ocr_confidence_is_float_or_none(self, make_image):
+        ext = OCRExtractor()
+        result = ext.extract(make_image)
+        for block in result.blocks:
+            assert block.confidence is None or isinstance(block.confidence, float), (
+                f"OCR block {block.id} confidence must be float or None"
+            )
+
+    def test_confidence_serialization_preserves_null(self, make_pdf):
+        """Pydantic serialization must preserve null, not coerce to 0."""
+        ext = PyMuPDFExtractor()
+        result = ext.extract(make_pdf)
+        for block in result.blocks:
+            data = block.model_dump()
+            assert data["confidence"] is None
+
+    def test_confidence_serialization_preserves_float(self, make_image):
+        """Pydantic serialization must preserve float confidence."""
+        ext = OCRExtractor()
+        result = ext.extract(make_image)
+        for block in result.blocks:
+            data = block.model_dump()
+            if block.confidence is not None:
+                assert isinstance(data["confidence"], float)
+                assert data["confidence"] == block.confidence

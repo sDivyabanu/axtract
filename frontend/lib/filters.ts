@@ -14,9 +14,31 @@ export type ConfidenceFilter = "all" | "high" | "medium" | "low" | "none";
 export type ReviewFilter = "all" | "review" | "clean";
 
 export const CONFIDENCE_THRESHOLDS = {
-  high: 0.8,
-  medium: 0.5,
+  high: 0.85,
+  medium: 0.60,
 } as const;
+
+export function getConfidenceCounts(blocks: DocumentBlock[]): Record<ConfidenceFilter, number> {
+  const counts: Record<ConfidenceFilter, number> = {
+    all: blocks.length,
+    high: 0,
+    medium: 0,
+    low: 0,
+    none: 0,
+  };
+  for (const b of blocks) {
+    if (b.confidence === null || b.confidence === undefined) {
+      counts.none++;
+    } else if (b.confidence >= CONFIDENCE_THRESHOLDS.high) {
+      counts.high++;
+    } else if (b.confidence >= CONFIDENCE_THRESHOLDS.medium) {
+      counts.medium++;
+    } else {
+      counts.low++;
+    }
+  }
+  return counts;
+}
 
 export function createInitialFilters(): FilterState {
   return {
@@ -81,23 +103,23 @@ function blockMatchesQuery(block: DocumentBlock, lowerQuery: string): boolean {
 }
 
 function blockMatchesConfidence(block: DocumentBlock, filter: ConfidenceFilter): boolean {
+  const c = block.confidence;
   switch (filter) {
     case "all":
       return true;
     case "high":
-      return block.confidence !== null && block.confidence >= CONFIDENCE_THRESHOLDS.high;
+      return c !== null && c !== undefined && c >= CONFIDENCE_THRESHOLDS.high;
     case "medium":
       return (
-        block.confidence !== null &&
-        block.confidence >= CONFIDENCE_THRESHOLDS.medium &&
-        block.confidence < CONFIDENCE_THRESHOLDS.high
+        c !== null &&
+        c !== undefined &&
+        c >= CONFIDENCE_THRESHOLDS.medium &&
+        c < CONFIDENCE_THRESHOLDS.high
       );
     case "low":
-      return (
-        block.confidence !== null && block.confidence < CONFIDENCE_THRESHOLDS.medium
-      );
+      return c !== null && c !== undefined && c < CONFIDENCE_THRESHOLDS.medium;
     case "none":
-      return block.confidence === null;
+      return c === null || c === undefined;
   }
 }
 

@@ -111,6 +111,7 @@ export default function ResultView({ result, sourceFile }: ResultViewProps) {
         review={explorer.filters.review}
         availableExtractors={explorer.extractors}
         pageCount={result.page_count}
+        allBlocks={result.blocks}
         onQueryChange={explorer.setQuery}
         onPageInputChange={explorer.setPageInput}
         onToggleType={explorer.toggleType}
@@ -467,18 +468,20 @@ function BlockCard({
         <span className="text-gray-400">p.{block.page}</span>
         <span className="text-gray-400">{block.extractor}</span>
         <span className="text-gray-300">{block.id}</span>
-        {block.confidence !== null && (
+        {block.confidence !== null && block.confidence !== undefined ? (
           <span
             className={`rounded px-1.5 py-0.5 ${
-              block.confidence >= 0.8
+              block.confidence >= 0.85
                 ? "bg-green-100 text-green-700"
-                : block.confidence >= 0.5
+                : block.confidence >= 0.60
                   ? "bg-yellow-100 text-yellow-700"
                   : "bg-red-100 text-red-700"
             }`}
           >
             {(block.confidence * 100).toFixed(1)}%
           </span>
+        ) : (
+          <span className="text-gray-300">Confidence: —</span>
         )}
         {block.requires_review && (
           <span className="rounded bg-yellow-200 px-1.5 py-0.5 text-yellow-800">
