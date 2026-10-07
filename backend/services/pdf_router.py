@@ -153,6 +153,10 @@ class PDFRouter:
                 return "mixed"
             return "digital"
         if analysis["has_images"]:
+            # A picture with only a short caption is an ordinary digital page (the picture
+            # becomes a figure/chart block); only an image-dominated page with ~no text is a scan.
+            if analysis["text_char_count"] >= 5 and analysis["image_coverage"] < 0.5:
+                return "digital"
             return "scanned"
         return "digital"  # Empty page, let PyMuPDF handle it
 

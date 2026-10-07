@@ -385,7 +385,7 @@ def _read_axis_chart(rgb: np.ndarray, words: list[Word], rect, hint_title: str) 
     dec = _decimals(y_axis) if y_axis else 2
     categories: list[str] = []
     series_out: list[dict[str, Any]] = []
-    labels_used = labels_total = 0
+    labels_used = labels_total = labels_disagree = 0
     number_words = [(w, parse_number(w.text)) for w in words]
     number_words = [(w, v) for w, v in number_words if v is not None]
 
@@ -433,6 +433,9 @@ def _read_axis_chart(rgb: np.ndarray, words: list[Word], rect, hint_title: str) 
                         near = min(cand, key=lambda t: abs(t[0].cy - edge))
                         measured, exact = near[1], True
                         labels_used += 1
+                    elif any(b["x"] - 4 <= w.cx <= b["x"] + b["w"] + 4 and abs(w.cy - edge) <= 60 and w.x0 > left
+                             and top - 50 <= w.cy <= bottom for w, _v in number_words):
+                        labels_disagree += 1  # a printed number sits on the bar but does not match
                 by_cat[k] = (measured, exact)
             n = len(cats_x) if cats_x else len(bars)
             values = [by_cat.get(i, (None, False))[0] for i in range(n)]
@@ -532,13 +535,18 @@ def _read_axis_chart(rgb: np.ndarray, words: list[Word], rect, hint_title: str) 
     y_label = _read_rotated_label(rgb, left_words, left, top, bottom)
 
     confidence = 0.85
+    if labels_total and labels_disagree >= max(1, labels_total // 2):
+        # Printed numbers contradict our own measurement: the plot area or axis was probably
+        # misread (e.g. a cropped chart). Report it, never present the measurement as reliable.
+        flags.append("data_labels_disagree_with_measurement")
+        confidence = 0.3
     if "y_axis_not_calibrated" in flags or "x_axis_not_calibrated" in flags:
         confidence = 0.4
     if "y_axis_calibration_poor" in flags:
         confidence = min(confidence, 0.5)
     if missing:
         confidence = min(confidence, 0.6)
-    if all_exact:
+    if all_exact and "data_labels_disagree_with_measurement" not in flags:
         confidence = min(0.95, confidence + 0.1)
     flags = sorted(set(flags))
 
