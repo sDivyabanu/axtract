@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import katex from "katex";
 import type { DocumentBlock, DocumentResponse } from "@/lib/types";
 import { generateFilteredMarkdown } from "@/lib/filters";
 import { useExplorerState } from "@/lib/useExplorerState";
@@ -509,6 +510,10 @@ function BlockCard({
       {/* Content */}
       {block.type === "table" ? (
         <TableRenderer block={block} query={query} />
+      ) : block.type === "chart" ? (
+        <ChartRenderer block={block} />
+      ) : block.type === "equation" ? (
+        <EquationRenderer block={block} />
       ) : (
         <div className="whitespace-pre-wrap text-sm">
           <HighlightedText text={block.content} query={query} />
@@ -564,6 +569,8 @@ function HighlightedText({
 /* Table Renderer                                                      */
 /* ------------------------------------------------------------------ */
 
+type MergedRegion = [number, number, number, number]; // row, col, rowspan, colspan
+
 function TableRenderer({
   block,
   query,
@@ -571,7 +578,7 @@ function TableRenderer({
   block: DocumentBlock;
   query: string;
 }) {
-  const rows = block.metadata?.rows as string[][] | undefined;
+  const rows = block.metadata?.rows as (string | null)[][] | undefined;
 
   if (!rows || rows.length === 0) {
     return (
@@ -581,33 +588,156 @@ function TableRenderer({
     );
   }
 
+  // Merged cells: the extractor reports the regions; covered cells arrive as null.
+  const merged = (block.metadata?.merged_cells as { merged_regions?: MergedRegion[] } | undefined)
+    ?.merged_regions ?? [];
+  const origins = new Map<string, [number, number]>();
+  const covered = new Set<string>();
+  for (const [r, c, rs, cs] of merged) {
+    origins.set(`${r},${c}`, [rs, cs]);
+    for (let i = r; i < r + rs; i++)
+      for (let j = c; j < c + cs; j++) if (i !== r || j !== c) covered.add(`${i},${j}`);
+  }
+  const headerRows = Math.max(
+    1,
+    Number((block.metadata?.multi_row_header as { header_row_count?: number } | undefined)?.header_row_count ?? 1),
+  );
+
+  const renderCell = (cell: string | null, ri: number, ci: number, header: boolean) => {
+    if (covered.has(`${ri},${ci}`)) return null;
+    const span = origins.get(`${ri},${ci}`);
+    const Tag = header ? "th" : "td";
+    return (
+      <Tag
+        key={ci}
+        rowSpan={span?.[0]}
+        colSpan={span?.[1]}
+        className={`border border-gray-300 px-3 py-1.5 ${header ? "bg-gray-50 text-left font-medium" : ""}`}
+      >
+        <HighlightedText text={cell == null ? "" : String(cell)} query={query} />
+      </Tag>
+    );
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr>
-            {rows[0].map((cell, i) => (
-              <th
-                key={i}
-                className="border border-gray-300 bg-gray-50 px-3 py-1.5 text-left font-medium"
-              >
-                <HighlightedText text={String(cell)} query={query} />
-              </th>
-            ))}
-          </tr>
+          {rows.slice(0, headerRows).map((row, ri) => (
+            <tr key={ri}>{row.map((cell, ci) => renderCell(cell, ri, ci, true))}</tr>
+          ))}
         </thead>
         <tbody>
-          {rows.slice(1).map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td key={ci} className="border border-gray-300 px-3 py-1.5">
-                  <HighlightedText text={String(cell)} query={query} />
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.slice(headerRows).map((row, i) => {
+            const ri = i + headerRows;
+            return <tr key={ri}>{row.map((cell, ci) => renderCell(cell, ri, ci, false))}</tr>;
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Chart + Equation renderers                                          */
+/* ------------------------------------------------------------------ */
+
+interface ChartSeries {
+  name: string;
+  values: (number | null)[];
+  x_values?: (number | null)[];
+}
+interface ChartData {
+  title?: string;
+  chart_type?: string;
+  categories?: string[];
+  series?: ChartSeries[];
+  x_label?: string;
+  y_label?: string;
+  extraction_method?: string;
+  values_estimated?: boolean;
+}
+
+const fmt = (v: number | null | undefined) => (v == null ? "—" : Number(v.toPrecision(7)).toString());
+
+function ChartRenderer({ block }: { block: DocumentBlock }) {
+  const data = block.metadata?.chart_data as ChartData | undefined;
+  const flags = (block.metadata?.flags as string[] | undefined) ?? [];
+  if (!data?.series?.length) {
+    return <div className="text-sm text-gray-500">{block.content}</div>;
+  }
+  const scatter = data.series.some((s) => s.x_values?.length);
+  const n = Math.max(...data.series.map((s) => s.values.length));
+  return (
+    <div className="text-sm">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span className="font-medium">{data.title || "Chart"}</span>
+        <span className="rounded bg-pink-50 px-1.5 py-0.5 text-xs text-pink-700">{data.chart_type}</span>
+        <span className="text-xs text-gray-400">{data.extraction_method}</span>
+        {data.values_estimated && (
+          <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800">values estimated</span>
+        )}
+        {flags.map((f) => (
+          <span key={f} className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">{f}</span>
+        ))}
+      </div>
+      {(data.x_label || data.y_label) && (
+        <div className="mb-1 text-xs text-gray-500">
+          {data.x_label && <>x: {data.x_label}</>} {data.y_label && <>y: {data.y_label}</>}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="border border-gray-300 bg-gray-50 px-2 py-1 text-left">{scatter ? "x" : ""}</th>
+              {data.series.map((s, i) => (
+                <th key={i} className="border border-gray-300 bg-gray-50 px-2 py-1 text-left">{s.name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: n }, (_, i) => (
+              <tr key={i}>
+                <td className="border border-gray-300 px-2 py-1 font-medium">
+                  {scatter ? fmt(data.series?.[0].x_values?.[i]) : data.categories?.[i] || i + 1}
+                </td>
+                {data.series?.map((s, k) => (
+                  <td key={k} className="border border-gray-300 px-2 py-1 tabular-nums">{fmt(s.values[i])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EquationRenderer({ block }: { block: DocumentBlock }) {
+  const latex = (block.metadata?.latex as string | undefined) ?? block.content;
+  const flags = (block.metadata?.flags as string[] | undefined) ?? [];
+  const html = useMemo(() => {
+    try {
+      return katex.renderToString(latex, { displayMode: true, throwOnError: false, trust: false });
+    } catch {
+      return null;
+    }
+  }, [latex]);
+  return (
+    <div className="text-sm">
+      {html ? (
+        <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <div className="text-red-600">Could not render this LaTeX.</div>
+      )}
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">{latex}</code>
+        <span className="text-gray-400">{String(block.metadata?.latex_method ?? "")}</span>
+        {flags.map((f) => (
+          <span key={f} className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">{f}</span>
+        ))}
+      </div>
     </div>
   );
 }
