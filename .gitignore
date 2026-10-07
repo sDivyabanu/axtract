@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment files (commit .env.example only)
+.env
+.env.*
+!.env.example
+
+# Temporary uploads and generated output
+backend/uploads/*
+!backend/uploads/.gitkeep
+output/
+generated/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
