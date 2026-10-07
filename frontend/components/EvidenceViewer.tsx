@@ -86,7 +86,8 @@ export default function EvidenceViewer({ docId, filename, pageCount, highlights,
 }
 
 function heatColor(b: HeatBlock): string {
-  if (b.requires_review || b.confidence == null) return "rgba(220,38,38,0.28)";
+  if (b.requires_review) return "rgba(220,38,38,0.28)";
+  if (b.confidence == null) return "rgba(13,148,136,0.16)"; // native digital text: no OCR, so no confidence score
   if (b.confidence >= 0.9) return "rgba(22,163,74,0.20)";
   if (b.confidence >= 0.75) return "rgba(234,179,8,0.28)";
   return "rgba(220,38,38,0.28)";
@@ -135,7 +136,7 @@ function Page({ docId, page, boxes, heat }: { docId: string; page: number; boxes
       />
       {loaded &&
         heat.map((b) => (
-          <div key={b.id} data-heat title={`${b.type} · ${b.confidence == null ? "no confidence" : Math.round(b.confidence * 100) + "%"}${b.extractor ? " · " + b.extractor : ""}${b.requires_review ? " · needs review" : ""}${b.flags.length ? " · " + b.flags.join(", ") : ""}\n${b.snippet}`}
+          <div key={b.id} data-heat title={`${b.type} · ${b.confidence == null ? "native text (no OCR)" : Math.round(b.confidence * 100) + "%"}${b.extractor ? " · " + b.extractor : ""}${b.requires_review ? " · needs review" : ""}${b.flags.length ? " · " + b.flags.join(", ") : ""}\n${b.snippet}`}
             className="absolute rounded-sm border border-black/10"
             style={{ left: b.bbox[0] * size.width, top: b.bbox[1] * size.height, width: (b.bbox[2] - b.bbox[0]) * size.width, height: (b.bbox[3] - b.bbox[1]) * size.height, background: heatColor(b) }} />
         ))}

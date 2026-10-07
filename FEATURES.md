@@ -266,7 +266,7 @@ CIM FY2023 revenue ₹385 Cr — each in under a second.
 ## Phase 6 — Polish  ✅
 
 - ✅ **Confidence heatmap** — a *Confidence* toggle in the evidence viewer colours every extracted block on the page (green ≥ 90 %,
-  amber 75–90 %, red < 75 % or flagged *requires review*); hover shows type, confidence, extractor and flags (`GET …/documents/{id}/blocks`).
+  amber 75–90 %, red < 75 % or flagged *requires review*, teal = native digital text with no OCR score); hover shows type, confidence, extractor and flags (`GET …/documents/{id}/blocks`).
 - ✅ **Evidence Pack (PDF)** — *Export Evidence Pack* on any answer produces a PDF a third party can check: question, answer,
   grounding, every receipt operand, **a cropped image of each cited region with the box drawn**, document SHA-256 hashes, page
   numbers (PDF and printed), parser/LLM/embedding/reranker versions, timestamp and a SHA-256 of the pack manifest. The SHA-256 of

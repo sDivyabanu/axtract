@@ -158,7 +158,7 @@ export default function AnswerCard({
           </ul>
         </div>
       )}
-      {!answer.pipeline && (
+      {answer.pipeline !== "baseline" && (
         <div className="mt-3 flex items-center gap-2 text-xs">
           <button type="button" onClick={downloadPack} disabled={packBusy}
             className="rounded border border-gray-300 px-2 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">

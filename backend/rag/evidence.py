@@ -22,6 +22,11 @@ from services import preview_service
 PARSER_VERSION = "ParseAnything 0.1.0"
 
 
+def _t(text: str) -> str:
+    """The built-in PDF fonts have no rupee glyph: print it as 'Rs '. Also escapes markup."""
+    return (text or "").replace("₹", "Rs ").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _crop(doc_id: str, page: int, bbox: list[float] | None) -> Image.Image | None:
     try:
         png = preview_service.page_png(doc_id, page, 130)
@@ -84,36 +89,36 @@ def build(answer: dict[str, Any]) -> tuple[bytes, str, str]:
     styles = getSampleStyleSheet()
     small = styles["BodyText"].clone("small"); small.fontSize = 8; small.leading = 10
     story: list[Any] = [Paragraph("Evidence Pack", styles["Title"]),
-                        Paragraph(f"Data room: <b>{ws['name']}</b> &nbsp;·&nbsp; generated {ts} &nbsp;·&nbsp; answer id {answer['answer_id']}", small),
-                        Spacer(1, 6 * mm), Paragraph("Question", styles["Heading3"]), Paragraph(answer["question"].replace("<", "&lt;"), styles["BodyText"]),
+                        Paragraph(f"Data room: <b>{_t(ws['name'])}</b> &nbsp;·&nbsp; generated {ts} &nbsp;·&nbsp; answer id {answer['answer_id']}", small),
+                        Spacer(1, 6 * mm), Paragraph("Question", styles["Heading3"]), Paragraph(_t(answer["question"]), styles["BodyText"]),
                         Paragraph("Answer", styles["Heading3"]),
-                        Paragraph((answer["text"] or "").replace("<", "&lt;"), styles["BodyText"])]
+                        Paragraph(_t(answer["text"]), styles["BodyText"])]
     g = answer.get("grounding")
     story.append(Paragraph(f"Mode: <b>{answer['mode']}</b>{' · model ' + answer['model'] if answer.get('model') else ''}"
                            + (f" · grounding <b>{g['verified']}/{g['total']}</b> claims verified" if g else "")
                            + (" · <b>abstained</b>" if answer.get("abstained") else ""), small))
     for b in answer.get("badges", []):
-        story.append(Paragraph(f"⚠ {b['label']}", small))
+        story.append(Paragraph(f"! {_t(b['label'])}", small))
 
     for r in answer.get("receipts", []):
-        story += [Spacer(1, 4 * mm), Paragraph(f"Number receipt: {r['title']}", styles["Heading3"]),
-                  Paragraph(f"<b>{r['result_display']}</b> &nbsp; <font size=8>{r['formula']}</font>", styles["BodyText"])]
+        story += [Spacer(1, 4 * mm), Paragraph(f"Number receipt: {_t(r['title'])}", styles["Heading3"]),
+                  Paragraph(f"<b>{_t(r['result_display'])}</b> &nbsp; <font size=8>{_t(r['formula'])}</font>", styles["BodyText"])]
         rows = [["Operand", "Value", "Document", "Page", "Conf."]]
         for o in r["operands"]:
-            rows.append([o["label"][:46], o["display"], o["filename"][:30], f"p.{o.get('printed_page') or o['page']}",
+            rows.append([_t(o["label"][:46]), _t(o["display"]), o["filename"][:30], f"p.{o.get('printed_page') or o['page']}",
                          "n/a" if o.get("confidence") is None else f"{o['confidence']:.0%}"])
         t = Table(rows, repeatRows=1, colWidths=[62 * mm, 22 * mm, 55 * mm, 16 * mm, 14 * mm])
         t.setStyle(TableStyle([("FONT", (0, 0), (-1, -1), "Helvetica", 7.5), ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 7.5),
                                ("GRID", (0, 0), (-1, -1), 0.3, colors.lightgrey), ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke)]))
         story.append(t)
         for w_ in r.get("warnings", []):
-            story.append(Paragraph(f"⚠ {w_}", small))
+            story.append(Paragraph(f"! {_t(w_)}", small))
 
     story += [Spacer(1, 5 * mm), Paragraph("Source regions", styles["Heading3"])]
     for rg in regions:
         crop = _crop(rg["doc_id"], int(rg["page"]), rg["bbox"])
         d = docs.get(rg["doc_id"], {})
-        cap = Paragraph(f"<b>{rg['label']}</b><br/>{d.get('filename', '')} · PDF page {rg['page']}" + (f" · printed page {rg['printed']}" if rg.get("printed") else ""), small)
+        cap = Paragraph(f"<b>{_t(rg['label'])}</b><br/>{_t(d.get('filename', ''))} · PDF page {rg['page']}" + (f" · printed page {rg['printed']}" if rg.get("printed") else ""), small)
         if crop is None:
             story.append(KeepTogether([cap, Paragraph("(region image unavailable)", small), Spacer(1, 3 * mm)]))
             continue
