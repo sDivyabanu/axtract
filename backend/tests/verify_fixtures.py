@@ -205,3 +205,191 @@ def make_pdf(path: Path, *, pages=2, table=True, image=True, scanned_page: int |
         c.showPage()
     c.save()
     return path
+
+
+# ====================================================================== extra fixtures for the content / structure / order tests
+
+
+def make_xlsx_cached(path: Path) -> Path:
+    """A workbook whose formula cells carry a stored result (as Excel would write them), plus a date,
+    a boolean, a numeric-looking text cell and a merged range."""
+    import datetime
+    import re
+    import zipfile
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sales"
+    ws.append(["Region", "Q1", "Q2", "Total"])
+    ws.append(["North", 10, 20, "=B2+C2"])
+    ws.append(["South", 30, 40, "=B3+C3"])
+    ws.append(["West", 50, 60.5, "=B4+C4"])
+    ws["F1"], ws["F2"], ws["F3"], ws["F4"] = datetime.date(2024, 1, 2), True, "007", "Notes"
+    ws.merge_cells("H1:I2")
+    ws["H1"] = "Merged heading"
+    costs = wb.create_sheet("Costs")
+    costs.append(["Item", "Amount"])
+    costs.append(["Rent", 1200])
+    costs.append(["Power", 340.25])
+    tmp = path.with_suffix(".raw.xlsx")
+    wb.save(tmp)
+    cached = {"D2": "30", "D3": "70", "D4": "110.5"}
+    with zipfile.ZipFile(tmp) as zin, zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                text = data.decode("utf-8")
+                for cell, value in cached.items():
+                    text, n = re.subn(rf'(<c r="{cell}"[^>]*><f>[^<]*</f>)(<v\s*/>|<v></v>)', rf"\g<1><v>{value}</v>", text)
+                    assert n == 1, f"could not store a result for {cell}"
+                data = text.encode("utf-8")
+            zout.writestr(item, data)
+    tmp.unlink()
+    return path
+
+
+def make_docx_merged(path: Path) -> Path:
+    import docx
+
+    d = docx.Document()
+    d.add_heading("Merged table report", level=1)
+    d.add_paragraph("The table below contains merged cells in both directions.")
+    t = d.add_table(rows=3, cols=3)
+    for r in range(3):
+        for c in range(3):
+            t.cell(r, c).text = f"v{r}{c}"
+    t.cell(0, 0).merge(t.cell(0, 1))  # horizontal
+    t.cell(1, 2).merge(t.cell(2, 2))  # vertical
+    d.save(path)
+    return path
+
+
+def make_pptx_merged(path: Path) -> Path:
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Merged table slide"
+    tbl = s.shapes.add_table(3, 3, Inches(1), Inches(2), Inches(6), Inches(2)).table
+    for r in range(3):
+        for c in range(3):
+            tbl.cell(r, c).text = f"v{r}{c}"
+    tbl.cell(0, 0).merge(tbl.cell(0, 1))
+    tbl.cell(1, 2).merge(tbl.cell(2, 2))
+    prs.save(path)
+    return path
+
+
+def make_docx_numbers(path: Path) -> Path:
+    import docx
+
+    d = docx.Document()
+    d.add_heading("Results", level=1)
+    d.add_paragraph("Revenue was $18.2 million in 2024, up 12.5% on the prior year.")
+    d.add_paragraph("Operating costs held at 9,400 thousand across all regions.")
+    d.add_paragraph("The first paragraph closes the introduction of the annual review.")
+    d.add_paragraph("The second paragraph opens the financial discussion for the year.")
+    d.add_paragraph("The third paragraph summarises the outlook for the next period.")
+    d.save(path)
+    return path
+
+
+def make_pptx_stacked(path: Path) -> Path:
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+    for i, (top, text) in enumerate([(0.5, "First box at the top of the slide"), (2.0, "Second box in the middle"), (4.0, "Third box near the bottom")]):
+        tb = s.shapes.add_textbox(Inches(1), Inches(top), Inches(6), Inches(0.8))
+        tb.name = f"Box {i + 1}"
+        tb.text_frame.text = text
+    prs.save(path)
+    return path
+
+
+def make_pdf_numbers(path: Path, columns: int = 1) -> Path:
+    """One page of distinct paragraphs; with columns=2 the text is laid out side by side."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(path), pagesize=A4)
+    w, h = A4
+    lines = ["Revenue was $18.2 million in the fiscal year.", "Operating costs rose to $9.4 million.",
+             "Headcount reached 1,240 employees worldwide.", "Margins improved by 3.5% compared with last year.",
+             "The board approved a dividend of $0.45 per share.", "Capital spending is planned at $2.1 million."]
+    c.setFont("Helvetica", 11)
+    if columns == 1:
+        for i, line in enumerate(lines):
+            c.drawString(60, h - 80 - i * 60, line)
+    else:
+        for i, line in enumerate(lines):
+            col, row = divmod(i, 3)
+            c.drawString(60 + col * 280, h - 80 - row * 60, line)
+    c.showPage()
+    c.save()
+    return path
+
+
+def make_docx_campaign(path: Path) -> Path:
+    """Rich DOCX for the fault campaign: headings, numbers, lists, a numeric table and a merged table."""
+    import docx
+
+    d = docx.Document()
+    d.add_heading("Annual Report", level=1)
+    d.add_paragraph("Revenue was $18.2 million in 2024, up 12.5% on 2023.")
+    d.add_paragraph("Operating costs held at 9,400 thousand across all regions.")
+    d.add_paragraph("Management expects continued growth in every region.")
+    d.add_paragraph("First list entry about market expansion", style="List Bullet")
+    d.add_paragraph("Second list entry about cost control", style="List Bullet")
+    t = d.add_table(rows=4, cols=3)
+    for r, row in enumerate([["Region", "Q1", "Q2"], ["North", "10", "20"], ["South", "30", "40"], ["West", "50", "60"]]):
+        for c, v in enumerate(row):
+            t.cell(r, c).text = v
+    d.add_paragraph("The merged table below groups results by quarter.")
+    m = d.add_table(rows=3, cols=3)
+    for r in range(3):
+        for c in range(3):
+            m.cell(r, c).text = f"m{r}{c}"
+    m.cell(0, 0).merge(m.cell(0, 1))
+    m.cell(1, 2).merge(m.cell(2, 2))
+    d.add_paragraph("Closing remarks summarise the outlook for the coming year.")
+    d.save(path)
+    return path
+
+
+def make_pptx_campaign(path: Path) -> Path:
+    from pptx import Presentation
+    from pptx.chart.data import CategoryChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+    from pptx.util import Inches
+
+    prs = Presentation()
+    s1 = prs.slides.add_slide(prs.slide_layouts[5])
+    s1.shapes.title.text = "Quarterly Results"
+    tb = s1.shapes.add_textbox(Inches(1), Inches(1.5), Inches(7), Inches(0.8))
+    tb.name = "Summary"
+    tb.text_frame.text = "Revenue was $18.2 million in 2024, up 12.5% on 2023."
+    t = s1.shapes.add_table(4, 3, Inches(1), Inches(3), Inches(6), Inches(2))
+    t.name = "Numbers"
+    for r, row in enumerate([["Region", "Q1", "Q2"], ["North", "10", "20"], ["South", "30", "40"], ["West", "50", "60"]]):
+        for c, v in enumerate(row):
+            t.table.cell(r, c).text = v
+    s2 = prs.slides.add_slide(prs.slide_layouts[5])
+    s2.shapes.title.text = "Merged and charted"
+    mt = s2.shapes.add_table(3, 3, Inches(1), Inches(1.5), Inches(5), Inches(1.5))
+    mt.name = "Merged"
+    for r in range(3):
+        for c in range(3):
+            mt.table.cell(r, c).text = f"m{r}{c}"
+    mt.table.cell(0, 0).merge(mt.table.cell(0, 1))
+    mt.table.cell(1, 2).merge(mt.table.cell(2, 2))
+    cd = CategoryChartData()
+    cd.categories = ["Q1", "Q2", "Q3"]
+    cd.add_series("Revenue", (10, 20, 30))
+    s2.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(1), Inches(3.5), Inches(5), Inches(3), cd).name = "Chart"
+    prs.save(path)
+    return path
