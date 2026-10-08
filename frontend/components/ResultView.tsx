@@ -484,13 +484,13 @@ function BlockCard({
 
   let borderClass: string;
   if (selected) {
-    borderClass = "border-blue-500 bg-blue-50/50 ring-2 ring-blue-300";
+    borderClass = "border-blue-500 bg-blue-50/60 ring-2 ring-blue-300";
   } else if (highlight) {
-    borderClass = "border-amber-400 bg-amber-50/50 ring-1 ring-amber-200";
+    borderClass = "border-amber-400 bg-amber-50/60 ring-1 ring-amber-200";
   } else if (block.requires_review) {
     borderClass = "border-yellow-400 bg-yellow-50";
   } else {
-    borderClass = "border-gray-200";
+    borderClass = "border-gray-200 bg-white";
   }
 
   return (
@@ -498,20 +498,20 @@ function BlockCard({
       type="button"
       id={`block-${block.id}`}
       onClick={onSelect}
-      className={`w-full text-left rounded-lg border p-3 cursor-pointer transition-colors hover:border-blue-300 hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-400 ${borderClass}`}
+      className={`w-full text-left rounded-xl border p-4 cursor-pointer transition-all shadow-xs hover:border-blue-300 hover:shadow-card focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 ${borderClass}`}
       aria-pressed={selected}
     >
       {/* Metadata row */}
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className={`rounded px-2 py-0.5 font-medium ${tagColor}`}>
+      <div className="mb-2.5 flex flex-wrap items-center gap-2 text-xs">
+        <span className={`rounded-md px-2 py-0.5 font-semibold text-xs ${tagColor}`}>
           {block.type}
         </span>
-        <span className="text-gray-400">p.{block.page}</span>
-        <span className="text-gray-400">{block.extractor}</span>
-        <span className="text-gray-300">{block.id}</span>
+        <span className="text-gray-600 font-medium">p.{block.page}</span>
+        <span className="text-gray-600">{block.extractor}</span>
+        <span className="text-gray-400 font-mono text-[11px]">{block.id}</span>
         {block.confidence !== null && block.confidence !== undefined ? (
           <span
-            className={`rounded px-1.5 py-0.5 ${
+            className={`rounded px-1.5 py-0.5 font-medium ${
               block.confidence >= 0.85
                 ? "bg-green-100 text-green-700"
                 : block.confidence >= 0.60
@@ -522,19 +522,19 @@ function BlockCard({
             {(block.confidence * 100).toFixed(1)}%
           </span>
         ) : (
-          <span className="text-gray-300">Confidence: —</span>
+          <span className="text-gray-400">Confidence: —</span>
         )}
         {block.requires_review && (
-          <span className="rounded bg-yellow-200 px-1.5 py-0.5 text-yellow-800">
+          <span className="rounded bg-yellow-200 px-1.5 py-0.5 font-medium text-yellow-800">
             review
           </span>
         )}
         {block.reading_order !== null && (
-          <span className="text-gray-300">#{block.reading_order}</span>
+          <span className="text-gray-400 font-mono">#{block.reading_order}</span>
         )}
         {block.bbox && (
-          <span className="text-gray-300" title="Has source provenance">
-            <svg className="inline h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <span className="text-gray-400" title="Has source provenance">
+            <svg className="inline h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </span>
@@ -549,7 +549,7 @@ function BlockCard({
       ) : block.type === "equation" ? (
         <EquationRenderer block={block} />
       ) : (
-        <div className="whitespace-pre-wrap text-sm">
+        <div className="whitespace-pre-wrap text-sm text-gray-900 font-normal leading-relaxed">
           <HighlightedText text={block.content} query={query} />
         </div>
       )}
@@ -578,10 +578,10 @@ function HighlightedText({
   query: string;
   activeIndex?: number;
 }) {
-  if (!query) return <>{text}</>;
+  if (!query) return <span className="text-gray-900">{text}</span>;
   const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, "gi"));
   return (
-    <>
+    <span className="text-gray-900">
       {parts.map((part, i) => {
         if (i % 2 === 0) return part;
         const active = (i - 1) / 2 === activeIndex; // matches sit at odd indices
@@ -589,13 +589,13 @@ function HighlightedText({
           <mark
             key={i}
             id={active ? "active-text-match" : undefined}
-            className={`rounded-sm px-0.5 ${active ? "bg-orange-400 text-white" : "bg-amber-200"}`}
+            className={`rounded-sm px-0.5 ${active ? "bg-orange-400 text-white" : "bg-amber-200 text-gray-900"}`}
           >
             {part}
           </mark>
         );
       })}
-    </>
+    </span>
   );
 }
 
