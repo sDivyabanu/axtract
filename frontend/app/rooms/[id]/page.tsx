@@ -64,19 +64,19 @@ function DataRoomPageInner() {
   const readyCount = docs.filter((d) => d.status === "ready").length;
 
   return (
-    <div>
+    <div className="ax-rise">
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => { e.preventDefault(); setDragging(false); upload(e.dataTransfer.files); }}
-        className={`mb-5 flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center ${
-          dragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
+        className={`mb-5 flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+          dragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:border-blue-400"
         }`}
       >
         <p className="font-medium">Drop the data room here</p>
         <p className="text-xs text-gray-500">PDF · DOCX · PPTX · XLSX · JPG · PNG — several files at once</p>
         <button type="button" onClick={() => input.current?.click()}
-          className="mt-1 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
+          className="mt-1 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-card hover:bg-blue-700">
           Choose files
         </button>
         <input ref={input} type="file" multiple className="hidden"
@@ -84,26 +84,26 @@ function DataRoomPageInner() {
           onChange={(e) => { if (e.target.files) upload(e.target.files); e.target.value = ""; }} />
       </div>
 
-      {error && <p role="alert" className="mb-3 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mb-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {rejected.length > 0 && (
-        <ul className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+        <ul className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
           {rejected.map((r) => <li key={r.filename}><b>{r.filename}</b>: {r.message}</li>)}
         </ul>
       )}
 
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500">{docs.length} documents · {readyCount} ready</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{docs.length} documents · {readyCount} ready</h2>
         {readyCount > 0 && (
-          <Link href={`/rooms/${id}/ask`} className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          <Link href={`/rooms/${id}/ask`} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card hover:bg-blue-700">
             Ask a question →
           </Link>
         )}
       </div>
 
       {docs.length === 0 ? (
-        <p className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">No documents yet.</p>
+        <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500 shadow-card">No documents yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-card">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
               <tr>
@@ -116,9 +116,9 @@ function DataRoomPageInner() {
               {docs.map((d) => (
                 <tr key={d.doc_id}>
                   <td className="px-3 py-2 font-medium">{d.filename}</td>
-                  <td className="px-3 py-2"><span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{TYPE_LABEL[d.doc_type] ?? d.doc_type}</span></td>
+                  <td className="px-3 py-2"><span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">{TYPE_LABEL[d.doc_type] ?? d.doc_type}</span></td>
                   <td className="px-3 py-2">
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[d.status]}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[d.status]}`}>
                       {d.status === "ready" || d.status === "failed" ? d.status : d.stage || d.status}
                     </span>
                     {["parsing", "indexing", "queued"].includes(d.status) && (
@@ -131,10 +131,10 @@ function DataRoomPageInner() {
                   <td className="px-3 py-2 text-right tabular-nums">{d.page_count || "—"}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{d.chunk_count || "—"}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {d.flag_count > 0 ? <span className="rounded bg-amber-100 px-1.5 text-amber-800">{d.flag_count}</span> : "—"}
+                    {d.flag_count > 0 ? <span className="rounded-full bg-amber-100 px-1.5 text-amber-800">{d.flag_count}</span> : "—"}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {d.quarantined_count > 0 ? <span className="rounded bg-red-100 px-1.5 text-red-800">{d.quarantined_count}</span> : "—"}
+                    {d.quarantined_count > 0 ? <span className="rounded-full bg-red-100 px-1.5 text-red-800">{d.quarantined_count}</span> : "—"}
                   </td>
                 </tr>
               ))}

@@ -34,14 +34,14 @@ function RoomShell({ children }: { children: React.ReactNode }) {
   }, [id]);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-10">
+    <div className="ax-rise mx-auto max-w-7xl px-6 pb-10">
       <div className="flex flex-wrap items-center gap-3 py-4">
-        <Link href="/rooms" className="text-sm text-gray-500 hover:text-gray-800">← Data rooms</Link>
-        <h1 className="text-xl font-bold tracking-tight">{name || "…"}</h1>
+        <Link href="/rooms" className="text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors">← Data rooms</Link>
+        <h1 className="font-display text-xl font-semibold tracking-tight">{name || "…"}</h1>
         {mode && (
           <span
             title={mode.mode === "llm" ? `Local model ${mode.model}` : mode.reason}
-            className={`ml-auto rounded-full px-2.5 py-1 text-xs font-medium ${
+            className={`ml-auto rounded-full px-2.5 py-1 text-xs font-medium shadow-xs ${
               mode.mode === "llm" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
             }`}
           >
@@ -55,8 +55,8 @@ function RoomShell({ children }: { children: React.ReactNode }) {
           const active = t.slug ? path.startsWith(href) : path === href;
           return (
             <Link key={t.slug} href={href}
-              className={`px-3 py-2 text-sm font-medium ${
-                active ? "border-b-2 border-gray-900 text-gray-900" : "text-gray-500 hover:text-gray-800"
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
+                active ? "border-b-2 border-blue-600 text-blue-600" : "text-gray-500 hover:text-blue-600"
               }`}>
               {t.label}
             </Link>
