@@ -27,12 +27,13 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "/", label: "New extraction", icon: Plus, match: (p) => p === "/" },
+  { href: "/workspace", label: "New extraction", icon: Plus, match: (p) => p.startsWith("/workspace") },
   { href: "/history", label: "Document history", icon: History, needsAuth: true, match: (p) => p.startsWith("/history") },
 ];
 
 const TITLES: [(p: string) => boolean, string, string | null][] = [
   [(p) => p.startsWith("/history"), "Document history", "Library"],
+  [(p) => p.startsWith("/workspace"), "Extraction workspace", null],
   [() => true, "Extraction workspace", null],
 ];
 
@@ -65,8 +66,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     });
   }
 
-  // The sign-in screen is a standalone page.
-  if (pathname.startsWith("/login")) return <>{children}</>;
+  // Standalone pages (Landing page at /, and Login page at /login)
+  if (pathname === "/" || pathname.startsWith("/login")) return <>{children}</>;
 
   const [, title, crumb] = TITLES.find(([m]) => m(pathname))!;
   const items = NAV.filter((i) => !i.needsAuth || user);
@@ -174,7 +175,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {pathname.startsWith("/history") && (
-              <Link href="/" className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700">
+              <Link href="/workspace" className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700">
                 <Plus size={16} /> New extraction
               </Link>
             )}
