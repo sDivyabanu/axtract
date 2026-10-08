@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from models.errors import AppError, ErrorInfo, ErrorResponse
-from routers import auth, documents, health, parse, preview
+from routers import auth, documents, health, parse, preview, rag
 
 # Optional backend settings (Supabase, database, encryption key). Real environment wins.
 load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
@@ -35,6 +35,9 @@ async def lifespan(app: FastAPI):
             )
         except Exception:
             logger.warning("Database unavailable; DB-backed features degraded.")
+    from rag import warmup
+
+    warmup.start()  # background: LLM weights + prompt, embedder, reranker, retrieval indexes (never blocks or fails startup)
     yield
     if os.environ.get("DATABASE_URL"):
         from db.prisma_client import close_pool
@@ -78,6 +81,8 @@ app.include_router(parse.router)
 app.include_router(preview.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
+app.include_router(rag.router)
+
 
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:

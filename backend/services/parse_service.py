@@ -61,90 +61,90 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
 
     filename = sanitize_filename(upload.filename)
     file_type = get_extension(filename)
-    extractor = get_extractor(file_type)
-    if extractor is None:
-        raise AppError(
-            "UNSUPPORTED_FORMAT",
-            "This file type is not supported yet.",
-            status_code=415,
-        )
+    if get_extractor(file_type) is None:
+        raise AppError("UNSUPPORTED_FORMAT", "This file type is not supported yet.", status_code=415)
 
-    started = perf_counter()
     temp_path: Path | None = None
-    document_id = uuid4().hex
-
     try:
-        # 2. Save and validate file
         temp_path = save_upload_to_temp(upload, file_type)
-        file_size = temp_path.stat().st_size
-
-        if file_size == 0:
-            raise AppError("EMPTY_FILE", "The uploaded file is empty.", status_code=400)
-
-        if file_size > MAX_UPLOAD_BYTES:
-            raise AppError(
-                "FILE_TOO_LARGE",
-                f"File exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
-                status_code=413,
-            )
-
-        # 3. Magic byte validation
-        with open(temp_path, "rb") as f:
-            header = f.read(16)
-        if not validate_magic_bytes(header, file_type):
-            raise AppError(
-                "INVALID_FILE",
-                "File content does not match the expected format.",
-                status_code=422,
-            )
-        progress.report("security", "running")
-        security_findings = pre_scan(
-            temp_path,
-            file_type,
-            )
-        hidden_content, hidden_findings = scan_hidden_content(
-             temp_path,
-             file_type,
-             )
-        security_findings.extend(hidden_findings)
-        _report_security(security_findings)
-
-        # 4. Extract
-        progress.report("extraction", "running")
-        result = extractor.extract(temp_path)
-        # 4a. Security scan of extracted content
-        security_findings.extend(
-            scan_blocks(result.blocks)
-            )
-        _report_security(security_findings)  # the security stage now also covers the extracted text
-        # 4a1. Charts, equations and figures: route every region to its reader
-        route_regions(result, temp_path, file_type)
-
-        # 4b. Preview artifacts (never fatal). Office files are converted to PDF here,
-        # while the upload still exists.
-        preview = preview_service.prepare(document_id, temp_path, file_type)
-
-    except BaseException:
-        close_source_path(temp_path)
-        remove_temp_file(temp_path)
-        raise
-
-    try:
-        return _finish(result, temp_path, preview, document_id, filename, file_type, started,
-                       security_findings, hidden_content)
+        return _parse_file(temp_path, filename, file_type, uuid4().hex, persistent_preview=False)
     finally:
         close_source_path(temp_path)
         remove_temp_file(temp_path)  # kept until now so AXTRACT Verify can read the original
 
 
-def _finish(result, temp_path, preview, document_id, filename, file_type, started,
-            security_findings, hidden_content) -> DocumentResponse:
+def parse_path(
+    path: Path,
+    filename: str,
+    *,
+    document_id: str | None = None,
+    budget_seconds: float | None = None,
+    persistent_preview: bool = True,
+) -> DocumentResponse:
+    """Parse a file that is already on disk (data-room ingestion).
+
+    Same pipeline as parse_upload. `budget_seconds` overrides the per-file deadline (the
+    public /api/parse endpoint keeps the 60 s contract); previews are kept permanently.
+    """
+    if budget_seconds is None:
+        deadline.start()
+    else:
+        deadline.start(budget_seconds)
+    filename = sanitize_filename(filename)
+    file_type = get_extension(filename)
+    if get_extractor(file_type) is None:
+        raise AppError("UNSUPPORTED_FORMAT", "This file type is not supported yet.", status_code=415)
+    return _parse_file(path, filename, file_type, document_id or uuid4().hex, persistent_preview)
+
+
+def _parse_file(
+    temp_path: Path, filename: str, file_type: str, document_id: str, persistent_preview: bool
+) -> DocumentResponse:
+    extractor = get_extractor(file_type)
+    started = perf_counter()
+
+    file_size = temp_path.stat().st_size
+    if file_size == 0:
+        raise AppError("EMPTY_FILE", "The uploaded file is empty.", status_code=400)
+    if file_size > MAX_UPLOAD_BYTES:
+        raise AppError(
+            "FILE_TOO_LARGE",
+            f"File exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+            status_code=413,
+        )
+
+    # 3. Magic byte validation
+    with open(temp_path, "rb") as f:
+        header = f.read(16)
+    if not validate_magic_bytes(header, file_type):
+        raise AppError(
+            "INVALID_FILE", "File content does not match the expected format.", status_code=422
+        )
+
+    progress.report("security", "running")
+    security_findings = pre_scan(temp_path, file_type)
+    hidden_content, hidden_findings = scan_hidden_content(temp_path, file_type)
+    security_findings.extend(hidden_findings)
+    _report_security(security_findings)
+
+    # 4. Extract
+    progress.report("extraction", "running")
+    result = extractor.extract(temp_path)
+    # 4a. Security scan of extracted content
+    security_findings.extend(scan_blocks(result.blocks))
+    _report_security(security_findings)  # the security stage now also covers the extracted text
+
+    # 4a. Charts, equations and figures: route every region to its reader
+    route_regions(result, temp_path, file_type)
+
+    # 4b. Preview artifacts (never fatal). Office files are converted to PDF here.
+    preview = preview_service.prepare(document_id, temp_path, file_type, persistent=persistent_preview)
+
     # 4.6. Enhance tables (merged cells, financial parsing)
     result.blocks = [enhance_table_block(block) for block in result.blocks]
 
     # 4.8. Merge cross-page tables
-    merged_blocks = merge_cross_page_tables(result.blocks)
-    result.blocks = merged_blocks
+    result.blocks = merge_cross_page_tables(result.blocks)
 
     # 5. Layout analysis and reading order
     ordered_blocks = assign_reading_order(result.blocks)

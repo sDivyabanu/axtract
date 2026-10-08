@@ -1,0 +1,124 @@
+{
+  "label": "s2_big2",
+  "ts": "2026-10-08 04:47",
+  "falcon": [
+    {
+      "id": "q01",
+      "type": "lookup",
+      "pass": true,
+      "ms": 2855,
+      "first_token_ms": 1482,
+      "mode": "llm",
+      "prompt_tokens": 264,
+      "completion_tokens": 14,
+      "abstained": false
+    }
+  ],
+  "big": [
+    {
+      "q": "Which company is this annual report for?",
+      "answer": "This annual report is for JPMorganChase.",
+      "ms": 16153,
+      "first_token_ms": 14550,
+      "mode": "llm",
+      "prompt_tokens": 1262,
+      "completion_tokens": 16,
+      "abstained": false
+    },
+    {
+      "q": "What is the net profit for the year?",
+      "answer": "The net profit for the year is $57,048 million.",
+      "ms": 5866,
+      "first_token_ms": 4035,
+      "mode": "llm",
+      "prompt_tokens": 1826,
+      "completion_tokens": 19,
+      "abstained": false
+    },
+    {
+      "q": "What was the total revenue for the year?",
+      "answer": "Not found in this data room.",
+      "ms": 9434,
+      "first_token_ms": 9202,
+      "mode": "llm",
+      "prompt_tokens": 777,
+      "completion_tokens": 3,
+      "abstained": true
+    },
+    {
+      "q": "Who is the chief executive officer?",
+      "answer": "Not found in this data room.",
+      "ms": 727,
+      "first_token_ms": 551,
+      "mode": "llm",
+      "prompt_tokens": 387,
+      "completion_tokens": 3,
+      "abstained": true
+    },
+    {
+      "q": "What was the dividend per share declared?",
+      "answer": "The dividend per share declared was $257.50 for Series R preferred stock, payable semiannually, with a fixed rate of 5.15%. For Series R prior to August 1, 2023",
+      "ms": 13423,
+      "first_token_ms": 1725,
+      "mode": "llm",
+      "prompt_tokens": 941,
+      "completion_tokens": 106,
+      "abstained": false
+    },
+    {
+      "q": "What is the capital of France?",
+      "answer": "Not found in this data room.",
+      "ms": 1086,
+      "first_token_ms": 1086,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "q": "What are the main risk factors described?",
+      "answer": "The main risk factors described are credit and investment risk, market risk, and operational risk. Credit and investment risk involves default or credit profile",
+      "ms": 10760,
+      "first_token_ms": 1503,
+      "mode": "llm",
+      "prompt_tokens": 746,
+      "completion_tokens": 91,
+      "abstained": false
+    },
+    {
+      "q": "How many employees does the firm have?",
+      "answer": "The firm has 150 employees throughout the state.",
+      "ms": 24150,
+      "first_token_ms": 22718,
+      "mode": "llm",
+      "prompt_tokens": 841,
+      "completion_tokens": 15,
+      "abstained": false
+    }
+  ],
+  "summary": {
+    "falcon": {
+      "n": 1,
+      "p50_ms": 2855,
+      "p95_ms": 2855,
+      "mean_ms": 2855,
+      "first_token_p50_ms": 1482,
+      "first_token_p95_ms": 1482,
+      "llm_answers": 1,
+      "llm_p50_ms": 2855,
+      "prompt_tokens_mean": 264
+    },
+    "big": {
+      "n": 8,
+      "p50_ms": 10760,
+      "p95_ms": 24150,
+      "mean_ms": 10200,
+      "first_token_p50_ms": 4035,
+      "first_token_p95_ms": 22718,
+      "llm_answers": 7,
+      "llm_p50_ms": 10760,
+      "prompt_tokens_mean": 969
+    },
+    "falcon_accuracy": 1.0
+  }
+}

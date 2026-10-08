@@ -40,3 +40,10 @@ Thumbs.db
 backend/model_weights/**/*.onnx
 reports/previews/
 reports/c[0-9]_report.*
+
+# Local app data (RAG database, data-room files, persistent previews)
+backend/data/
+
+# RAG model cache (fetched by scripts/setup_rag.sh); keep only the checksum manifest
+backend/model_weights/rag/*
+!backend/model_weights/rag/MANIFEST.sha256

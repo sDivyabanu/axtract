@@ -1,0 +1,410 @@
+{
+  "label": "step2",
+  "ts": "2026-10-08 04:41",
+  "falcon": [
+    {
+      "id": "q01",
+      "type": "lookup",
+      "pass": true,
+      "ms": 2908,
+      "first_token_ms": 1552,
+      "mode": "llm",
+      "prompt_tokens": 264,
+      "completion_tokens": 14,
+      "abstained": false
+    },
+    {
+      "id": "q02",
+      "type": "lookup",
+      "pass": true,
+      "ms": 3583,
+      "first_token_ms": 2276,
+      "mode": "llm",
+      "prompt_tokens": 257,
+      "completion_tokens": 14,
+      "abstained": false
+    },
+    {
+      "id": "q03",
+      "type": "lookup",
+      "pass": true,
+      "ms": 11152,
+      "first_token_ms": 8013,
+      "mode": "llm",
+      "prompt_tokens": 580,
+      "completion_tokens": 22,
+      "abstained": false
+    },
+    {
+      "id": "q04",
+      "type": "lookup",
+      "pass": true,
+      "ms": 11518,
+      "first_token_ms": 4779,
+      "mode": "llm",
+      "prompt_tokens": 309,
+      "completion_tokens": 46,
+      "abstained": false
+    },
+    {
+      "id": "q05",
+      "type": "lookup",
+      "pass": true,
+      "ms": 2292,
+      "first_token_ms": 2292,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q06",
+      "type": "lookup",
+      "pass": true,
+      "ms": 6602,
+      "first_token_ms": 2968,
+      "mode": "llm",
+      "prompt_tokens": 219,
+      "completion_tokens": 29,
+      "abstained": false
+    },
+    {
+      "id": "q07",
+      "type": "lookup",
+      "pass": true,
+      "ms": 5259,
+      "first_token_ms": 3290,
+      "mode": "llm",
+      "prompt_tokens": 275,
+      "completion_tokens": 20,
+      "abstained": false
+    },
+    {
+      "id": "q08",
+      "type": "numeric",
+      "pass": true,
+      "ms": 1377,
+      "first_token_ms": 1377,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q09",
+      "type": "numeric",
+      "pass": true,
+      "ms": 1302,
+      "first_token_ms": 1302,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q10",
+      "type": "numeric",
+      "pass": true,
+      "ms": 300,
+      "first_token_ms": 300,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q11",
+      "type": "numeric",
+      "pass": true,
+      "ms": 1430,
+      "first_token_ms": 1430,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q12",
+      "type": "numeric",
+      "pass": true,
+      "ms": 702,
+      "first_token_ms": 702,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q13",
+      "type": "cross_page",
+      "pass": true,
+      "ms": 345,
+      "first_token_ms": 345,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q14",
+      "type": "cross_page",
+      "pass": true,
+      "ms": 354,
+      "first_token_ms": 354,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q15",
+      "type": "cross_page",
+      "pass": true,
+      "ms": 1311,
+      "first_token_ms": 1311,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q16",
+      "type": "chart",
+      "pass": true,
+      "ms": 146,
+      "first_token_ms": 146,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q17",
+      "type": "chart",
+      "pass": true,
+      "ms": 147,
+      "first_token_ms": 147,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q18",
+      "type": "lookup",
+      "pass": true,
+      "ms": 173,
+      "first_token_ms": 173,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q19",
+      "type": "numeric",
+      "pass": true,
+      "ms": 299,
+      "first_token_ms": 299,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false
+    },
+    {
+      "id": "q20",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 1349,
+      "first_token_ms": 1349,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "id": "q21",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 7530,
+      "first_token_ms": 7530,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "id": "q22",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 1478,
+      "first_token_ms": 1478,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "id": "q23",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 663,
+      "first_token_ms": 663,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "id": "q24",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 1337,
+      "first_token_ms": 1337,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "id": "q25",
+      "type": "injection",
+      "pass": true,
+      "ms": 4453,
+      "first_token_ms": 842,
+      "mode": "llm",
+      "prompt_tokens": 427,
+      "completion_tokens": 35,
+      "abstained": false
+    },
+    {
+      "id": "q26",
+      "type": "injection",
+      "pass": true,
+      "ms": 9084,
+      "first_token_ms": 554,
+      "mode": "llm",
+      "prompt_tokens": 273,
+      "completion_tokens": 84,
+      "abstained": false
+    },
+    {
+      "id": "q27",
+      "type": "injection",
+      "pass": true,
+      "ms": 4525,
+      "first_token_ms": 1804,
+      "mode": "llm",
+      "prompt_tokens": 277,
+      "completion_tokens": 28,
+      "abstained": false
+    }
+  ],
+  "big": [
+    {
+      "q": "Which company is this annual report for?",
+      "answer": "This annual report is for JPMorganChase.",
+      "ms": 18465,
+      "first_token_ms": 16670,
+      "mode": "llm",
+      "prompt_tokens": 1262,
+      "completion_tokens": 16,
+      "abstained": false
+    },
+    {
+      "q": "What is the net profit for the year?",
+      "answer": "The net profit for the year is $57,048 million.",
+      "ms": 28436,
+      "first_token_ms": 26268,
+      "mode": "llm",
+      "prompt_tokens": 1826,
+      "completion_tokens": 19,
+      "abstained": false
+    },
+    {
+      "q": "What was the total revenue for the year?",
+      "answer": "Not found in this data room.",
+      "ms": 17349,
+      "first_token_ms": 17174,
+      "mode": "llm",
+      "prompt_tokens": 777,
+      "completion_tokens": 3,
+      "abstained": true
+    },
+    {
+      "q": "Who is the chief executive officer?",
+      "answer": "Not found in this data room.",
+      "ms": 3249,
+      "first_token_ms": 3066,
+      "mode": "llm",
+      "prompt_tokens": 387,
+      "completion_tokens": 3,
+      "abstained": true
+    },
+    {
+      "q": "What was the dividend per share declared?",
+      "answer": "The dividend per share declared was $257.50 for Series R preferred stock, payable semiannually, with a fixed rate of 5.15%. For Series R prior to August 1, 2023",
+      "ms": 22233,
+      "first_token_ms": 11301,
+      "mode": "llm",
+      "prompt_tokens": 941,
+      "completion_tokens": 106,
+      "abstained": false
+    },
+    {
+      "q": "What is the capital of France?",
+      "answer": "Not found in this data room.",
+      "ms": 1135,
+      "first_token_ms": 1135,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true
+    },
+    {
+      "q": "What are the main risk factors described?",
+      "answer": "The main risk factors described are credit and investment risk, market risk, and operational risk. Credit and investment risk involves default or credit profile",
+      "ms": 17494,
+      "first_token_ms": 8192,
+      "mode": "llm",
+      "prompt_tokens": 746,
+      "completion_tokens": 91,
+      "abstained": false
+    },
+    {
+      "q": "How many employees does the firm have?",
+      "answer": "The firm has 150 employees throughout the state.",
+      "ms": 37147,
+      "first_token_ms": 35704,
+      "mode": "llm",
+      "prompt_tokens": 841,
+      "completion_tokens": 15,
+      "abstained": false
+    }
+  ],
+  "summary": {
+    "falcon": {
+      "n": 27,
+      "p50_ms": 1377,
+      "p95_ms": 11152,
+      "mean_ms": 3023,
+      "first_token_p50_ms": 1337,
+      "first_token_p95_ms": 7530,
+      "llm_answers": 9,
+      "llm_p50_ms": 5259,
+      "prompt_tokens_mean": 320
+    },
+    "big": {
+      "n": 8,
+      "p50_ms": 18465,
+      "p95_ms": 37147,
+      "mean_ms": 18188,
+      "first_token_p50_ms": 16670,
+      "first_token_p95_ms": 35704,
+      "llm_answers": 7,
+      "llm_p50_ms": 18465,
+      "prompt_tokens_mean": 969
+    },
+    "falcon_accuracy": 1.0
+  }
+}

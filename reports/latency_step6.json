@@ -1,0 +1,683 @@
+{
+  "label": "step6",
+  "ts": "2026-10-08 04:57",
+  "falcon": [
+    {
+      "id": "q01",
+      "type": "lookup",
+      "pass": true,
+      "ms": 2539,
+      "first_token_ms": 1496,
+      "mode": "llm",
+      "prompt_tokens": 562,
+      "completion_tokens": 11,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 13,
+        "Reranking": 1299,
+        "Generating": 1160,
+        "Verifying": 0
+      },
+      "ttft_ms": 129
+    },
+    {
+      "id": "q02",
+      "type": "lookup",
+      "pass": true,
+      "ms": 3629,
+      "first_token_ms": 2252,
+      "mode": "llm",
+      "prompt_tokens": 555,
+      "completion_tokens": 15,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 8,
+        "Reranking": 1248,
+        "Generating": 2293,
+        "Verifying": 0
+      },
+      "ttft_ms": 927
+    },
+    {
+      "id": "q03",
+      "type": "lookup",
+      "pass": true,
+      "ms": 8466,
+      "first_token_ms": 6196,
+      "mode": "llm",
+      "prompt_tokens": 878,
+      "completion_tokens": 23,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 11,
+        "Reranking": 1214,
+        "Generating": 7176,
+        "Verifying": 0
+      },
+      "ttft_ms": 4919
+    },
+    {
+      "id": "q04",
+      "type": "lookup",
+      "pass": true,
+      "ms": 7827,
+      "first_token_ms": 2971,
+      "mode": "llm",
+      "prompt_tokens": 607,
+      "completion_tokens": 48,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 10,
+        "Reranking": 1186,
+        "Computing": 9,
+        "Generating": 6537,
+        "Verifying": 0
+      },
+      "ttft_ms": 1691
+    },
+    {
+      "id": "q05",
+      "type": "lookup",
+      "pass": true,
+      "ms": 1330,
+      "first_token_ms": 1330,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 1220,
+        "Computing": 9,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q06",
+      "type": "lookup",
+      "pass": true,
+      "ms": 4693,
+      "first_token_ms": 1905,
+      "mode": "llm",
+      "prompt_tokens": 517,
+      "completion_tokens": 29,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 14,
+        "Reranking": 1194,
+        "Generating": 3423,
+        "Verifying": 0
+      },
+      "ttft_ms": 647
+    },
+    {
+      "id": "q07",
+      "type": "lookup",
+      "pass": true,
+      "ms": 4505,
+      "first_token_ms": 2517,
+      "mode": "llm",
+      "prompt_tokens": 573,
+      "completion_tokens": 21,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 10,
+        "Reranking": 1215,
+        "Generating": 3196,
+        "Verifying": 0
+      },
+      "ttft_ms": 1219
+    },
+    {
+      "id": "q08",
+      "type": "numeric",
+      "pass": true,
+      "ms": 1309,
+      "first_token_ms": 1309,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 1233,
+        "Computing": 7,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q09",
+      "type": "numeric",
+      "pass": true,
+      "ms": 1289,
+      "first_token_ms": 1289,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 1188,
+        "Computing": 7,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q10",
+      "type": "numeric",
+      "pass": true,
+      "ms": 296,
+      "first_token_ms": 296,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 18,
+        "Reranking": 211,
+        "Computing": 4,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q11",
+      "type": "numeric",
+      "pass": true,
+      "ms": 1302,
+      "first_token_ms": 1302,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 16,
+        "Reranking": 1218,
+        "Computing": 6,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q12",
+      "type": "numeric",
+      "pass": true,
+      "ms": 623,
+      "first_token_ms": 623,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 14,
+        "Reranking": 544,
+        "Computing": 5,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q13",
+      "type": "cross_page",
+      "pass": true,
+      "ms": 339,
+      "first_token_ms": 339,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 13,
+        "Reranking": 262,
+        "Computing": 5,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q14",
+      "type": "cross_page",
+      "pass": true,
+      "ms": 349,
+      "first_token_ms": 349,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 16,
+        "Reranking": 267,
+        "Computing": 5,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q15",
+      "type": "cross_page",
+      "pass": true,
+      "ms": 1297,
+      "first_token_ms": 1297,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 13,
+        "Reranking": 1220,
+        "Computing": 6,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q16",
+      "type": "chart",
+      "pass": true,
+      "ms": 155,
+      "first_token_ms": 155,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 55,
+        "Computing": 3,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q17",
+      "type": "chart",
+      "pass": true,
+      "ms": 143,
+      "first_token_ms": 143,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 14,
+        "Reranking": 63,
+        "Computing": 4,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q18",
+      "type": "lookup",
+      "pass": true,
+      "ms": 151,
+      "first_token_ms": 151,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 16,
+        "Reranking": 64,
+        "Computing": 4,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q19",
+      "type": "numeric",
+      "pass": true,
+      "ms": 291,
+      "first_token_ms": 291,
+      "mode": "computed",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 17,
+        "Reranking": 210,
+        "Computing": 4,
+        "Verifying": 0
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q20",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 1260,
+      "first_token_ms": 1260,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 1196
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q21",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 597,
+      "first_token_ms": 597,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 12,
+        "Reranking": 528,
+        "Computing": 6
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q22",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 1295,
+      "first_token_ms": 1295,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 17,
+        "Reranking": 1217
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q23",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 614,
+      "first_token_ms": 614,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 13,
+        "Reranking": 542
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q24",
+      "type": "unanswerable",
+      "pass": true,
+      "ms": 1312,
+      "first_token_ms": 1312,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 17,
+        "Reranking": 1232
+      },
+      "ttft_ms": null
+    },
+    {
+      "id": "q25",
+      "type": "injection",
+      "pass": true,
+      "ms": 7359,
+      "first_token_ms": 3797,
+      "mode": "llm",
+      "prompt_tokens": 725,
+      "completion_tokens": 36,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 10,
+        "Reranking": 522,
+        "Generating": 6747,
+        "Verifying": 0
+      },
+      "ttft_ms": 3197
+    },
+    {
+      "id": "q26",
+      "type": "injection",
+      "pass": true,
+      "ms": 9456,
+      "first_token_ms": 1556,
+      "mode": "llm",
+      "prompt_tokens": 571,
+      "completion_tokens": 79,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 11,
+        "Reranking": 15,
+        "Generating": 9350,
+        "Verifying": 1
+      },
+      "ttft_ms": 1461
+    },
+    {
+      "id": "q27",
+      "type": "injection",
+      "pass": true,
+      "ms": 6235,
+      "first_token_ms": 1679,
+      "mode": "llm",
+      "prompt_tokens": 575,
+      "completion_tokens": 45,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 11,
+        "Reranking": 1214,
+        "Generating": 4923,
+        "Verifying": 1
+      },
+      "ttft_ms": 378
+    }
+  ],
+  "big": [
+    {
+      "q": "Which company is this annual report for?",
+      "answer": "This annual report is for JPMorganChase. The report references JPMorganChase services and its financial condition.",
+      "ms": 18324,
+      "first_token_ms": 14893,
+      "mode": "llm",
+      "prompt_tokens": 1560,
+      "completion_tokens": 32,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 14,
+        "Reranking": 1055,
+        "Generating": 17072,
+        "Verifying": 1
+      },
+      "ttft_ms": 13656
+    },
+    {
+      "q": "What is the net profit for the year?",
+      "answer": "Net income for the year ended December 31, 2025, was $57,048 million. This figure is consistent with the data in source.",
+      "ms": 27521,
+      "first_token_ms": 22510,
+      "mode": "llm",
+      "prompt_tokens": 2124,
+      "completion_tokens": 46,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 16,
+        "Reranking": 1173,
+        "Computing": 27,
+        "Generating": 26171,
+        "Verifying": 2
+      },
+      "ttft_ms": 21171
+    },
+    {
+      "q": "What was the total revenue for the year?",
+      "answer": "Total net revenue for the year ended December 31, 2025, was $78,454 million. This figure is derived from the sum of regional revenues as reported in the annual ",
+      "ms": 11981,
+      "first_token_ms": 6481,
+      "mode": "llm",
+      "prompt_tokens": 1075,
+      "completion_tokens": 52,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 41,
+        "Reranking": 1199,
+        "Computing": 27,
+        "Generating": 10570,
+        "Verifying": 1
+      },
+      "ttft_ms": 5086
+    },
+    {
+      "q": "Who is the chief executive officer?",
+      "answer": "Jamie Dimon is the Chairman and Chief Executive Officer. The title \"Chief Executive Officer\" is mentioned in the document.",
+      "ms": 6206,
+      "first_token_ms": 3116,
+      "mode": "llm",
+      "prompt_tokens": 685,
+      "completion_tokens": 31,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 36,
+        "Reranking": 172,
+        "Generating": 5784,
+        "Verifying": 1
+      },
+      "ttft_ms": 2708
+    },
+    {
+      "q": "What was the dividend per share declared?",
+      "answer": "The dividend per share declared was $257.50 for Series R preferred stock. For Series R prior to August 1, 2023, the dividend rate was fixed at $300.00 per share",
+      "ms": 25128,
+      "first_token_ms": 16329,
+      "mode": "llm",
+      "prompt_tokens": 1239,
+      "completion_tokens": 57,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 19,
+        "Reranking": 1426,
+        "Generating": 23333,
+        "Verifying": 4
+      },
+      "ttft_ms": 14575
+    },
+    {
+      "q": "What is the capital of France?",
+      "answer": "Not found in this data room.",
+      "ms": 2940,
+      "first_token_ms": 2940,
+      "mode": "extractive",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "abstained": true,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 358,
+        "Reranking": 2200
+      },
+      "ttft_ms": null
+    },
+    {
+      "q": "What are the main risk factors described?",
+      "answer": "The main risk factors described are credit and investment risk, market risk, and operational risk. Credit risk involves default or credit profile changes, marke",
+      "ms": 23026,
+      "first_token_ms": 13663,
+      "mode": "llm",
+      "prompt_tokens": 1044,
+      "completion_tokens": 67,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 34,
+        "Reranking": 1053,
+        "Generating": 21504,
+        "Verifying": 20
+      },
+      "ttft_ms": 12187
+    },
+    {
+      "q": "How many employees does the firm have?",
+      "answer": "The firm has 150 employees.",
+      "ms": 11743,
+      "first_token_ms": 10438,
+      "mode": "llm",
+      "prompt_tokens": 1139,
+      "completion_tokens": 13,
+      "abstained": false,
+      "stages": {
+        "Routing": 0,
+        "Retrieving": 135,
+        "Reranking": 978,
+        "Computing": 60,
+        "Generating": 10117,
+        "Verifying": 1
+      },
+      "ttft_ms": 8832
+    }
+  ],
+  "summary": {
+    "falcon": {
+      "n": 27,
+      "p50_ms": 1297,
+      "p95_ms": 8466,
+      "mean_ms": 2543,
+      "first_token_p50_ms": 1297,
+      "first_token_p95_ms": 3797,
+      "llm_answers": 9,
+      "llm_p50_ms": 6235,
+      "prompt_tokens_mean": 618
+    },
+    "big": {
+      "n": 8,
+      "p50_ms": 18324,
+      "p95_ms": 27521,
+      "mean_ms": 15859,
+      "first_token_p50_ms": 13663,
+      "first_token_p95_ms": 22510,
+      "llm_answers": 7,
+      "llm_p50_ms": 18324,
+      "prompt_tokens_mean": 1267
+    },
+    "falcon_accuracy": 1.0
+  }
+}

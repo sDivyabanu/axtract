@@ -342,3 +342,53 @@ pages, Office formats), `chart_data`, `latex`, `flags`, `needs_review`, `markdow
 Tests: `cd backend && .venv/bin/python -m pytest` (LibreOffice / formula tests skip if absent).
 Reports: `backend/.venv/bin/python scripts/run_samples.py --tag after` → `reports/after_report.md`
 and annotated pages in `reports/previews/`.
+
+---
+
+## DealLens: auditable Q&A over a data room (RAG layer)
+
+*"It doesn't just read the data room. It audits it — and every answer comes with a receipt."*
+
+DealLens sits on top of the parser: upload a data room (several documents) and ask questions, run diligence packs, find contradictions
+between documents, quarantine hidden/injected content, and get an auto-drafted seller question list. Self-hosted: local LLM via **Ollama**,
+local ONNX embeddings and reranker, SQLite. Full feature list: [FEATURES.md](FEATURES.md). Design: [docs/RAG_DESIGN.md](docs/RAG_DESIGN.md).
+Demo: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+**Setup (once, needs network once):**
+```bash
+scripts/setup_rag.sh                                       # Ollama + qwen3:4b-instruct + embedding/reranker weights (SHA-256 manifest)
+backend/.venv/bin/python scripts/make_demo_dataroom.py      # synthetic "Project Falcon" data room + eval/golden_qa.yaml
+backend/.venv/bin/python scripts/run_rag_eval.py            # Baseline vs DealLens → reports/rag_eval.md (add --no-llm for a fast run)
+```
+Without Ollama everything still works in **extractive mode** (exact table values and quoted passages, flagged in the UI).
+
+**Models and licences**
+
+| Component | Choice | Licence |
+|---|---|---|
+| LLM | `qwen3:4b-instruct` via Ollama (default; `DEALLENS_LLM_MODEL` to change) | Apache-2.0 |
+| Embeddings | `BAAI/bge-small-en-v1.5` via fastembed | MIT (fastembed: Apache-2.0) |
+| Reranker | `Xenova/ms-marco-MiniLM-L-6-v2` (cross-encoder) | Apache-2.0 |
+| Index | SQLite + numpy exact search + own BM25 | stdlib / BSD |
+| Baseline text extraction | pypdf | BSD-3 |
+| Exports | python-docx, openpyxl | MIT |
+| UI tests (dev only) | Playwright | Apache-2.0 |
+
+```mermaid
+flowchart LR
+  U[Upload data room] --> P[ParseAnything parser<br/>blocks + bbox + confidence]
+  P --> S[Security shield<br/>hidden text · injection · active content]
+  S -->|quarantine| Q[(Quarantine)]
+  S --> C[Chunker + typed table store + facts]
+  C --> I[(SQLite · BM25 · vectors)]
+  Qn[Question] --> R[Router] --> H[Hybrid retrieval<br/>BM25 + dense → RRF → cross-encoder]
+  I --> H
+  R -->|numeric| T[Planner → table-op DSL<br/>executed by our code] --> NR[Number Receipt]
+  H --> G[LLM or extractive] --> V[Verifier<br/>numbers · dates · entities]
+  NR --> V --> A[Answer: citations · receipts · grounding · badges]
+  I --> D[Contradictions · packs · seller questions · maturity wall]
+```
+
+**Key guarantees:** the LLM never decides a fact and never does arithmetic (it may plan JSON; our DSL computes); document text is untrusted
+and never reaches a prompt if quarantined; every number, citation and suggestion links to document + page + box; if the evidence is weak the
+answer is "Not found" plus what was searched; logs and the audit trail hold ids, hashes and timings only.

@@ -16,6 +16,11 @@ from models.document import BlockType, DocumentBlock
 from models.errors import AppError, DocumentError
 
 
+import re as _re
+
+# Financial lines that should be formulas in a model; a typed number here is a red flag in diligence.
+_KEY_LINE = _re.compile(r"^\s*(?:total|grand total|ebitda|adjusted ebitda|revenue|net (?:income|profit)|gross profit|operating (?:income|profit))\b", _re.I)
+
 # Above these sizes the workbook is opened in streaming mode / not re-read for formulas.
 _FULL_LOAD_BYTES = 25 * 1024 * 1024
 _FORMULA_CHECK_BYTES = 5 * 1024 * 1024
@@ -117,6 +122,40 @@ class XlsxExtractor(BaseExtractor):
                     if isinstance(cell.value, str) and cell.value.startswith("=") and c < len(raw_rows[r]) and raw_rows[r][c] is None:
                         uncached += 1
 
+        hidden_sheet = getattr(ws, "sheet_state", "visible") != "visible"
+        hidden_content: list[dict] = []
+        if self._merge_info_available:
+            hidden_rows = {r - 1 for r, d in ws.row_dimensions.items() if d.hidden}
+            hidden_cols: set[int] = set()
+            for key, d in ws.column_dimensions.items():
+                if d.hidden:
+                    lo = d.min or openpyxl.utils.column_index_from_string(key)
+                    hi = d.max or lo
+                    hidden_cols |= set(range(lo - 1, hi))
+            from openpyxl.utils import get_column_letter
+
+            for r, row in enumerate(rows_data):
+                for c, v in enumerate(row):
+                    if v not in (None, "") and (r in hidden_rows or c in hidden_cols):
+                        hidden_content.append({"cell": f"{get_column_letter(c + 1)}{r + 1}", "value": v})
+                        rows_data[r][c] = ""  # never reaches the index / the LLM
+
+        # Hardcoded values where a formula-driven model would have one (manual override suspected).
+        hardcoded: list[dict] = []
+        if ws_formulas is not None:
+            formula_cells = 0
+            for row in ws_formulas.iter_rows(min_row=1, min_col=1):
+                for cell in row:
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        formula_cells += 1
+            if formula_cells:
+                for row in ws_formulas.iter_rows(min_row=1, min_col=1):
+                    label = str(row[0].value or "")
+                    if _KEY_LINE.search(label):
+                        for cell in row[1:]:
+                            if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                                hardcoded.append({"cell": cell.coordinate, "label": label, "value": cell.value})
+
         metadata = {
             "sheet_name": sheet_name,
             "rows": rows_data,
@@ -126,6 +165,14 @@ class XlsxExtractor(BaseExtractor):
             "merged_cells": {"has_merged_cells": bool(regions), "merged_regions": regions},
         }
         flags = []
+        if hidden_sheet:
+            metadata["hidden_sheet"] = True
+        if hidden_content:
+            metadata["hidden_content"] = hidden_content
+            flags.append("hidden_rows_or_columns")
+        if hardcoded:
+            metadata["hardcoded_cells"] = hardcoded
+            flags.append("manual_override_suspected")
         if not self._merge_info_available:
             flags.append("merged_cells_not_read_large_file")
         if uncached:

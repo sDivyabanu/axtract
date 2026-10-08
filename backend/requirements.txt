@@ -26,6 +26,10 @@ defusedxml         # PSF: safe XML parsing for Office chart / equation parts
 latex2mathml       # MIT: LaTeX syntax validation
 requests
 
+# RAG layer (DealLens): local embeddings + reranker, baseline text extraction
+fastembed          # Apache-2.0: ONNX embeddings (bge-small, MIT) + cross-encoder reranker (MiniLM, Apache-2.0)
+pypdf              # BSD-3: deliberately naive baseline pipeline
+
 # Text similarity for verification
 python-Levenshtein
 

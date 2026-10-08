@@ -31,11 +31,12 @@ import pypdfium2 as pdfium
 
 from models.document import BBox, BlockType, DocumentBlock
 from utils import deadline
-from utils.files import UPLOAD_DIR
+from utils.files import DATA_DIR, UPLOAD_DIR
 
 logger = logging.getLogger(__name__)
 
-PREVIEW_ROOT = UPLOAD_DIR / "previews"
+PREVIEW_ROOT = UPLOAD_DIR / "previews"  # temporary previews (TTL)
+PERSISTENT_PREVIEW_ROOT = DATA_DIR / "previews"  # data-room documents (never expire)
 PREVIEW_TTL_SECONDS = 60 * 60
 OFFICE_TYPES = {"docx", "pptx", "xlsx"}
 IMAGE_TYPES = {"jpg", "jpeg", "png"}
@@ -123,10 +124,13 @@ def office_to_pdf(src: Path, out_dir: Path, timeout: float = 40.0) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def _doc_dir(document_id: str) -> Path:
+def _doc_dir(document_id: str, persistent: bool = False) -> Path:
     if not _ID_RE.match(document_id):
         raise PreviewError("Invalid document id.")
-    return PREVIEW_ROOT / document_id
+    if persistent:
+        return PERSISTENT_PREVIEW_ROOT / document_id
+    persisted = PERSISTENT_PREVIEW_ROOT / document_id
+    return persisted if persisted.exists() else PREVIEW_ROOT / document_id
 
 
 def cleanup_old(ttl: float = PREVIEW_TTL_SECONDS) -> None:
@@ -141,11 +145,15 @@ def cleanup_old(ttl: float = PREVIEW_TTL_SECONDS) -> None:
             pass
 
 
-def prepare(document_id: str, src: Path, file_type: str) -> PreviewInfo:
-    """Create the preview artifacts for a freshly uploaded file. Never raises."""
+def prepare(document_id: str, src: Path, file_type: str, persistent: bool = False) -> PreviewInfo:
+    """Create the preview artifacts for a freshly uploaded file. Never raises.
+
+    persistent=True keeps them under DATA_DIR (data-room documents); otherwise they are
+    temporary and removed after PREVIEW_TTL_SECONDS.
+    """
     try:
         cleanup_old()
-        d = _doc_dir(document_id)
+        d = _doc_dir(document_id, persistent)
         d.mkdir(parents=True, exist_ok=True)
 
         if file_type in IMAGE_TYPES:
