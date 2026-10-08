@@ -9,7 +9,11 @@
 
 import { unzip } from "fflate";
 
-const ALLOWED_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "jpg", "jpeg", "png"];
+const ALLOWED_EXTENSIONS = [
+  "pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "csv",
+  "jpg", "jpeg", "png", "tif", "tiff", "heic",
+  "txt", "md", "html", "htm", "rtf", "eml", "msg",
+];
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // keep in sync with backend MAX_UPLOAD_BYTES
 const MAX_FILES_PER_ZIP = 50;
 const MAX_TOTAL_UNCOMPRESSED = 300 * 1024 * 1024;
@@ -18,11 +22,25 @@ const MAX_COMPRESSION_RATIO = 200; // zip-bomb guard: expansion beyond 200x is r
 const MIME: Record<string, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  doc: "application/msword",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ppt: "application/vnd.ms-powerpoint",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls: "application/vnd.ms-excel",
+  csv: "text/csv",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  heic: "image/heic",
+  txt: "text/plain",
+  md: "text/plain",
+  html: "text/html",
+  htm: "text/html",
+  rtf: "application/rtf",
+  eml: "message/rfc822",
+  msg: "application/vnd.ms-outlook",
 };
 
 // System junk that should disappear silently (macOS/Windows artefacts).

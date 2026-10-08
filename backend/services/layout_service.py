@@ -9,12 +9,67 @@ Handles:
 
 from __future__ import annotations
 
+import re
+from collections import Counter
+
 from models.document import BlockType, DocumentBlock
 
 
 # Page regions (normalized coordinates)
 _HEADER_THRESHOLD = 0.08  # Top 8% is header zone
 _FOOTER_THRESHOLD = 0.92  # Bottom 8% is footer zone
+
+_PAGE_NUM_RE = re.compile(
+    r"(?:page\s*)?\d{1,4}(?:\s*(?:/|of)\s*\d{1,4})?", re.IGNORECASE
+)
+
+
+def _norm_text(text: str) -> str:
+    return " ".join(text.split()).lower()
+
+
+def _running_header_footer_maps(
+    pages: dict[int, list[DocumentBlock]], page_count: int
+) -> tuple[Counter, Counter]:
+    """Count normalized texts sitting in the top/bottom zones across pages.
+
+    Only repeated text (or lone page numbers) qualifies as a running
+    header/footer — a one-off title in the top zone stays body text.
+    """
+    top_counts: Counter = Counter()
+    bottom_counts: Counter = Counter()
+    for blocks in pages.values():
+        for b in blocks:
+            if b.bbox is None or "route" not in b.metadata:
+                continue
+            if b.type != BlockType.PARAGRAPH:
+                continue
+            mid_y = (b.bbox[1] + b.bbox[3]) / 2
+            text = _norm_text(b.content)
+            if not text:
+                continue
+            if mid_y < _HEADER_THRESHOLD:
+                top_counts[text] += 1
+            elif mid_y > _FOOTER_THRESHOLD:
+                bottom_counts[text] += 1
+    return top_counts, bottom_counts
+
+
+def _is_running(
+    text: str, counts: Counter, page_count: int, *, is_top: bool
+) -> bool:
+    norm = _norm_text(text)
+    if not norm:
+        return False
+    # A lone page number (top-right or bottom-center) is always a page marker.
+    if not is_top and _PAGE_NUM_RE.fullmatch(norm):
+        return True
+    repeats = counts.get(norm, 0)
+    if page_count >= 3 and repeats >= max(2, page_count // 2):
+        return True
+    if 2 <= page_count < 3 and repeats == page_count:
+        return True
+    return False
 
 
 def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
@@ -30,6 +85,8 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
     pages: dict[int, list[DocumentBlock]] = {}
     for block in blocks:
         pages.setdefault(block.page, []).append(block)
+
+    top_counts, bottom_counts = _running_header_footer_maps(pages, len(pages))
 
     ordered: list[DocumentBlock] = []
     reading_idx = 0
@@ -52,11 +109,17 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
                 mid_y = (y1 + y2) / 2
 
                 if mid_y < _HEADER_THRESHOLD and block.type == BlockType.PARAGRAPH:
-                    block.type = BlockType.HEADER
-                    header_blocks.append(block)
+                    if _is_running(block.content, top_counts, len(pages), is_top=True):
+                        block.type = BlockType.HEADER
+                        header_blocks.append(block)
+                    else:
+                        body_blocks.append(block)
                 elif mid_y > _FOOTER_THRESHOLD and block.type == BlockType.PARAGRAPH:
-                    block.type = BlockType.FOOTER
-                    footer_blocks.append(block)
+                    if _is_running(block.content, bottom_counts, len(pages), is_top=False):
+                        block.type = BlockType.FOOTER
+                        footer_blocks.append(block)
+                    else:
+                        body_blocks.append(block)
                 else:
                     body_blocks.append(block)
             else:
@@ -91,7 +154,10 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
 def _detect_columns(blocks: list[DocumentBlock]) -> list[tuple[float, float]]:
     """Detect column boundaries from block x-coordinates.
 
-    Returns list of (x_start, x_end) column ranges, sorted left to right.
+    Finds the widest vertical whitespace gutter between merged block extents
+    in the middle of the page. A page with any full-width block (table,
+    figure) is single-column. Falls back to (0, 1) when no confident gutter
+    exists.
     """
     if not blocks:
         return [(0.0, 1.0)]
@@ -100,31 +166,35 @@ def _detect_columns(blocks: list[DocumentBlock]) -> list[tuple[float, float]]:
     if len(blocks_with_bbox) < 3:
         return [(0.0, 1.0)]
 
-    # Collect x-midpoints
-    x_mids = sorted((b.bbox[0] + b.bbox[2]) / 2 for b in blocks_with_bbox)
+    # Any full-width block means the page is not multi-column.
+    if any(b.bbox[2] - b.bbox[0] > 0.6 for b in blocks_with_bbox):
+        return [(0.0, 1.0)]
 
-    # Simple gap-based column detection
-    # Look for a significant gap in x-midpoints near the center
-    page_width = 1.0
-    center = page_width / 2
-    min_gap = 0.05  # Minimum gap to consider a column break
+    # Merge overlapping x-extents, then look for the widest internal gap.
+    intervals = sorted((b.bbox[0], b.bbox[2]) for b in blocks_with_bbox)
+    merged: list[list[float]] = []
+    for start, end in intervals:
+        if merged and start <= merged[-1][1] + 0.015:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
 
-    # Check if there's a clear bimodal distribution
-    left_blocks = [x for x in x_mids if x < center - min_gap]
-    right_blocks = [x for x in x_mids if x > center + min_gap]
+    best_gap = 0.0
+    best_split: float | None = None
+    for i in range(len(merged) - 1):
+        gap = merged[i + 1][0] - merged[i][1]
+        split = (merged[i][1] + merged[i + 1][0]) / 2
+        # The gutter must sit in the middle band and actually separate content.
+        if gap >= 0.03 and 0.2 <= split <= 0.8:
+            left = [b for b in blocks_with_bbox if (b.bbox[0] + b.bbox[2]) / 2 < split]
+            right = [b for b in blocks_with_bbox if (b.bbox[0] + b.bbox[2]) / 2 >= split]
+            if len(left) >= 2 and len(right) >= 2 and gap > best_gap:
+                best_gap = gap
+                best_split = split
 
-    if len(left_blocks) >= 2 and len(right_blocks) >= 2:
-        # Likely two columns
-        left_max = max(b.bbox[2] for b in blocks_with_bbox if (b.bbox[0] + b.bbox[2]) / 2 < center)
-        right_min = min(b.bbox[0] for b in blocks_with_bbox if (b.bbox[0] + b.bbox[2]) / 2 > center)
-
-        if right_min > left_max + min_gap:
-            return [
-                (0.0, (left_max + right_min) / 2),
-                ((left_max + right_min) / 2, 1.0),
-            ]
-
-    return [(0.0, 1.0)]
+    if best_split is None:
+        return [(0.0, 1.0)]
+    return [(0.0, best_split), (best_split, 1.0)]
 
 
 def _sort_by_columns(

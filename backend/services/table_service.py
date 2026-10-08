@@ -353,8 +353,21 @@ def reconstruct_table_from_ocr(
     if len(col_lefts) < 2:
         return None
 
+    # Right edges per column: numeric columns are right-aligned, so a cell's
+    # right edge often matches its column even when the left edge drifts.
+    rights_by_col: dict[int, list[float]] = {}
+    for ln in multi:
+        for b in ln:
+            ci = min(range(len(col_lefts)), key=lambda i: abs(b.bbox[0] - col_lefts[i]))
+            if abs(b.bbox[0] - col_lefts[ci]) <= 0.055:
+                rights_by_col.setdefault(ci, []).append(b.bbox[2])
+    col_right_means = {
+        ci: sum(v) / len(v) for ci, v in rights_by_col.items() if len(v) >= 2
+    }
+
     # 3. assign blocks to columns; a line is a table row only when every
-    #    block maps cleanly to a distinct column
+    #    block maps cleanly to a distinct column. Left edge matches first;
+    #    narrow cells may match by right edge (right-aligned numbers).
     tol = 0.055
     grid: list[tuple[list, list[str]]] = []
     for ln in multi:
@@ -362,7 +375,16 @@ def reconstruct_table_from_ocr(
         ok = True
         for b in ln:
             ci = min(range(len(col_lefts)), key=lambda i: abs(b.bbox[0] - col_lefts[i]))
-            if abs(b.bbox[0] - col_lefts[ci]) > tol or row[ci] is not None:
+            if abs(b.bbox[0] - col_lefts[ci]) > tol:
+                matched = False
+                width = b.bbox[2] - b.bbox[0]
+                rm = col_right_means.get(ci)
+                if width <= 0.25 and rm is not None and abs(b.bbox[2] - rm) <= tol:
+                    matched = True
+                if not matched:
+                    ok = False
+                    break
+            if row[ci] is not None:
                 ok = False
                 break
             row[ci] = " ".join(b.content.split())
@@ -443,7 +465,13 @@ def enhance_table_block(block: DocumentBlock) -> DocumentBlock:
         "multi_row_header": header_info,
         "parsed_rows": parsed_rows,
     })
-    
+
+    # Self-check (DQCL §6): verify numeric columns against their total rows.
+    tie_out = check_numeric_tie_out(rows)
+    if tie_out is not None:
+        enhanced_metadata["tie_out"] = tie_out
+
+    review = block.requires_review or bool(tie_out and tie_out.get("mismatch"))
     return DocumentBlock(
         id=block.id,
         type=block.type,
@@ -453,6 +481,62 @@ def enhance_table_block(block: DocumentBlock) -> DocumentBlock:
         confidence=block.confidence,
         extractor=block.extractor,
         reading_order=block.reading_order,
-        requires_review=block.requires_review,
+        requires_review=review,
         metadata=enhanced_metadata,
     )
+
+
+_TOTAL_ROW_RE = re.compile(r"^\s*(?:total|sub[-\s]?total|net\s|gross\s)", re.IGNORECASE)
+
+
+def check_numeric_tie_out(rows: list[list[str | None]]) -> dict | None:
+    """Sum numeric cells in each column and compare against total rows.
+
+    Returns ``None`` when the table has no total row to check against;
+    otherwise ``{"checks", "passed", "mismatch", "details"}``.
+    """
+    if len(rows) < 2:
+        return None
+
+    def _num(cell) -> float | None:
+        if cell in (None, ""):
+            return None
+        parsed = parse_financial_number(str(cell))
+        return float(parsed) if isinstance(parsed, (int, float)) else None
+
+    checks: list[dict] = []
+    for ri, row in enumerate(rows):
+        first = " ".join(str(row[0]).split()) if row and row[0] else ""
+        if not _TOTAL_ROW_RE.match(first):
+            continue
+        for ci in range(1, len(row)):
+            total = _num(row[ci])
+            if total is None:
+                continue
+            col_sum = 0.0
+            seen = False
+            for r in rows[:ri]:
+                if r and ci < len(r) and not _TOTAL_ROW_RE.match(
+                    " ".join(str(r[0]).split()) if r[0] else ""
+                ):
+                    v = _num(r[ci])
+                    if v is not None:
+                        col_sum += v
+                        seen = True
+            if not seen:
+                continue
+            ok = abs(col_sum - total) <= max(0.01, 0.005 * abs(total))
+            checks.append({
+                "row": ri, "column": ci, "sum": round(col_sum, 2),
+                "total": total, "match": ok,
+            })
+
+    if not checks:
+        return None
+    mismatch = any(not c["match"] for c in checks)
+    return {
+        "checks": len(checks),
+        "passed": sum(1 for c in checks if c["match"]),
+        "mismatch": mismatch,
+        "details": checks if mismatch else [],
+    }

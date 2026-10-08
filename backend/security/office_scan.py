@@ -199,18 +199,19 @@ def scan_xlsx_formulas(path: str) -> dict:
 
 # ── public combined scanner ───────────────────────────────────────────────────
 
-def scan_office(path: str) -> dict:
+def scan_office(path: str | Path) -> dict:
     """
     Run all Office security checks on one file.
     Routes xlsx to formula scanner too.
     """
     findings = []
 
-    zip_result = scan_office_zip(path)
+    path_str = str(path)
+    zip_result = scan_office_zip(path_str)
     findings  += zip_result.get("findings", [])
 
     manual_overrides = []
-    if path.lower().endswith('.xlsx'):
+    if path_str.lower().endswith('.xlsx'):
         formula_result    = scan_xlsx_formulas(path)
         findings         += formula_result.get("findings", [])
         manual_overrides  = formula_result.get("manual_overrides", [])

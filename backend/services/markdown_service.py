@@ -31,6 +31,10 @@ def blocks_to_markdown(blocks: list[DocumentBlock]) -> str:
         block.metadata["markdown"] = _block_to_markdown(block)
 
     for block in sorted_blocks:
+        # Running headers/footers stay in the JSON for provenance but are
+        # removed from the body markdown (DQCL worked-example requirement).
+        if block.type in (BlockType.HEADER, BlockType.FOOTER):
+            continue
         # Page break marker
         if block.page != current_page:
             if current_page > 0:

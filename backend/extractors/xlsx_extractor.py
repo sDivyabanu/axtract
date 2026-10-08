@@ -134,6 +134,9 @@ class XlsxExtractor(BaseExtractor):
         if flags:
             metadata["flags"] = flags
             metadata["needs_review"] = True
+        # Spreadsheets have no page geometry; expose the sheet extent as an
+        # estimated bbox so provenance consumers get a coordinate (flagged).
+        metadata["bbox_estimated"] = "whole_sheet"
 
         return [
             DocumentBlock(
@@ -141,7 +144,7 @@ class XlsxExtractor(BaseExtractor):
                 type=BlockType.TABLE,
                 content="\n".join(" | ".join("" if c is None else c for c in row) for row in rows_data),
                 page=sheet_number,
-                bbox=None,
+                bbox=(0.0, 0.0, 1.0, 1.0),
                 confidence=None,
                 extractor=self.name,
                 requires_review=bool(flags),

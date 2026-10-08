@@ -16,7 +16,8 @@ def pre_scan(
     if file_type in {"xlsx", "docx", "pptx"}:
         from security.office_scan import scan_office
 
-        raw_findings = scan_office(file_path)
+        # scan_office returns {"findings": [...], ...}; iterate its findings list.
+        raw_findings = scan_office(file_path).get("findings", [])
 
         for item in raw_findings:
             findings.append(

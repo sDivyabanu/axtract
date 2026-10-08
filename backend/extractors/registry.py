@@ -14,10 +14,22 @@ from typing import Protocol, runtime_checkable
 from pathlib import Path
 
 from extractors.base import BaseExtractor, ExtractionResult
+from extractors.container_extractors import (
+    EmailExtractor,
+    LegacyOfficeExtractor,
+    MsgExtractor,
+    TiffHeicExtractor,
+)
 from extractors.docx_extractor import DocxExtractor
 from extractors.ocr_extractor import OCRExtractor
 from extractors.pptx_extractor import PptxExtractor
 from extractors.pymupdf_extractor import PyMuPDFExtractor
+from extractors.text_extractors import (
+    CsvExtractor,
+    HtmlExtractor,
+    RtfExtractor,
+    TextExtractor,
+)
 from extractors.xlsx_extractor import XlsxExtractor
 
 
@@ -50,9 +62,25 @@ _BY_EXTENSION: dict[str, Extractable] = {
     "docx": DocxExtractor(),
     "pptx": PptxExtractor(),
     "xlsx": XlsxExtractor(),
+    # legacy Office, converted via LibreOffice
+    "doc": LegacyOfficeExtractor(),
+    "ppt": LegacyOfficeExtractor(),
+    "xls": LegacyOfficeExtractor(),
     "jpg": _ocr,
     "jpeg": _ocr,
     "png": _ocr,
+    "tif": TiffHeicExtractor(),
+    "tiff": TiffHeicExtractor(),
+    "heic": TiffHeicExtractor(),
+    "txt": TextExtractor(),
+    "md": TextExtractor(),
+    "markdown": TextExtractor(),
+    "html": HtmlExtractor(),
+    "htm": HtmlExtractor(),
+    "rtf": RtfExtractor(),
+    "csv": CsvExtractor(),
+    "eml": EmailExtractor(),
+    "msg": MsgExtractor(),
 }
 
 

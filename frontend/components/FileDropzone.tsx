@@ -4,16 +4,20 @@ import { useRef, useState, type DragEvent } from "react";
 import { extractZip } from "@/lib/unzip";
 
 const ACCEPTED_TYPES =
-  ".pdf,.docx,.pptx,.xlsx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,application/zip";
+  ".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.tif,.tiff,.heic,.txt,.md,.html,.htm,.rtf,.zip,.eml,.msg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,image/jpeg,image/png,image/tiff,image/heic,text/plain,text/html,application/rtf,application/zip,message/rfc822,application/vnd.ms-outlook";
 
-const ALLOWED_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "jpg", "jpeg", "png", "zip"];
+const ALLOWED_EXTENSIONS = [
+  "pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "csv",
+  "jpg", "jpeg", "png", "tif", "tiff", "heic",
+  "txt", "md", "html", "htm", "rtf", "zip", "eml", "msg",
+];
 const MAX_BYTES = 100 * 1024 * 1024; // keep in sync with backend MAX_UPLOAD_BYTES
 const MAX_ZIP_BYTES = 300 * 1024 * 1024;
 
 function validateFile(file: File): string | null {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return `".${ext}" files are not supported. Use PDF, DOCX, PPTX, XLSX, JPG, PNG or ZIP.`;
+    return `".${ext}" files are not supported.`;
   }
   if (file.size === 0) return "The selected file is empty.";
   const limit = ext === "zip" ? MAX_ZIP_BYTES : MAX_BYTES;
