@@ -51,7 +51,7 @@ export default function SourceViewer({
   }
 
   return (
-    <div className="flex h-full flex-col border-l border-gray-200 bg-white">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card">
       <div className="flex-shrink-0 border-b border-gray-200 p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold">Original Document</h3>
