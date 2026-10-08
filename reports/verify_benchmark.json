@@ -1,0 +1,781 @@
+{
+  "real_documents": [
+    {
+      "file": "01_cross_page_table.pdf",
+      "status": "verified",
+      "extract_ms": 1003,
+      "verify_ms": 290,
+      "units": 4,
+      "verified": 4,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 1,
+        "inventory": 267,
+        "completeness": 9,
+        "content": 8,
+        "structure": 0,
+        "reading_order": 5
+      }
+    },
+    {
+      "file": "02_merged_cells_multirow_header.pdf",
+      "status": "verified",
+      "extract_ms": 112,
+      "verify_ms": 22,
+      "units": 1,
+      "verified": 1,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 21,
+        "completeness": 0,
+        "content": 1,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "03_financial_number_formats.pdf",
+      "status": "verified",
+      "extract_ms": 95,
+      "verify_ms": 25,
+      "units": 1,
+      "verified": 1,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 23,
+        "completeness": 1,
+        "content": 1,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "04_charts.pdf",
+      "status": "verified",
+      "extract_ms": 8110,
+      "verify_ms": 21,
+      "units": 3,
+      "verified": 3,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 19,
+        "completeness": 1,
+        "content": 1,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "05_equations.pdf",
+      "status": "not_verifiable",
+      "extract_ms": 3361,
+      "verify_ms": 14,
+      "units": 2,
+      "verified": 1,
+      "not_verifiable": 1,
+      "review_required": 0,
+      "evidence_coverage": 0.5,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 13,
+        "completeness": 0,
+        "content": 0,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "06_mixed_digital_scanned.pdf",
+      "status": "not_verifiable",
+      "extract_ms": 2489,
+      "verify_ms": 14,
+      "units": 3,
+      "verified": 2,
+      "not_verifiable": 1,
+      "review_required": 0,
+      "evidence_coverage": 0.6667,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 13,
+        "completeness": 0,
+        "content": 0,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "07_report.docx",
+      "status": "verified",
+      "extract_ms": 964,
+      "verify_ms": 26,
+      "units": 1,
+      "verified": 1,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 1,
+        "inventory": 22,
+        "completeness": 1,
+        "content": 1,
+        "structure": 1,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "08_deck.pptx",
+      "status": "verified",
+      "extract_ms": 932,
+      "verify_ms": 6,
+      "units": 4,
+      "verified": 4,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 1,
+        "inventory": 3,
+        "completeness": 0,
+        "content": 1,
+        "structure": 1,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "09_financials.xlsx",
+      "status": "verified",
+      "extract_ms": 85,
+      "verify_ms": 5,
+      "units": 2,
+      "verified": 2,
+      "not_verifiable": 0,
+      "review_required": 0,
+      "evidence_coverage": 1.0,
+      "agreement_rate": 1.0,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 1,
+        "completeness": 0,
+        "content": 1,
+        "structure": 2,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "10_invoice_ocr.png",
+      "status": "not_verifiable",
+      "extract_ms": 1580,
+      "verify_ms": 1,
+      "units": 1,
+      "verified": 0,
+      "not_verifiable": 1,
+      "review_required": 0,
+      "evidence_coverage": 0.0,
+      "agreement_rate": null,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 0,
+        "completeness": 0,
+        "content": 0,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "10b_scanned_memo.png",
+      "status": "not_verifiable",
+      "extract_ms": 4306,
+      "verify_ms": 1,
+      "units": 1,
+      "verified": 0,
+      "not_verifiable": 1,
+      "review_required": 0,
+      "evidence_coverage": 0.0,
+      "agreement_rate": null,
+      "blocking_issues": [],
+      "stages": {
+        "integrity": 0,
+        "inventory": 0,
+        "completeness": 0,
+        "content": 0,
+        "structure": 0,
+        "reading_order": 0
+      }
+    },
+    {
+      "file": "11_chart_image.jpg",
+      "status": "review_required",
+      "extract_ms": 1441,
+      "verify_ms": 2,
+      "units": 1,
+      "verified": 0,
+      "not_verifiable": 0,
+      "review_required": 1,
+      "evidence_coverage": 0.0,
+      "agreement_rate": null,
+      "blocking_issues": [
+        "extraction_integrity:extractor_flagged_blocks"
+      ],
+      "stages": {
+        "integrity": 1,
+        "inventory": 1,
+        "completeness": 0,
+        "content": 0,
+        "structure": 0,
+        "reading_order": 0
+      }
+    }
+  ],
+  "overhead": {
+    "extract_ms": 24478,
+    "verify_ms": 427,
+    "percent": 1.7
+  },
+  "fault_injection": {
+    "injected": 53,
+    "detected": 53,
+    "missed": 0,
+    "right_layer_and_code": 53,
+    "by_format": {
+      "docx": {
+        "injected": 18,
+        "detected": 18,
+        "right_layer": 18
+      },
+      "pptx": {
+        "injected": 11,
+        "detected": 11,
+        "right_layer": 11
+      },
+      "xlsx": {
+        "injected": 14,
+        "detected": 14,
+        "right_layer": 14
+      },
+      "pdf_text": {
+        "injected": 6,
+        "detected": 6,
+        "right_layer": 6
+      },
+      "pdf_table": {
+        "injected": 4,
+        "detected": 4,
+        "right_layer": 4
+      }
+    },
+    "faults": [
+      {
+        "format": "docx",
+        "fault": "digit changed in a paragraph ($18.2M -> $13.2M)",
+        "detected": true,
+        "codes": [
+          "numeric_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "percentage changed (12.5% -> 15.2%)",
+        "detected": true,
+        "codes": [
+          "numeric_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "word substituted (growth -> grwth)",
+        "detected": true,
+        "codes": [
+          "content_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "word dropped",
+        "detected": true,
+        "codes": [
+          "content_words_missing"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "text invented and appended",
+        "detected": true,
+        "codes": [
+          "unexpected_words"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "paragraph removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "two paragraphs swapped",
+        "detected": true,
+        "codes": [
+          "reading_order_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "heading extracted as paragraph",
+        "detected": true,
+        "codes": [
+          "object_type_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "list item extracted as paragraph",
+        "detected": true,
+        "codes": [
+          "object_type_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table cell digit changed",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table cell text changed",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table rows swapped",
+        "detected": true,
+        "codes": [
+          "table_row_order_changed"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table columns swapped",
+        "detected": true,
+        "codes": [
+          "table_column_order_changed"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table last row dropped",
+        "detected": true,
+        "codes": [
+          "table_dimensions_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "merged cells lost",
+        "detected": true,
+        "codes": [
+          "merged_cells_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "merged cells corrupted (wrong span)",
+        "detected": true,
+        "codes": [
+          "merged_cells_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table flattened into paragraphs",
+        "detected": true,
+        "codes": [
+          "table_flattened_into_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "docx",
+        "fault": "table removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_table"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "digit changed in a text shape",
+        "detected": true,
+        "codes": [
+          "numeric_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "text shape removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "title extracted as paragraph",
+        "detected": true,
+        "codes": [
+          "object_type_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "table cell digit changed",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "table rows swapped",
+        "detected": true,
+        "codes": [
+          "table_row_order_changed"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "table columns swapped",
+        "detected": true,
+        "codes": [
+          "table_column_order_changed"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "table last row dropped",
+        "detected": true,
+        "codes": [
+          "table_dimensions_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "merged cells lost",
+        "detected": true,
+        "codes": [
+          "merged_cells_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "table flattened into paragraphs",
+        "detected": true,
+        "codes": [
+          "table_flattened_into_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "chart reduced to an image placeholder",
+        "detected": true,
+        "codes": [
+          "chart_not_structured"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pptx",
+        "fault": "chart removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_chart"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "numeric cell digit changed (20 -> 21)",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "decimal changed (60.5 -> 60.6)",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "text cell changed",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "text cell '007' became '7'",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "formula's stored result changed",
+        "detected": true,
+        "codes": [
+          "formula_result_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "date changed",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "boolean flipped",
+        "detected": true,
+        "codes": [
+          "cell_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "cell value removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_cells"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "value invented in an empty cell",
+        "detected": true,
+        "codes": [
+          "unexpected_cell_value"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "sheet removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_sheet"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "rows swapped",
+        "detected": true,
+        "codes": [
+          "table_row_order_changed"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "columns swapped",
+        "detected": true,
+        "codes": [
+          "table_column_order_changed"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "merged range lost",
+        "detected": true,
+        "codes": [
+          "merged_cells_mismatch",
+          "possible_missing_merged_range"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "xlsx",
+        "fault": "merged range invented",
+        "detected": true,
+        "codes": [
+          "merged_cells_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_text",
+        "fault": "digit changed in a paragraph",
+        "detected": true,
+        "codes": [
+          "numeric_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_text",
+        "fault": "percentage digit changed",
+        "detected": true,
+        "codes": [
+          "numeric_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_text",
+        "fault": "word dropped",
+        "detected": true,
+        "codes": [
+          "content_words_missing"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_text",
+        "fault": "word substituted (employees -> employes)",
+        "detected": true,
+        "codes": [
+          "content_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_text",
+        "fault": "paragraph removed",
+        "detected": true,
+        "codes": [
+          "content_words_missing",
+          "numeric_value_mismatch",
+          "possible_missing_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_text",
+        "fault": "two paragraphs swapped",
+        "detected": true,
+        "codes": [
+          "reading_order_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_table",
+        "fault": "table removed",
+        "detected": true,
+        "codes": [
+          "content_words_missing",
+          "numeric_value_mismatch",
+          "possible_missing_table",
+          "possible_missing_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_table",
+        "fault": "table cell digit changed",
+        "detected": true,
+        "codes": [
+          "numeric_value_mismatch"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_table",
+        "fault": "table flattened into paragraphs",
+        "detected": true,
+        "codes": [
+          "table_flattened_into_text"
+        ],
+        "status": "review_required"
+      },
+      {
+        "format": "pdf_table",
+        "fault": "image removed",
+        "detected": true,
+        "codes": [
+          "possible_missing_image"
+        ],
+        "status": "review_required"
+      }
+    ]
+  }
+}
