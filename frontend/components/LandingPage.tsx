@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowRight,
+  BookOpen,
   Check,
   CheckCircle2,
   Cpu,
@@ -19,7 +20,10 @@ import {
   Loader2,
   Lock,
   Mail,
+  MessageSquare,
   ScanSearch,
+  Search,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Zap,
@@ -113,6 +117,12 @@ export default function LandingPage() {
               className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
             >
               Validation Engine
+            </a>
+            <a
+              href="#deallens"
+              className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+            >
+              DealLens
             </a>
             <a
               href="#pipeline"
@@ -269,6 +279,12 @@ export default function LandingPage() {
                         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-blue-700"
                       >
                         Open Extraction Workspace <ArrowRight size={16} />
+                      </Link>
+                      <Link
+                        href="/rooms"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-900 bg-gray-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+                      >
+                        <BookOpen size={16} /> Open DealLens
                       </Link>
                       <Link
                         href="/history"
@@ -574,6 +590,84 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* -------------------- DealLens Data Room Intelligence -------------------- */}
+      <section id="deallens" className="border-t border-gray-200 bg-white py-16 lg:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">
+              <BookOpen size={14} /> DealLens
+            </span>
+            <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">
+              AI-powered due diligence data rooms
+            </h2>
+            <p className="mt-3 text-base text-gray-600">
+              Upload deal documents, ask natural-language questions, and get source-grounded answers
+              with page-level evidence trails and arithmetic receipts.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                icon: MessageSquare,
+                title: "Ask & Answer with Evidence",
+                desc: "Ask any question about the deal. Every answer links to exact page coordinates with highlighted source text and arithmetic receipts.",
+              },
+              {
+                icon: Search,
+                title: "Cross-Document Comparison",
+                desc: "Compare figures across financial statements, CIMs, and management accounts. Spot discrepancies instantly with side-by-side evidence.",
+              },
+              {
+                icon: ShieldAlert,
+                title: "Contradiction Detection",
+                desc: "Automatically flag conflicting claims across documents — revenue mismatches, date inconsistencies, and duplicated data.",
+              },
+              {
+                icon: Layers,
+                title: "Diligence Packs",
+                desc: "Auto-generate pre-built question packs for financials, contracts, compliance, and operations — ready for review teams.",
+              },
+              {
+                icon: ShieldCheck,
+                title: "Quarantine & Security",
+                desc: "Flagged documents are sandboxed and scanned. Hidden content, embedded macros, and injection attempts are surfaced before review.",
+              },
+              {
+                icon: Eye,
+                title: "Full Audit Trail",
+                desc: "Every answer, every fact, every number traces back to its source. Exportable audit logs for compliance and governance.",
+              },
+            ].map((feat) => {
+              const Icon = feat.icon;
+              return (
+                <div
+                  key={feat.title}
+                  className="rounded-2xl border border-gray-200/90 bg-gray-50 p-6 shadow-card transition-all hover:shadow-lift"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-900 text-white">
+                    <Icon size={22} />
+                  </div>
+                  <h3 className="mt-4 font-display text-lg font-semibold text-gray-900">
+                    {feat.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-600 leading-relaxed">{feat.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-10 text-center">
+            <Link
+              href={user ? "/rooms" : "/#auth-section"}
+              className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-gray-800"
+            >
+              <BookOpen size={16} /> Open DealLens <ArrowRight size={15} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* -------------------- 15-Stage Pipeline Section -------------------- */}
       <section id="pipeline" className="border-t border-gray-200 bg-white py-16 lg:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -710,6 +804,12 @@ export default function LandingPage() {
                   className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-blue-500"
                 >
                   {user ? "Open Workspace" : "Get started for free"} <ArrowRight size={16} />
+                </Link>
+                <Link
+                  href={user ? "/rooms" : "/#auth-section"}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+                >
+                  <BookOpen size={16} /> {user ? "Open DealLens" : "Try DealLens"}
                 </Link>
               </div>
             </div>
