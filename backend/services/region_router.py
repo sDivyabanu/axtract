@@ -414,7 +414,9 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
     if vector_pages:
         from services.vision.chart_pdf_vector import read_vector_charts
 
-        with pdfplumber.open(str(file_path)) as plumber:
+        from utils.request_cache import source_pdf
+
+        with source_pdf(file_path) as plumber:
             for pno in vector_pages:
                 deadline.check()
                 try:

@@ -86,7 +86,7 @@ def scan_pdf_page(page, page_num: int = 0) -> dict:
     image_bboxes = [fitz.Rect(img["bbox"])
                     for img in page.get_image_info(xrefs=True)
                     if "bbox" in img]
-    blocks = page.get_text("dict")
+    blocks = page.get_text("dict", flags=fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES)
     for block in blocks.get("blocks", []):
         if block.get("type") != 0:               # 0 = text block
             continue

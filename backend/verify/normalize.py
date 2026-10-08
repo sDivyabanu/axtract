@@ -56,6 +56,10 @@ def _dehyphenate(text: str, join: bool) -> str:
     return _HYPHEN_BREAK.sub(repl, text)
 
 
+from utils.request_cache import memo_text
+
+
+@memo_text
 def normalize_text(
     text: str,
     *,

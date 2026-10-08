@@ -32,8 +32,9 @@ from models.errors import AppError
 from services import preview_service
 from services.parse_service import parse_upload
 from utils import deadline
+from utils.jobs import run_parse_job
 from utils.deadline import HARD_LIMIT_SECONDS
-from utils.files import get_extension, sanitize_filename
+from utils.files import MAX_UPLOAD_BYTES, get_extension, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,9 @@ async def upload_document(
 
     filename = sanitize_filename(file.filename)
     file_type = get_extension(filename)
-    file_bytes = await file.read()
+    file_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise AppError("FILE_TOO_LARGE", "File exceeds upload limit.", status_code=413)
 
     if not file_bytes:
         raise AppError("EMPTY_FILE", "The uploaded file is empty.", status_code=400)
@@ -156,7 +159,7 @@ async def upload_document(
 
     try:
         response = await asyncio.wait_for(
-            run_in_threadpool(parse_upload, BytesUpload(file=BytesIO(file_bytes), filename=filename)),
+            run_parse_job(parse_upload, BytesUpload(file=BytesIO(file_bytes), filename=filename)),
             timeout=HARD_LIMIT_SECONDS,
         )
     except asyncio.TimeoutError:

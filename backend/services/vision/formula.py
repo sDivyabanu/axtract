@@ -36,12 +36,12 @@ class FormulaResult:
 def _ocr_text(img: Image.Image) -> str:
     import numpy as np
 
-    from extractors.ocr_extractor import _get_ocr
+    from extractors.ocr_extractor import run_ocr
 
     w, h = img.size
     pad = Image.new("RGB", (w + 40, h + 40), "white")
     pad.paste(img.convert("RGB"), (20, 20))
-    res, _ = _get_ocr()(np.array(pad))
+    res, _ = run_ocr(np.array(pad))
     return " ".join(str(t) for _, t, _c in (res or []))
 
 

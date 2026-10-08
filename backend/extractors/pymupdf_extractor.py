@@ -325,8 +325,9 @@ class PyMuPDFExtractor(BaseExtractor):
 
         # Text analysis
         text = page.get_text("text").strip()
+        page_blocks = page.get_text("blocks")
         text_blocks = [
-            b for b in page.get_text("blocks") if b[6] == _TEXT_BLOCK and b[4].strip()
+            b for b in page_blocks if b[6] == _TEXT_BLOCK and b[4].strip()
         ]
         text_area = sum(
             (b[2] - b[0]) * (b[3] - b[1]) for b in text_blocks
@@ -336,7 +337,7 @@ class PyMuPDFExtractor(BaseExtractor):
         # Image analysis
         images = page.get_images(full=True)
         image_blocks = [
-            b for b in page.get_text("blocks") if b[6] == _IMAGE_BLOCK
+            b for b in page_blocks if b[6] == _IMAGE_BLOCK
         ]
         image_area = sum(
             (b[2] - b[0]) * (b[3] - b[1]) for b in image_blocks
