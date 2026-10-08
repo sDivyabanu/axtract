@@ -16,7 +16,7 @@ def pre_scan(
     if file_type in {"xlsx", "docx", "pptx"}:
         from security.office_scan import scan_office
 
-        raw_findings = scan_office(file_path)
+        raw_findings = scan_office(str(file_path))["findings"]
 
         for item in raw_findings:
             findings.append(
@@ -50,7 +50,13 @@ def scan_hidden_content(
         from security.hidden_content import scan_pdf_page
         import fitz
 
-        with fitz.open(file_path) as doc:
+        from models.errors import AppError
+
+        try:
+            doc = fitz.open(file_path)
+        except Exception as exc:  # corrupt PDF: same 422 the upload path reports for other formats
+            raise AppError("INVALID_FILE", f"Could not open PDF file: {exc}", status_code=422) from exc
+        with doc:
             for page_num, page in enumerate(doc):
                 result = scan_pdf_page(page, page_num + 1)
 
