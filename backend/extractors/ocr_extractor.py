@@ -36,6 +36,36 @@ def _get_ocr():
     return _ocr_engine
 
 
+def run_ocr(array):
+    """Exact-pixel reuse only within a parse. Never reuse OCR as Verify evidence.
+
+    Only cache small images (<=512KB) where the same region is likely to be
+    OCR'd again within the same request (e.g. formula crops shared between
+    extraction and chart analysis).  Large chart renders are always unique and
+    the SHA-256 + deepcopy overhead exceeds any conceivable reuse benefit.
+    """
+    import copy
+    import hashlib
+    import numpy as np
+    from utils.request_cache import _state
+
+    _CACHE_BYTE_LIMIT = 512 * 1024
+
+    state = _state.get()
+    key = None
+    if state is not None and array.nbytes <= _CACHE_BYTE_LIMIT:
+        array = np.ascontiguousarray(array)
+        key = (array.shape, array.dtype.str, hashlib.sha256(memoryview(array)).digest())
+        if key in state['ocr']:
+            return copy.deepcopy(state['ocr'][key])
+
+    result = _get_ocr()(array)
+
+    if key is not None and len(state['ocr']) < 8:
+        state['ocr'][key] = copy.deepcopy(result)
+    return result
+
+
 def _normalize_bbox_from_points(
     points: list[list[float]], img_w: int, img_h: int
 ) -> BBox:
@@ -107,11 +137,10 @@ class OCRExtractor(BaseExtractor):
             return blocks, errors
 
         try:
-            ocr = _get_ocr()
             # RapidOCR accepts PIL Image, numpy array, or path
             import numpy as np
             img_array = np.array(img)
-            result, _ = ocr(img_array)
+            result, _ = run_ocr(img_array)
         except Exception as exc:
             errors.append(
                 DocumentError(

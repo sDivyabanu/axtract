@@ -2,13 +2,13 @@ import asyncio
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import StreamingResponse
-from starlette.concurrency import run_in_threadpool
 
 from models.document import DocumentResponse
 from models.errors import AppError
 from services import progress
 from services.parse_service import parse_upload
 from services.progress_stream import SSE_HEADERS, event_stream
+from utils.jobs import run_parse_job
 from utils.deadline import HARD_LIMIT_SECONDS
 
 router = APIRouter(prefix="/api", tags=["parse"])
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["parse"])
 async def _parse(file: UploadFile | None) -> DocumentResponse:
     try:
         return await asyncio.wait_for(
-            run_in_threadpool(parse_upload, file), timeout=HARD_LIMIT_SECONDS
+            run_parse_job(parse_upload, file), timeout=HARD_LIMIT_SECONDS
         )
     except asyncio.TimeoutError as exc:
         tracker = progress.current()

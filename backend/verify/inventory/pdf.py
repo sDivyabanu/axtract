@@ -153,7 +153,8 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
         plumber = None
         try:
             import pdfplumber
-            plumber = pdfplumber.open(str(path))
+            from utils.request_cache import acquire_pdf
+            plumber = acquire_pdf(path)
         except Exception:  # noqa: BLE001
             inv.limitations.append("pdfplumber could not open this file: no word regions or table candidates.")
         try:
@@ -218,7 +219,8 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
                 inv.units.append(su)
         finally:
             if plumber is not None:
-                plumber.close()
+                from utils.request_cache import release_pdf
+                release_pdf(plumber)
     except Exception as exc:  # noqa: BLE001 - an inventory failure never affects the extraction
         inv.error = f"{type(exc).__name__}: {exc}"
     inv.timing_ms = round((time.perf_counter() - t0) * 1000, 3)

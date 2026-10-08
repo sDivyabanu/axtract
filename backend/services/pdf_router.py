@@ -36,9 +36,8 @@ class PDFRouter:
         self._ocr = OCRExtractor()
 
     def extract(self, file_path: Path) -> ExtractionResult:
-        data = file_path.read_bytes()
         try:
-            doc = pymupdf.open(stream=data, filetype="pdf")
+            doc = pymupdf.open(str(file_path), filetype="pdf")
         except Exception as exc:
             raise AppError(
                 "INVALID_FILE", "The PDF could not be opened.", status_code=422

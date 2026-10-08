@@ -54,8 +54,8 @@ class Word:
 
 
 def parse_number(text: str) -> float | None:
-    t = text.strip().replace("−", "-").replace("O", "0") if re.fullmatch(r"[\dO.,\-$%\s]+", text.strip()) else text.strip()
-    t = re.sub(r"[$€£¥%]", "", t).strip()
+    t = text.strip().replace("âˆ’", "-").replace("O", "0") if re.fullmatch(r"[\dO.,\-$%\s]+", text.strip()) else text.strip()
+    t = re.sub(r"[$â‚¬Â£Â¥%]", "", t).strip()
     if not t:
         return None
     n = _to_number(t)
@@ -68,9 +68,9 @@ def parse_number(text: str) -> float | None:
 
 
 def ocr_words(img: Image.Image) -> list[Word]:
-    from extractors.ocr_extractor import _get_ocr
+    from extractors.ocr_extractor import run_ocr
 
-    res, _ = _get_ocr()(np.array(img.convert("RGB")))
+    res, _ = run_ocr(np.array(img.convert("RGB")))
     words: list[Word] = []
     for points, text, conf in res or []:
         text = str(text).strip()
@@ -225,8 +225,10 @@ def _snap(pix: float, ticks: list[float], tol: float = 7.0) -> tuple[float, bool
 
 def _color_clusters(rgb: np.ndarray, region: np.ndarray, min_pixels: int) -> list[dict[str, Any]]:
     """Dominant saturated colours inside `region` (bool mask)."""
-    sat = rgb.max(axis=2).astype(int) - rgb.min(axis=2).astype(int)
-    colored = region & (sat >= 40) & (rgb.min(axis=2) < 235)
+    minimum = np.minimum(np.minimum(rgb[:, :, 0], rgb[:, :, 1]), rgb[:, :, 2])
+    maximum = np.maximum(np.maximum(rgb[:, :, 0], rgb[:, :, 1]), rgb[:, :, 2])
+    sat = maximum.astype(int) - minimum.astype(int)
+    colored = region & (sat >= 40) & (minimum < 235)
     if colored.sum() < min_pixels:
         return []
     px = rgb[colored].astype(int)
@@ -248,10 +250,11 @@ def _color_clusters(rgb: np.ndarray, region: np.ndarray, min_pixels: int) -> lis
             centers.append(c)
             totals.append(int(counts[idx]))
     clusters = []
+    channels = tuple(rgb[:, :, i].astype(float) for i in range(3))
     for c, t in sorted(zip(centers, totals), key=lambda z: -z[1]):
         if t >= min_pixels:
-            dist = np.linalg.norm(rgb.astype(int) - c, axis=2)
-            clusters.append({"color": [int(v) for v in c], "mask": region & (dist < 55), "pixels": t})
+            dist2 = sum((channel - value) ** 2 for channel, value in zip(channels, c))
+            clusters.append({"color": [int(v) for v in c], "mask": region & (dist2 < 55 ** 2), "pixels": t})
     return clusters
 
 
@@ -583,9 +586,9 @@ def _read_rotated_label(rgb: np.ndarray, left_words: list[Word], left: int, top:
     if strip.size == 0:
         return ""
     rotated = np.ascontiguousarray(np.rot90(strip, k=-1))  # clockwise
-    from extractors.ocr_extractor import _get_ocr
+    from extractors.ocr_extractor import run_ocr
 
-    res, _ = _get_ocr()(rotated)
+    res, _ = run_ocr(rotated)
     return " ".join(str(t).strip() for _, t, _c in (res or []) if str(t).strip())
 
 

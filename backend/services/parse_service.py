@@ -31,6 +31,7 @@ from services import preview_service
 from services.markdown_service import blocks_to_markdown
 from services.table_service import enhance_table_block, merge_cross_page_tables
 from utils import deadline
+from utils.request_cache import cached_request, close_source_path
 from utils.files import (
     MAX_UPLOAD_BYTES,
     get_extension,
@@ -44,6 +45,7 @@ from utils.files import (
 logger = logging.getLogger(__name__)
 
 
+@cached_request
 def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     """Validate an upload, run the matching extractor, apply layout analysis,
     generate Markdown, and return the common document schema.
@@ -123,6 +125,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         preview = preview_service.prepare(document_id, temp_path, file_type)
 
     except BaseException:
+        close_source_path(temp_path)
         remove_temp_file(temp_path)
         raise
 
@@ -130,6 +133,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         return _finish(result, temp_path, preview, document_id, filename, file_type, started,
                        security_findings, hidden_content)
     finally:
+        close_source_path(temp_path)
         remove_temp_file(temp_path)  # kept until now so AXTRACT Verify can read the original
 
 

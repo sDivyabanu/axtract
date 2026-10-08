@@ -58,4 +58,5 @@ _BY_EXTENSION: dict[str, Extractable] = {
 
 def get_extractor(extension: str) -> Extractable | None:
     """Return the extractor for a lowercase extension without the dot, or None if unsupported."""
-    return _BY_EXTENSION.get(extension)
+    extractor = _BY_EXTENSION.get(extension)
+    return type(extractor)() if isinstance(extractor, (DocxExtractor, PptxExtractor, XlsxExtractor)) else extractor
