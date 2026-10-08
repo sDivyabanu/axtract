@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from fastapi import UploadFile
 from security.pipeline import pre_scan,scan_blocks,scan_hidden_content
+from services import progress
 from security.output_safety import sanitise_block_text, sanitise_markdown
 from extractors.registry import get_extractor
 from models.document import DocumentResponse
@@ -94,6 +95,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
                 "File content does not match the expected format.",
                 status_code=422,
             )
+        progress.report("security", "running")
         security_findings = pre_scan(
             temp_path,
             file_type,
@@ -103,13 +105,16 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
              file_type,
              )
         security_findings.extend(hidden_findings)
+        _report_security(security_findings)
 
         # 4. Extract
+        progress.report("extraction", "running")
         result = extractor.extract(temp_path)
         # 4a. Security scan of extracted content
         security_findings.extend(
             scan_blocks(result.blocks)
             )
+        _report_security(security_findings)  # the security stage now also covers the extracted text
         # 4a1. Charts, equations and figures: route every region to its reader
         route_regions(result, temp_path, file_type)
 
@@ -172,8 +177,16 @@ def _finish(result, temp_path, preview, document_id, filename, file_type, starte
         preview_pages=preview.pages,
         preview_error=preview.error,
     )
+    progress.report("extraction", "warning" if result.errors else "completed",
+                    blocks=len(ordered_blocks), pages=result.page_count, errors=len(result.errors))
     _attach_validation(response, temp_path)
     return response
+
+
+def _report_security(findings) -> None:
+    counts = progress.severity_counts(findings)
+    progress.report("security", "warning" if findings else "completed",
+                    findings=len(findings), by_severity=counts)
 
 
 _MAX_REPORT_BYTES = 2_000_000
@@ -182,6 +195,9 @@ _MAX_REPORT_BYTES = 2_000_000
 def _attach_validation(response: DocumentResponse, path: Path) -> None:
     """Run AXTRACT Verify and attach its report. Advisory and fail-safe: nothing here can fail a parse."""
     if os.environ.get("AXTRACT_VERIFY", "1").strip().lower() in ("0", "false", "off", "no"):
+        tracker = progress.current()
+        if tracker is not None:
+            tracker.skip_verify("disabled")
         return
     try:
         from verify.engine import VerifyOptions, verify_extraction
@@ -190,6 +206,9 @@ def _attach_validation(response: DocumentResponse, path: Path) -> None:
 
         remaining = deadline.remaining()
         if remaining < 4:
+            tracker = progress.current()
+            if tracker is not None:
+                tracker.skip_verify("time_budget")
             report = build_report([], failure=ValidationFailure(
                 stage="budget", error_type="TimeBudget", message="too little of the request's time budget was left to validate"))
         else:
@@ -200,6 +219,13 @@ def _attach_validation(response: DocumentResponse, path: Path) -> None:
                 unit["checks"] = []
             data["truncated"] = "per-unit check details omitted: the report exceeded its size limit"
         response.validation = data
+        verdict = {"verified": "completed", "recovered": "completed", "failed": "failed"}.get(data.get("status"), "warning")
+        summary = data.get("summary") or {}
+        progress.report("verdict", verdict, status=data.get("status"), issues=summary.get("issues_total"))
     except Exception:  # noqa: BLE001 - validation must never cost a successful extraction
         logger.exception("AXTRACT Verify failed; the extraction is returned without a validation report")
         response.validation = None
+        tracker = progress.current()
+        if tracker is not None:
+            tracker.skip_verify("unavailable")
+        progress.report("verdict", "failed", error_type="ValidationError")

@@ -1,5 +1,7 @@
 import { API_BASE_URL, ApiError } from "./api";
 import { createClient } from "./supabase";
+import { consumeParseStream } from "./stream";
+import type { StreamHandlers } from "./stream";
 import type { DocumentResponse, ValidationReport } from "./types";
 
 async function getAccessToken(): Promise<string> {
@@ -91,6 +93,20 @@ export async function uploadDocument(file: File): Promise<UploadResult> {
     body,
   });
   return handleResponse<UploadResult>(response);
+}
+
+/** Upload with live progress. Same stored result as uploadDocument(). */
+export async function uploadDocumentStream(file: File, handlers: StreamHandlers): Promise<UploadResult> {
+  const body = new FormData();
+  body.append("file", file);
+  let response: Response;
+  try {
+    response = await authFetch("/api/documents/stream", { method: "POST", body, signal: handlers.signal });
+  } catch (err) {
+    if (handlers.signal?.aborted) throw new ApiError("STREAM_ABORTED", "Cancelled.");
+    throw err;
+  }
+  return consumeParseStream<UploadResult>(response, handlers);
 }
 
 export async function listDocuments(

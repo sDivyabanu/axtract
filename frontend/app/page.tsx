@@ -1,17 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
+import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultView from "@/components/ResultView";
 import {
   escalateValidation,
   getDocumentResult,
   promoteRecovery,
   uploadDocument,
+  uploadDocumentStream,
 } from "@/lib/api-authenticated";
 import type { ValidationActions } from "@/components/ValidationPanel";
 import { ApiError, parseDocument } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { initialPipeline, type PipelineState } from "@/lib/pipeline";
+import { parseDocumentStream, type StreamHandlers } from "@/lib/stream";
 import type { DocumentResponse } from "@/lib/types";
 
 type TabStatus = "parsing" | "done" | "error";
@@ -24,6 +28,8 @@ interface DocTab {
   error: string | null;
   // Set when the result is saved in history: secondary validation needs the stored original.
   savedId: string | null;
+  // Real progress reported by the backend while this file is processed (null for saved results opened from history).
+  pipeline: PipelineState | null;
 }
 
 let nextTabId = 1;
@@ -50,6 +56,7 @@ export default function Home() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const controllers = useRef(new Map<string, AbortController>());
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
@@ -76,6 +83,7 @@ export default function Home() {
               result: saved.result,
               error: null,
               savedId,
+              pipeline: null,
             },
           ]);
           setActiveTabId((current) => current ?? `tab-${nextTabId - 1}`);
@@ -90,6 +98,7 @@ export default function Home() {
               status: "error",
               result: null,
               savedId: null,
+              pipeline: null,
               error:
                 err instanceof ApiError
                   ? `[${err.code}] ${err.message}`
@@ -119,6 +128,7 @@ export default function Home() {
       result: null,
       error: null,
       savedId: null,
+      pipeline: initialPipeline(),
     }));
     setTabs((prev) => [...prev, ...newTabs]);
     setActiveTabId((current) => current ?? newTabs[0].id);
@@ -136,7 +146,26 @@ export default function Home() {
       );
     }
 
+    // Use the live-progress endpoint; an older backend without it gets the plain request instead.
+    async function streamOrPlain<T>(streamed: () => Promise<T>, plain: () => Promise<T>): Promise<T> {
+      try {
+        return await streamed();
+      } catch (err) {
+        if (err instanceof ApiError && err.code === "STREAM_UNAVAILABLE") return plain();
+        throw err;
+      }
+    }
+
     async function parseOne(tabId: string, file: File) {
+      const controller = new AbortController();
+      controllers.current.set(tabId, controller);
+      const handlers: StreamHandlers = {
+        signal: controller.signal,
+        onPipeline: (update) =>
+          setTabs((prev) =>
+            prev.map((t) => (t.id === tabId ? { ...t, pipeline: update(t.pipeline ?? initialPipeline()) } : t)),
+          ),
+      };
       // Signed in: upload through the authenticated endpoint so the document
       // and its parse result are stored in the database (visible in History).
       // Otherwise fall back to the anonymous parse endpoint.
@@ -145,7 +174,10 @@ export default function Home() {
         let savedDocId: string | null = null;
         if (user) {
           try {
-            const saved = await uploadDocument(file);
+            const saved = await streamOrPlain(
+              () => uploadDocumentStream(file, handlers),
+              () => uploadDocument(file),
+            );
             result = saved.result;
             savedDocId = saved.document_id;
           } catch (err) {
@@ -153,18 +185,28 @@ export default function Home() {
             setNotice(
               "Documents could not be saved to your history, so they were parsed without saving.",
             );
-            result = await parseDocument(file);
+            result = await streamOrPlain(
+              () => parseDocumentStream(file, handlers),
+              () => parseDocument(file),
+            );
           }
         } else {
-          result = await parseDocument(file);
+          result = await streamOrPlain(
+            () => parseDocumentStream(file, handlers),
+            () => parseDocument(file),
+          );
         }
         await updateTab(tabId, { status: "done", result, error: null, savedId: savedDocId });
       } catch (err) {
         const message =
           err instanceof ApiError
-            ? `[${err.code}] ${err.message}`
+            ? err.code === "STREAM_ABORTED"
+              ? "Processing was cancelled."
+              : `[${err.code}] ${err.message}`
             : "Something went wrong while parsing the document.";
         await updateTab(tabId, { status: "error", error: message });
+      } finally {
+        controllers.current.delete(tabId);
       }
     }
 
@@ -185,6 +227,7 @@ export default function Home() {
   }, [pendingFiles, isParsing, user]);
 
   function closeTab(id: string) {
+    controllers.current.get(id)?.abort(); // stops the server-side work for this file
     setTabs((prev) => {
       const index = prev.findIndex((t) => t.id === id);
       const next = prev.filter((t) => t.id !== id);
@@ -320,7 +363,18 @@ export default function Home() {
 
       {activeTab && (
         <div className="min-w-0">
-          {activeTab.status === "parsing" && (
+          {activeTab.pipeline && (
+            <div className="mb-4">
+              <ProcessingPipeline
+                key={activeTab.id}
+                fileName={activeTab.name}
+                pipeline={activeTab.pipeline}
+                compact={activeTab.status === "done"}
+                onCancel={() => controllers.current.get(activeTab.id)?.abort()}
+              />
+            </div>
+          )}
+          {activeTab.status === "parsing" && !activeTab.pipeline && (
             <p className="text-sm text-gray-500">
               Parsing “{activeTab.name}”, please wait…
             </p>
