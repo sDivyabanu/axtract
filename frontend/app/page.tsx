@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
 import ResultView from "@/components/ResultView";
+import type { ValidationActions } from "@/components/ValidationPanel";
 import { ApiError, parseDocument } from "@/lib/api";
-import { getDocumentResult, uploadDocument } from "@/lib/api-authenticated";
+import { escalateValidation, getDocumentResult, promoteRecovery, uploadDocument } from "@/lib/api-authenticated";
 import { useAuth } from "@/lib/auth-context";
 import type { DocumentResponse } from "@/lib/types";
 
@@ -26,18 +27,25 @@ export default function Home() {
   const [result, setResult] = useState<DocumentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Set when the result is saved in history: secondary validation needs the stored original.
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   // Opening a history item (/?doc=<id>) shows the saved result without parsing again.
   useEffect(() => {
-    const savedId = new URLSearchParams(window.location.search).get("doc");
-    if (!savedId || authLoading || !user) return;
+    const docParam = new URLSearchParams(window.location.search).get("doc");
+    if (!docParam || authLoading || !user) return;
     let cancelled = false;
     (async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const saved = await getDocumentResult(savedId);
-        if (!cancelled) setResult(saved.result);
+        const saved = await getDocumentResult(docParam);
+        if (!cancelled) {
+          setResult(saved.result);
+          setSavedId(docParam);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? `[${err.code}] ${err.message}` : "Could not open the saved document.");
@@ -56,7 +64,39 @@ export default function Home() {
     setResult(null);
     setError(null);
     setNotice(null);
+    setSavedId(null);
   }
+
+  const validationActions: ValidationActions | undefined =
+    savedId && user
+      ? {
+          busy: verifyBusy,
+          error: verifyError,
+          onEscalate: async () => {
+            setVerifyBusy(true);
+            setVerifyError(null);
+            try {
+              const out = await escalateValidation(savedId);
+              setResult((r) => (r ? { ...r, validation: out.validation } : r));
+            } catch (err) {
+              setVerifyError(err instanceof Error ? err.message : "Secondary validation failed.");
+            } finally {
+              setVerifyBusy(false);
+            }
+          },
+          onPromote: async (ids, reason) => {
+            setVerifyBusy(true);
+            setVerifyError(null);
+            try {
+              setResult((await promoteRecovery(savedId, ids, reason)).result);
+            } catch (err) {
+              setVerifyError(err instanceof Error ? err.message : "Could not accept the recovery.");
+            } finally {
+              setVerifyBusy(false);
+            }
+          },
+        }
+      : undefined;
 
   async function handleParse() {
     if (!selectedFile) return;
@@ -67,7 +107,9 @@ export default function Home() {
     try {
       if (user) {
         try {
-          setResult((await uploadDocument(selectedFile)).result);
+          const saved = await uploadDocument(selectedFile);
+          setResult(saved.result);
+          setSavedId(saved.document_id);
         } catch (err) {
           if (!(err instanceof ApiError) || !SAVE_UNAVAILABLE.has(err.code)) throw err;
           setNotice("This document could not be saved to your history, so it was parsed without saving.");
@@ -134,7 +176,7 @@ export default function Home() {
         </div>
       )}
 
-      {result && <ResultView result={result} />}
+      {result && <ResultView result={result} validationActions={validationActions} />}
     </main>
   );
 }

@@ -2,26 +2,32 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import katex from "katex";
-import type { DocumentBlock, DocumentResponse } from "@/lib/types";
+import type { BlockPreview, DocumentBlock, DocumentResponse, ValidationIssue } from "@/lib/types";
+import { resolveIssueTarget } from "@/lib/issueTarget";
 import { generateFilteredMarkdown } from "@/lib/filters";
 import { useExplorerState } from "@/lib/useExplorerState";
 import FilterToolbar from "./FilterToolbar";
 import ActiveFilters from "./ActiveFilters";
 import MatchNavigator from "./MatchNavigator";
 import PageNavigator from "./PageNavigator";
-import SourceViewer from "./SourceViewer";
+import SourceViewer, { previewTarget } from "./SourceViewer";
+import ValidationPanel, { type ValidationActions } from "./ValidationPanel";
 
 type Tab = "blocks" | "markdown" | "json";
 const BLOCKS_PER_PAGE = 100;
 
 interface ResultViewProps {
   result: DocumentResponse;
+  /** Escalation / promotion handlers; only offered for results saved to history. */
+  validationActions?: ValidationActions;
 }
 
-export default function ResultView({ result }: ResultViewProps) {
+export default function ResultView({ result, validationActions }: ResultViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("blocks");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [sourceViewerOpen, setSourceViewerOpen] = useState(false);
+  const [focusIssue, setFocusIssue] = useState<(BlockPreview & { key: string }) | null>(null);
+  const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const explorer = useExplorerState(result);
   // Filters can shrink the match list under the current index: clamp it.
   const safeMatchIndex =
@@ -36,7 +42,23 @@ export default function ResultView({ result }: ResultViewProps) {
 
   function handleSelectBlock(block: DocumentBlock) {
     setSelectedBlockId(block.id);
+    setFocusIssue(null);
+    setActiveIssueId(null);
     if (canShowSource) {
+      setSourceViewerOpen(true);
+    }
+  }
+
+  /** Open a validation issue at its original location in the existing source viewer. */
+  function handleSelectIssue(issue: ValidationIssue) {
+    const { block, target } = resolveIssueTarget(issue, result.blocks, previewTarget);
+    if (block) {
+      setSelectedBlockId(block.id);
+      setActiveTab("blocks");
+    }
+    setActiveIssueId(issue.id);
+    if (target && canShowSource) {
+      setFocusIssue({ ...target, key: issue.id });
       setSourceViewerOpen(true);
     }
   }
@@ -88,6 +110,17 @@ export default function ResultView({ result }: ResultViewProps) {
           </div>
         </div>
       </div>
+
+      {/* AXTRACT Verify */}
+      {result.validation && (
+        <ValidationPanel
+          validation={result.validation}
+          canShowSource={canShowSource}
+          activeIssueId={activeIssueId}
+          onSelectIssue={handleSelectIssue}
+          actions={validationActions}
+        />
+      )}
 
       {/* Errors / warnings */}
       {result.errors.length > 0 && (
@@ -231,6 +264,7 @@ export default function ResultView({ result }: ResultViewProps) {
             documentId={result.document_id}
             pageCount={result.preview_pages ?? 1}
             selectedBlock={selectedBlock}
+            focus={focusIssue}
             onClose={handleCloseSource}
           />
         </div>
