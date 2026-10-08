@@ -63,3 +63,6 @@ class DocumentResponse(BaseModel):
     preview_available: bool = False
     preview_pages: int = 0
     preview_error: str | None = None
+    # AXTRACT Verify report (see verify.models.ValidationReport), as plain JSON. None when validation is
+    # disabled. Validation is advisory: `status` above is the extraction's status, not a trust verdict.
+    validation: dict[str, Any] | None = None

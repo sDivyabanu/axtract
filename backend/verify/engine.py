@@ -17,7 +17,7 @@ finished extraction.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -43,6 +43,9 @@ _ENGINES = {
 @dataclass
 class VerifyOptions:
     inventory: InventoryOptions = field(default_factory=InventoryOptions)
+    # Soft wall-clock budget for the whole run. Once spent, remaining stages are skipped and the report
+    # says so (status FAILED: "validation could not complete"); the extraction is never affected.
+    time_budget_s: float | None = None
 
 
 @dataclass
@@ -65,6 +68,11 @@ def run_verification(file_path: Path, response: DocumentResponse, options: Verif
 
     def stage(name: str, fn: Callable[[], Any]) -> Any:
         t0 = time.perf_counter()
+        if options.time_budget_s is not None and name != "integrity" and (t0 - t_all) > options.time_budget_s:
+            failures.append(ValidationFailure(stage=name, error_type="TimeBudget",
+                                              message=f"validation budget of {options.time_budget_s:.1f}s was spent before this stage"))
+            timings[name] = 0.0
+            return None
         try:
             return fn()
         except Exception as exc:  # noqa: BLE001 - validation must never take the extraction down
@@ -74,7 +82,10 @@ def run_verification(file_path: Path, response: DocumentResponse, options: Verif
             timings[name] = round((time.perf_counter() - t0) * 1000, 3)
 
     integrity = stage("integrity", lambda: run_integrity(response, ids))
-    inventory = stage("inventory", lambda: build_inventory(Path(file_path), response.file_type, options.inventory))
+    inv_opts = options.inventory
+    if options.time_budget_s is not None:
+        inv_opts = replace(inv_opts, time_budget_s=min(inv_opts.time_budget_s, max(options.time_budget_s * 0.6, 0.5)))
+    inventory = stage("inventory", lambda: build_inventory(Path(file_path), response.file_type, inv_opts))
     completeness = stage("completeness", lambda: check_completeness(inventory, response, ids)) if inventory is not None else None
     matches = completeness.matches if completeness is not None else None
     content = stage("content", lambda: check_content(inventory, response, matches, ids)) if matches is not None else None

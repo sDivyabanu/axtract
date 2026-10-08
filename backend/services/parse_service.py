@@ -11,7 +11,9 @@ Pipeline:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
@@ -101,9 +103,17 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         # while the upload still exists.
         preview = preview_service.prepare(document_id, temp_path, file_type)
 
-    finally:
+    except BaseException:
         remove_temp_file(temp_path)
+        raise
 
+    try:
+        return _finish(result, temp_path, preview, document_id, filename, file_type, started)
+    finally:
+        remove_temp_file(temp_path)  # kept until now so AXTRACT Verify can read the original
+
+
+def _finish(result, temp_path, preview, document_id, filename, file_type, started) -> DocumentResponse:
     # 4.6. Enhance tables (merged cells, financial parsing)
     result.blocks = [enhance_table_block(block) for block in result.blocks]
 
@@ -126,7 +136,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     # 6. Markdown generation
     markdown = blocks_to_markdown(ordered_blocks)
 
-    return DocumentResponse(
+    response = DocumentResponse(
         document_id=document_id,
         filename=filename,
         file_type=file_type,
@@ -140,3 +150,34 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         preview_pages=preview.pages,
         preview_error=preview.error,
     )
+    _attach_validation(response, temp_path)
+    return response
+
+
+_MAX_REPORT_BYTES = 2_000_000
+
+
+def _attach_validation(response: DocumentResponse, path: Path) -> None:
+    """Run AXTRACT Verify and attach its report. Advisory and fail-safe: nothing here can fail a parse."""
+    if os.environ.get("AXTRACT_VERIFY", "1").strip().lower() in ("0", "false", "off", "no"):
+        return
+    try:
+        from verify.engine import VerifyOptions, verify_extraction
+        from verify.models import ValidationFailure
+        from verify.rollup import build_report
+
+        remaining = deadline.remaining()
+        if remaining < 4:
+            report = build_report([], failure=ValidationFailure(
+                stage="budget", error_type="TimeBudget", message="too little of the request's time budget was left to validate"))
+        else:
+            report = verify_extraction(path, response, VerifyOptions(time_budget_s=min(15.0, remaining - 3)))
+        data = report.model_dump(mode="json")
+        if len(json.dumps(data)) > _MAX_REPORT_BYTES:  # keep very large documents' responses bounded
+            for unit in data["units"]:
+                unit["checks"] = []
+            data["truncated"] = "per-unit check details omitted: the report exceeded its size limit"
+        response.validation = data
+    except Exception:  # noqa: BLE001 - validation must never cost a successful extraction
+        logger.exception("AXTRACT Verify failed; the extraction is returned without a validation report")
+        response.validation = None
