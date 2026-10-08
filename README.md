@@ -392,3 +392,61 @@ flowchart LR
 **Key guarantees:** the LLM never decides a fact and never does arithmetic (it may plan JSON; our DSL computes); document text is untrusted
 and never reaches a prompt if quarantined; every number, citation and suggestion links to document + page + box; if the evidence is weak the
 answer is "Not found" plus what was searched; logs and the audit trail hold ids, hashes and timings only.
+### Deployment Limitation
+
+The current RAG/DealLens deployment is **host-machine dependent**. The backend and RAG services run on the deployment computer, so the host machine must remain powered on for RAG queries to work. If the computer is switched off, the RAG layer is unavailable until the backend host is started again.
+
+A future production deployment can move these services to a continuously running server/cloud instance.
+## Current Metrics
+
+### Parser Benchmark
+
+AXTRACT was tested on a 20-document `allenai/olmOCR-bench` development run.
+
+| Metric | Result |
+|---|---:|
+| Documents processed | 20 |
+| Successful documents | 20 |
+| Failed documents | 0 |
+| Processing success rate | **100%** |
+| Total pages | 20 |
+| Blocks extracted | 715 |
+| Total runtime | 60.21 s |
+| Throughput | 0.33 pages/sec |
+| Mean latency | 14.50 s |
+| Median latency | 8.20 s |
+| P95 latency | 48.12 s |
+| Peak memory | 1.39 GB |
+
+### Category Runtime
+
+| Category | Documents | Mean runtime |
+|---|---:|---:|
+| Headers / Footers | 1 | 3.89 s |
+| arXiv Math | 12 | 8.21 s |
+| Tables | 3 | 21.79 s |
+| Multi-column | 2 | 25.21 s |
+| Old Scans Math | 1 | 30.64 s |
+| Old Scans | 1 | 41.06 s |
+
+> **Important:** The 100% success rate measures whether documents were successfully processed by the pipeline. It is **not an accuracy score**. Extraction accuracy, reading-order accuracy, table fidelity, figure extraction, equation recognition, and provenance quality still require ground-truth evaluation.
+
+### Security Metrics
+
+The security pipeline currently covers:
+
+- Unicode and prompt-injection detection
+- Hidden PDF content
+- Hidden XLSX sheets/rows/columns
+- Hidden PPTX content
+- Office VBA/OLE/DDE detection
+- Suspicious Excel hardcoded financial values
+- Dangerous URI detection
+- Script/event-handler sanitization
+- Spreadsheet formula-injection protection
+
+Security findings are returned separately from normal document content through:
+
+```text
+security_findings[]
+hidden_content[]
