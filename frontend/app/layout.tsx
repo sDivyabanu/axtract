@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Figtree, Inter } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
@@ -20,7 +21,9 @@ export default function RootLayout({
     <html lang="en" className={`h-full antialiased ${inter.variable} ${figtree.variable}`}>
       <body className="min-h-full">
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          <Suspense>
+            <AppShell>{children}</AppShell>
+          </Suspense>
         </AuthProvider>
       </body>
     </html>
