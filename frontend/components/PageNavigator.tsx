@@ -42,7 +42,7 @@ export default function PageNavigator({
     <div className="flex flex-wrap items-center gap-2 text-sm">
       {/* Direct page jump */}
       <div className="flex items-center gap-1">
-        <label className="text-xs text-gray-500">Go to page:</label>
+        <label className="text-xs font-medium text-gray-700">Go to page:</label>
         <input
           type="number"
           min={1}
@@ -51,12 +51,12 @@ export default function PageNavigator({
           onChange={(e) => setGoInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleGo()}
           placeholder="#"
-          className="w-16 rounded border border-gray-300 px-2 py-1 text-xs focus:border-gray-500 focus:outline-none"
+          className="w-16 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-900 shadow-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         <button
           type="button"
           onClick={handleGo}
-          className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-50"
         >
           Go
         </button>
