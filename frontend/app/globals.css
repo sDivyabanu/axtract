@@ -1,14 +1,135 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ AXTRACT design tokens
+   The existing components use Tailwind's gray/blue/green/amber/red scales. Re-pointing those scales at the
+   AXTRACT palette restyles every screen consistently and keeps one source of truth. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-figtree), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-white: #ffffff;
+  --color-gray-50: #f8fafd;
+  --color-gray-100: #f1f3f4;
+  --color-gray-200: #e8eaed;
+  --color-gray-300: #dadce0;
+  --color-gray-400: #9aa0a6;
+  --color-gray-500: #80868b;
+  --color-gray-600: #5f6368;
+  --color-gray-700: #3c4043;
+  --color-gray-800: #28292c;
+  --color-gray-900: #202124;
+
+  --color-blue-50: #e8f0fe;
+  --color-blue-100: #d2e3fc;
+  --color-blue-200: #aecbfa;
+  --color-blue-300: #8ab4f8;
+  --color-blue-400: #669df6;
+  --color-blue-500: #4285f4;
+  --color-blue-600: #1a73e8;
+  --color-blue-700: #1967d2;
+  --color-blue-800: #174ea6;
+  --color-blue-900: #123c80;
+
+  --color-green-50: #e6f4ea;
+  --color-green-100: #ceead6;
+  --color-green-200: #a8dab5;
+  --color-green-300: #81c995;
+  --color-green-400: #5bb974;
+  --color-green-500: #34a853;
+  --color-green-600: #1e8e3e;
+  --color-green-700: #188038;
+  --color-green-800: #137333;
+
+  --color-amber-50: #fef7e0;
+  --color-amber-100: #feefc3;
+  --color-amber-200: #fde293;
+  --color-amber-300: #fdd663;
+  --color-amber-400: #fcc934;
+  --color-amber-500: #f9ab00;
+  --color-amber-600: #e37400;
+  --color-amber-700: #b06000;
+  --color-amber-800: #915200;
+  --color-yellow-50: #fef7e0;
+  --color-yellow-100: #feefc3;
+  --color-yellow-300: #fdd663;
+  --color-yellow-600: #e37400;
+  --color-yellow-700: #b06000;
+  --color-yellow-800: #915200;
+
+  --color-red-50: #fce8e6;
+  --color-red-100: #fad2cf;
+  --color-red-200: #f6aea9;
+  --color-red-300: #f28b82;
+  --color-red-400: #ee675c;
+  --color-red-500: #ea4335;
+  --color-red-600: #d93025;
+  --color-red-700: #c5221f;
+  --color-red-800: #a50e0e;
+
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+  --shadow-card: 0 1px 2px rgb(60 64 67 / 0.08), 0 1px 3px 1px rgb(60 64 67 / 0.06);
+  --shadow-lift: 0 1px 3px rgb(60 64 67 / 0.12), 0 4px 8px 3px rgb(60 64 67 / 0.08);
+}
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #202124;
+  --ai-gradient: linear-gradient(135deg, #1a73e8 0%, #6b5bd2 100%);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-figtree), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #d2e3fc;
+}
+
+/* Subtle page entrance and list reveal; disabled for reduced motion below. */
+@keyframes ax-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ax-rise {
+  animation: ax-rise 0.35s ease-out both;
+}
+@keyframes ax-shimmer {
+  to { background-position: -200% 0; }
+}
+.ax-skeleton {
+  background: linear-gradient(90deg, #f1f3f4 25%, #e8eaed 37%, #f1f3f4 63%);
+  background-size: 200% 100%;
+  animation: ax-shimmer 1.4s linear infinite;
+  border-radius: 0.5rem;
+}
+.ax-ai-text {
+  background: var(--ai-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .ax-rise, .ax-skeleton { animation: none; }
 }
 
 /* Live processing pipeline (components/ProcessingPipeline.tsx) */

@@ -46,7 +46,7 @@ test("events change only the stage they name, in server order", () => {
 });
 
 test("stale, duplicate and unknown events are ignored", () => {
-  let p = applyStage(initialPipeline(), ev("security", "completed", 5));
+  const p = applyStage(initialPipeline(), ev("security", "completed", 5));
   const same = applyStage(p, ev("security", "running", 4));
   assert.equal(same, p);
   assert.equal(applyStage(p, ev("security", "failed", 5)), p);

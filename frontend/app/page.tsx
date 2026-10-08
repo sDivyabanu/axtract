@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Loader2, Plus, RotateCcw, ShieldCheck, Sparkles, X, XCircle } from "lucide-react";
 import FileDropzone from "@/components/FileDropzone";
+import RecentDocuments from "@/components/RecentDocuments";
 import ProcessingPipeline from "@/components/ProcessingPipeline";
 import ResultView from "@/components/ResultView";
 import {
@@ -30,6 +32,8 @@ interface DocTab {
   savedId: string | null;
   // Real progress reported by the backend while this file is processed (null for saved results opened from history).
   pipeline: PipelineState | null;
+  // The uploaded file, kept so a failed document can be retried.
+  file: File | null;
 }
 
 let nextTabId = 1;
@@ -56,6 +60,7 @@ export default function Home() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
   const controllers = useRef(new Map<string, AbortController>());
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -84,6 +89,7 @@ export default function Home() {
               error: null,
               savedId,
               pipeline: null,
+              file: null,
             },
           ]);
           setActiveTabId((current) => current ?? `tab-${nextTabId - 1}`);
@@ -99,6 +105,7 @@ export default function Home() {
               result: null,
               savedId: null,
               pipeline: null,
+              file: null,
               error:
                 err instanceof ApiError
                   ? `[${err.code}] ${err.message}`
@@ -120,8 +127,10 @@ export default function Home() {
     if (pendingFiles.length === 0 || isParsing) return;
     setIsParsing(true);
     setNotice(null);
+    setShowUpload(false);
 
     const newTabs: DocTab[] = pendingFiles.map((file) => ({
+      file,
       id: `tab-${nextTabId++}`,
       name: file.name,
       status: "parsing",
@@ -147,11 +156,15 @@ export default function Home() {
     }
 
     // Use the live-progress endpoint; an older backend without it gets the plain request instead.
-    async function streamOrPlain<T>(streamed: () => Promise<T>, plain: () => Promise<T>): Promise<T> {
+    async function streamOrPlain<T>(tabId: string, streamed: () => Promise<T>, plain: () => Promise<T>): Promise<T> {
       try {
         return await streamed();
       } catch (err) {
-        if (err instanceof ApiError && err.code === "STREAM_UNAVAILABLE") return plain();
+        if (err instanceof ApiError && err.code === "STREAM_UNAVAILABLE") {
+          // No live events from this server: show an honest indeterminate state, not stages that never reported.
+          setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, pipeline: null } : t)));
+          return plain();
+        }
         throw err;
       }
     }
@@ -175,6 +188,7 @@ export default function Home() {
         if (user) {
           try {
             const saved = await streamOrPlain(
+              tabId,
               () => uploadDocumentStream(file, handlers),
               () => uploadDocument(file),
             );
@@ -186,12 +200,14 @@ export default function Home() {
               "Documents could not be saved to your history, so they were parsed without saving.",
             );
             result = await streamOrPlain(
+              tabId,
               () => parseDocumentStream(file, handlers),
               () => parseDocument(file),
             );
           }
         } else {
           result = await streamOrPlain(
+            tabId,
             () => parseDocumentStream(file, handlers),
             () => parseDocument(file),
           );
@@ -280,20 +296,62 @@ export default function Home() {
         }
       : undefined;
 
-  return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">AXTRACT</h1>
-        <p className="text-sm text-gray-500">
-          Universal document ingestion engine
-        </p>
-      </div>
+  function removePending(index: number) {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }
 
-      <FileDropzone
-        files={pendingFiles}
-        onFilesSelected={handleFilesSelected}
-        disabled={isParsing}
-      />
+  function retryTab(tab: DocTab) {
+    if (!tab.file) return;
+    setPendingFiles((prev) => [...prev, tab.file as File]);
+    closeTab(tab.id);
+  }
+
+  return (
+    <main className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-6">
+      {tabs.length === 0 && (
+        <section className="ax-rise relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-10 shadow-card sm:px-12 sm:py-14">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-[0.14] blur-3xl"
+            style={{ background: "var(--ai-gradient)" }}
+          />
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+            <Sparkles size={14} /> Evidence-backed document intelligence
+          </span>
+          <h2 className="mt-4 max-w-3xl font-display text-3xl font-semibold leading-tight tracking-tight text-gray-900 sm:text-5xl">
+            Turn any document into <span className="ax-ai-text">trusted, structured intelligence.</span>
+          </h2>
+          <p className="mt-4 max-w-2xl text-base text-gray-600 sm:text-lg">
+            Extract text, tables, figures and more — with evidence-backed validation built into every step.
+          </p>
+          <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
+            {["Security scan before extraction", "Independent check against the original file", "Click any block to see its source"].map((t) => (
+              <li key={t} className="flex items-center gap-2">
+                <ShieldCheck size={16} className="text-blue-600" aria-hidden /> {t}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {tabs.length === 0 || pendingFiles.length > 0 || showUpload ? (
+        <FileDropzone
+          files={pendingFiles}
+          onFilesSelected={handleFilesSelected}
+          onRemoveFile={removePending}
+          disabled={isParsing}
+        />
+      ) : (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowUpload(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-card transition-colors hover:bg-gray-50"
+          >
+            <Plus size={16} /> Add more documents
+          </button>
+        </div>
+      )}
 
       {pendingFiles.length > 0 && (
         <div>
@@ -301,68 +359,78 @@ export default function Home() {
             type="button"
             onClick={parseAll}
             disabled={isParsing}
-            className="rounded-md bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
+            {isParsing && <Loader2 size={16} className="animate-spin" />}
             {isParsing
-              ? "Parsing…"
-              : `Parse ${pendingFiles.length} ${
-                  pendingFiles.length === 1 ? "Document" : "Documents"
-                }`}
+              ? "Processing…"
+              : `Start extraction · ${pendingFiles.length} ${pendingFiles.length === 1 ? "document" : "documents"}`}
           </button>
         </div>
       )}
 
       {notice && (
-        <div
-          role="status"
-          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800"
-        >
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden />
           {notice}
         </div>
       )}
 
+      {tabs.length === 0 && user && <RecentDocuments />}
+
       {tabs.length > 0 && (
-        <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`group flex max-w-[220px] min-w-[140px] shrink-0 items-center gap-2 rounded-t-lg border border-b-0 px-3 py-2 text-sm transition-colors ${
-                tab.id === activeTabId
-                  ? "border-gray-200 bg-white font-medium text-gray-900"
-                  : "border-transparent bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setActiveTabId(tab.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                title={tab.name}
+        <div role="tablist" aria-label="Documents" className="flex gap-1.5 overflow-x-auto pb-1">
+          {tabs.map((tab) => {
+            const active = tab.id === activeTabId;
+            const vstatus = tab.result?.validation?.status;
+            const dot =
+              vstatus === "verified" || vstatus === "recovered"
+                ? "text-green-600"
+                : vstatus === "failed"
+                  ? "text-red-600"
+                  : vstatus
+                    ? "text-amber-600"
+                    : "text-gray-400";
+            return (
+              <div
+                key={tab.id}
+                className={`group flex max-w-[260px] min-w-[150px] shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-sm transition-all ${
+                  active
+                    ? "border-blue-200 bg-blue-50 font-medium text-blue-900 shadow-card"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
               >
-                {tab.status === "parsing" && (
-                  <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-                )}
-                {tab.status === "error" && (
-                  <span className="shrink-0 text-red-500" aria-hidden>
-                    !
-                  </span>
-                )}
-                <span className="truncate">{tab.name}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => closeTab(tab.id)}
-                aria-label={`Close ${tab.name}`}
-                className="shrink-0 rounded px-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-200 hover:text-gray-700 group-hover:opacity-100"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTabId(tab.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  title={tab.name}
+                >
+                  {tab.status === "parsing" && <Loader2 size={15} className="shrink-0 animate-spin text-blue-600" aria-label="Processing" />}
+                  {tab.status === "error" && <XCircle size={15} className="shrink-0 text-red-600" aria-label="Failed" />}
+                  {tab.status === "done" && (
+                    <CheckCircle2 size={15} className={`shrink-0 ${dot}`} aria-label={vstatus ? `Validation: ${vstatus.replace(/_/g, " ")}` : "Done"} />
+                  )}
+                  <span className="truncate">{tab.name}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => closeTab(tab.id)}
+                  aria-label={`Close ${tab.name}`}
+                  className="shrink-0 rounded-full p-0.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {activeTab && (
-        <div className="min-w-0">
+        <div className="ax-rise min-w-0" key={activeTab.id}>
           {activeTab.pipeline && (
             <div className="mb-4">
               <ProcessingPipeline
@@ -375,16 +443,24 @@ export default function Home() {
             </div>
           )}
           {activeTab.status === "parsing" && !activeTab.pipeline && (
-            <p className="text-sm text-gray-500">
-              Parsing “{activeTab.name}”, please wait…
-            </p>
+            <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+              <Loader2 size={18} className="animate-spin text-blue-600" aria-hidden />
+              Processing “{activeTab.name}”…
+            </div>
           )}
           {activeTab.status === "error" && (
-            <div
-              role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700"
-            >
-              {activeTab.error}
+            <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <XCircle size={18} className="shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">{activeTab.error}</span>
+              {activeTab.file && (
+                <button
+                  type="button"
+                  onClick={() => retryTab(activeTab)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                >
+                  <RotateCcw size={14} /> Try again
+                </button>
+              )}
             </div>
           )}
           {activeTab.status === "done" && activeTab.result && (

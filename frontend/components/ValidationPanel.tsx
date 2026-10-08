@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AlertTriangle, BadgeCheck, CircleHelp, ShieldAlert, ShieldCheck, Undo2, XOctagon } from "lucide-react";
 import type {
   IssueSeverity,
   ValidationIssue,
@@ -30,6 +31,32 @@ const STATUS: Record<ValidationStatus, { label: string; badge: string; box: stri
   review_required: { label: "REVIEW REQUIRED", badge: "bg-amber-100 text-amber-800 border-amber-300", box: "border-amber-200 bg-amber-50/40", dot: "bg-amber-500" },
   failed: { label: "FAILED", badge: "bg-red-100 text-red-800 border-red-300", box: "border-red-200 bg-red-50/40", dot: "bg-red-500" },
   not_verifiable: { label: "NOT VERIFIABLE", badge: "bg-gray-100 text-gray-700 border-gray-300", box: "border-gray-200 bg-gray-50/60", dot: "bg-gray-400" },
+};
+
+const STATUS_ICON = {
+  verified: BadgeCheck,
+  recovered: Undo2,
+  review_required: AlertTriangle,
+  failed: XOctagon,
+  not_verifiable: CircleHelp,
+} as const;
+
+const STATUS_MEANING: Record<ValidationStatus, string> = {
+  verified: "Independent evidence from the original file agrees with the extraction.",
+  recovered: "A flagged unit was re-read and the accepted reading matches the source.",
+  review_required: "Some units disagree with, or could not be fully confirmed against, the source. Review the issues below.",
+  failed: "Validation could not complete, or found critical problems.",
+  not_verifiable: "There is no independent evidence to check this extraction against. That is not a pass.",
+};
+
+const LAYER_LABEL: Record<string, string> = {
+  integrity: "Integrity",
+  extraction_integrity: "Integrity",
+  completeness: "Completeness",
+  content: "Content correctness",
+  structure: "Structure",
+  reading_order: "Reading order",
+  inventory: "Source inventory",
 };
 
 const SEVERITY: Record<IssueSeverity, { label: string; cls: string }> = {
@@ -96,48 +123,110 @@ export default function ValidationPanel({
     { key: "not_verifiable", n: s.not_verifiable },
   ];
 
+  const StatusIcon = STATUS_ICON[validation.status] ?? CircleHelp;
+  const verifiedUnits = s.verified + s.recovered;
+  const checkRows = Object.entries(validation.checks ?? {});
+  const metric = "rounded-lg border border-gray-200 bg-white p-3";
+
   return (
-    <div className={`rounded-lg border p-4 ${style.box}`} data-testid="validation-panel">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold">AXTRACT Verify</h2>
-          <p className="text-xs text-gray-500">
-            Independent check of this extraction against the original file. A validation result, not an accuracy score.
-          </p>
-        </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-bold tracking-wide ${style.badge}`} data-testid="validation-status">
-          {style.label}
+    <div className={`ax-rise overflow-hidden rounded-xl border bg-white shadow-card ${style.box}`} data-testid="validation-panel">
+      <div className="flex flex-wrap items-start gap-4 p-4 sm:p-5">
+        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${style.badge}`} aria-hidden>
+          <StatusIcon size={26} />
         </span>
+        <div className="min-w-0 flex-1 basis-64">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-lg font-semibold text-gray-900">AXTRACT Verify</h2>
+            <span className={`rounded-full border px-3 py-0.5 text-xs font-bold tracking-wide ${style.badge}`} data-testid="validation-status">
+              {style.label}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-gray-700">{STATUS_MEANING[validation.status]}</p>
+          <p className="mt-0.5 text-sm text-gray-600">{validation.status_reason}</p>
+        </div>
       </div>
 
-      <p className="mt-2 text-sm text-gray-700">{validation.status_reason}</p>
-
       {validation.failure && (
-        <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700" role="alert">
+        <div className="mx-4 mb-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 sm:mx-5" role="alert">
           Validation could not complete (stage “{validation.failure.stage}”: {validation.failure.error_type}). The
           extraction below is unaffected.
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+      <div className="grid grid-cols-2 gap-2 px-4 pb-4 sm:px-5 lg:grid-cols-5">
+        <div className={metric} title={s.definitions?.evidence_coverage}>
+          <p className="text-xs text-gray-500">Evidence coverage</p>
+          <p className="font-display text-2xl font-semibold text-gray-900">{pct(s.evidence_coverage)}</p>
+          <p className="text-[11px] text-gray-500">of units with independent evidence</p>
+        </div>
+        <div className={metric} title={s.definitions?.agreement_rate}>
+          <p className="text-xs text-gray-500">Agreement rate</p>
+          <p className="font-display text-2xl font-semibold text-gray-900">{pct(s.agreement_rate)}</p>
+          <p className="text-[11px] text-gray-500">{s.checks_agreed} of {s.checks_decided} checks agreed</p>
+        </div>
+        <div className={metric}>
+          <p className="text-xs text-gray-500">Issues detected</p>
+          <p className="font-display text-2xl font-semibold text-gray-900">{s.issues_total}</p>
+          <p className="text-[11px] text-gray-500">{s.issues_open} open</p>
+        </div>
+        <div className={metric}>
+          <p className="text-xs text-gray-500">Verified units</p>
+          <p className="font-display text-2xl font-semibold text-green-700">{verifiedUnits}</p>
+          <p className="text-[11px] text-gray-500">of {s.units_total}</p>
+        </div>
+        <div className={metric}>
+          <p className="text-xs text-gray-500">Not verifiable</p>
+          <p className="font-display text-2xl font-semibold text-gray-700">{s.not_verifiable}</p>
+          <p className="text-[11px] text-gray-500">no independent evidence</p>
+        </div>
+      </div>
+      <p className="px-4 pb-3 text-[11px] text-gray-500 sm:px-5">
+        Evidence coverage and agreement rate describe how much was checked and how much of that agreed. They are not accuracy scores.
+      </p>
+
+      <div className="flex flex-wrap gap-1.5 px-4 pb-3 text-xs sm:px-5">
         {counts.map(({ key, n }) => (
-          <span key={key} className="inline-flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1">
+          <span key={key} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1">
             <span className={`h-2 w-2 rounded-full ${STATUS[key].dot}`} />
             <strong>{n}</strong> {STATUS[key].label.toLowerCase()}
           </span>
         ))}
-        <span className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-gray-600" title={s.definitions?.evidence_coverage}>
-          Evidence coverage <strong>{pct(s.evidence_coverage)}</strong>
-        </span>
-        <span className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-gray-600" title={s.definitions?.agreement_rate}>
-          Agreement <strong>{pct(s.agreement_rate)}</strong> ({s.checks_agreed}/{s.checks_decided})
-        </span>
       </div>
 
+      {checkRows.length > 0 && (
+        <div className="border-t border-gray-200 bg-white/70 px-4 py-3 sm:px-5">
+          <h3 className="mb-2 text-sm font-semibold text-gray-900">Validation layers</h3>
+          <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {checkRows.map(([name, c]) => {
+              const ok = c.failed === 0 && c.passed > 0;
+              const none = c.passed === 0 && c.failed === 0;
+              return (
+                <li key={name} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs">
+                  {c.failed > 0 ? (
+                    <ShieldAlert size={16} className="shrink-0 text-amber-600" aria-hidden />
+                  ) : ok ? (
+                    <ShieldCheck size={16} className="shrink-0 text-green-600" aria-hidden />
+                  ) : (
+                    <CircleHelp size={16} className="shrink-0 text-gray-400" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-gray-900">{LAYER_LABEL[name] ?? name.replace(/_/g, " ")}</span>
+                    <span className="block text-gray-500">
+                      {none ? `${c.not_verifiable} not verifiable` : `${c.passed} passed · ${c.failed} flagged${c.not_verifiable ? ` · ${c.not_verifiable} not verifiable` : ""}`}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <div className="border-t border-gray-200 px-4 py-3 sm:px-5">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="mt-3 text-xs font-medium text-gray-600 underline-offset-2 hover:underline"
+        className="text-sm font-medium text-blue-700 hover:underline"
         aria-expanded={open}
       >
         {open ? "Hide details" : `Show details (${blocking.length} to review, ${notes.length} notes)`}
@@ -218,7 +307,7 @@ export default function ValidationPanel({
                   type="button"
                   disabled={actions.busy}
                   onClick={() => void actions.onEscalate()}
-                  className="rounded border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-full border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
                 >
                   {actions.busy ? "Working…" : "Re-check flagged units"}
                 </button>
@@ -231,7 +320,7 @@ export default function ValidationPanel({
                         void actions.onPromote(supported.map((r) => r.id), "Accepted: candidate matches the independent source evidence");
                       }
                     }}
-                    className="rounded bg-gray-900 px-3 py-1.5 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+                    className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     Accept {supported.length} supported recovery{supported.length === 1 ? "" : "ies"}
                   </button>
@@ -247,6 +336,7 @@ export default function ValidationPanel({
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -270,7 +360,7 @@ function IssueRow({
   const ev = issue.evidence[0];
   const located = hasLocation(issue);
   return (
-    <li className={`rounded border bg-white ${active ? "border-gray-900 ring-1 ring-gray-900" : "border-gray-200"}`}>
+    <li className={`rounded-lg border bg-white transition-shadow ${active ? "border-blue-600 ring-2 ring-blue-100" : "border-gray-200 hover:shadow-card"}`}>
       <div className="flex items-start gap-2 p-2">
         <button
           type="button"
