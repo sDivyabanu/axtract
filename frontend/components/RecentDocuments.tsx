@@ -55,7 +55,7 @@ export default function RecentDocuments() {
           return (
             <li key={d.id}>
               <Link
-                href={`/?doc=${d.id}`}
+                href={`/workspace?doc=${d.id}`}
                 className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-card transition-all hover:border-blue-300 hover:shadow-lift"
               >
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${k.cls}`} aria-hidden>

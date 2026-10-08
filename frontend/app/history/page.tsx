@@ -176,7 +176,7 @@ export default function HistoryPage() {
           <FolderOpen size={32} className="mx-auto text-gray-400" aria-hidden />
           <p className="mt-3 font-medium text-gray-900">No documents yet</p>
           <p className="text-sm text-gray-500">Documents you process while signed in are saved here.</p>
-          <Link href="/" className="mt-4 inline-block rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <Link href="/workspace" className="mt-4 inline-block rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700">
             Start an extraction
           </Link>
         </div>
@@ -195,7 +195,7 @@ export default function HistoryPage() {
                 <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${k.cls}`} aria-hidden>
                   <k.Icon size={22} />
                 </span>
-                <Link href={`/?doc=${doc.id}`} className="min-w-0 flex-1 basis-48">
+                <Link href={`/workspace?doc=${doc.id}`} className="min-w-0 flex-1 basis-48">
                   <span className="block truncate font-medium text-gray-900 hover:text-blue-700">{doc.original_filename}</span>
                   <span className="block text-xs text-gray-500">
                     {k.label} · {formatSize(doc.file_size_bytes)} · {doc.block_count ?? "—"} blocks · {formatDate(doc.created_at)}
@@ -203,7 +203,7 @@ export default function HistoryPage() {
                 </Link>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusChip(doc.status)}`}>{doc.status}</span>
                 <div className="flex items-center gap-1">
-                  <Link href={`/?doc=${doc.id}`} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                  <Link href={`/workspace?doc=${doc.id}`} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50">
                     Open
                   </Link>
                   <button type="button" onClick={() => handleDownload(doc)} aria-label={`Download ${doc.original_filename}`} title="Download original" className="rounded-full p-2 text-gray-600 hover:bg-gray-100">
