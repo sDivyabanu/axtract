@@ -48,7 +48,14 @@ class DocumentBlock(BaseModel):
     requires_review: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-
+class SecurityFinding(BaseModel):
+    type: str
+    severity: Literal["low", "medium", "high", "critical"]
+    detail: str
+    block_id: str | None = None
+    page: int | None = None
+    bbox: BBox | None = None
+    action_taken: str = "flagged"
 class DocumentResponse(BaseModel):
     document_id: str
     filename: str
@@ -59,7 +66,10 @@ class DocumentResponse(BaseModel):
     blocks: list[DocumentBlock]
     markdown: str = ""
     errors: list[DocumentError] = Field(default_factory=list)
-    # Optional preview info. A failed preview never fails the parse: it sets preview_error.
+
+    security_findings: list[SecurityFinding] = Field(default_factory=list)
+    hidden_content: list[dict[str, Any]] = Field(default_factory=list)
+
     preview_available: bool = False
     preview_pages: int = 0
     preview_error: str | None = None

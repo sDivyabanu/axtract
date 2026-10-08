@@ -18,6 +18,7 @@ Every match records WHY it was made (which signals agreed), and matching is one-
 
 from __future__ import annotations
 
+import html
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -113,7 +114,8 @@ class CompletenessOutcome:
 
 
 def block_text(b: DocumentBlock) -> str:
-    parts = [b.content if isinstance(b.content, str) else ""]
+    # undo the output sanitiser's reversible HTML escaping (see verify.content.out_text)
+    parts = [html.unescape(b.content) if isinstance(b.content, str) else ""]
     rows = b.metadata.get("rows") if isinstance(b.metadata, dict) else None
     if b.type == T.TABLE and isinstance(rows, list):
         parts.append(" ".join(str(c) for r in rows if isinstance(r, list) for c in r if c))

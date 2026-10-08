@@ -22,8 +22,19 @@ logger = logging.getLogger("parseanything")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # The database pool is created lazily on the first persistence request, so an
-    # unreachable or unconfigured database never prevents parsing from working.
+    # Decide the DB path up front (PostgreSQL vs Supabase REST) so the first
+    # request doesn't pay for the probe; an unreachable or unconfigured
+    # database never prevents parsing from working.
+    if os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL"):
+        from db.prisma_client import _use_rest
+        try:
+            rest_mode = await _use_rest()
+            logger.info(
+                "Database ready (%s).",
+                "Supabase REST over HTTPS" if rest_mode else "PostgreSQL",
+            )
+        except Exception:
+            logger.warning("Database unavailable; DB-backed features degraded.")
     yield
     if os.environ.get("DATABASE_URL"):
         from db.prisma_client import close_pool

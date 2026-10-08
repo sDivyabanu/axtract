@@ -1,51 +1,59 @@
-## Security
+# Axtract — What We Built Beyond the Brief
 
-- **Hidden content detection** (S15) — Detects white-on-white text, sub-1pt fonts,
-  off-page bounding boxes, and text hidden under images in PDFs; detects hidden
-  sheets and hidden rows/columns in Excel. All hidden content is moved to a
-  separate `hidden_content[]` field and never reaches the downstream LLM.
+## Security (not in DQCL, our addition)
 
-- **Prompt injection scanning** (S15) — Scans every extracted text block across
-  all formats for adversarial phrases ("ignore previous instructions", "you are
-  now", "system prompt" etc.); flags `prompt_injection_suspected` with the block
-  ID. Content is flagged, never deleted.
+- Every document is scanned for hidden adversarial content before
+  a single token reaches the downstream LLM
+- White-on-white text, sub-1pt fonts, off-page text and text hidden
+  under images are separated into a quarantine field — never in the
+  main output
+- Prompt injection phrases are detected with aggressive normalisation
+  that catches leetspeak, spaced letters and mixed-case bypasses
+- Zero-width characters and bidi override controls that can reverse
+  displayed text are stripped and flagged
+- Mixed Latin/Cyrillic/Greek words (homoglyphs) are flagged so entity
+  matching cannot be fooled by a visually identical but different string
+- PDF JavaScript, OpenAction, Launch and EmbeddedFiles are detected
+  and reported — never executed
+- Office VBA macros, DDE field instructions and OLE objects are
+  detected and reported — never executed
+- Excel financial cells with hardcoded values and no formula backing
+  are flagged as manual override suspected — a red flag in diligence
+- Remote template references in Office files that would silently fetch
+  a URL on open are detected and blocked — zero network requests made
+- All extracted text is HTML-escaped and dangerous URIs are neutralised
+  before reaching any output
+- Every security control has a synthetic finance-domain test file and
+  an auto-scorer that prints PASS/FAIL with timing in one command
 
-- **Unicode normalisation & trick detection** (S16) — NFKC-normalises all text;
-  strips and flags zero-width characters (U+200B–U+200D, U+2060, U+FEFF) and
-  bidirectional override controls (U+202A–U+202E) that can reverse displayed text;
-  flags mixed Latin/Cyrillic/Greek words as `homoglyph_suspected`. All changes
-  recorded in block metadata.
+## Financial intelligence (beyond basic extraction)
 
-- **PDF active content detection** (S10) — Scans the PDF object tree for
-  JavaScript, OpenAction, AA, Launch, EmbeddedFiles and SubmitForm entries.
-  Nothing is executed; each detection becomes a `security_finding` with
-  `action_taken: "not_executed"`. Parse succeeds normally.
+- Financial numbers are parsed into actual floats — parenthesized
+  negatives, thousands separators, currency symbols and percentages
+  are all handled, not left as strings
+- Tables split across page breaks are detected and stitched into one
+  logical table with correct headers — not two broken half-tables
+- Reading order is reconstructed across multi-column layouts so left
+  and right columns never interleave
 
-- **Office macro, DDE & OLE detection** (S11) — Detects `vbaProject.bin` (VBA
-  macros), DDEAUTO field instructions, and embedded OLE objects in DOCX/XLSX/PPTX.
-  Nothing is executed; findings reported per block.
+## Trustworthiness (beyond what parsers normally provide)
 
-- **Excel formula integrity / manual override detection** (F28) — Loads workbooks
-  with `data_only=False` to retrieve formula expressions alongside values. Financial
-  cells (Total, EBITDA, Revenue, Net Income) with a hardcoded value and no formula
-  backing are flagged `manual_override_suspected` — a red flag in diligence that a
-  number may have been altered.
+- Every extracted block carries its source page and normalised
+  bounding box so any number can be traced back to its exact location
+- Confidence is preserved from the real extractor signal and is never
+  fabricated — deterministic extractors get null, not an invented score
+- Ambiguous and low-confidence blocks are flagged requires_review
+  instead of being hallucinated or silently dropped
+- Hidden content is quarantined in its own field so the main body
+  seen by the LLM is clean and the analyst can inspect what was hidden
 
-- **Remote template & external link detection** (S12) — Parses Office `.rels`
-  files for `TargetMode="External"` relationships (e.g. `attachedTemplate` fetching
-  a remote `.dotx`). Flags every external reference; makes zero network requests.
-  Prevents SSRF and silent tracking via counterparty documents.
+## Production readiness
 
-- **XSS-safe output & formula injection prevention** (S17) — HTML-escapes all
-  extracted text in HTML/Markdown outputs; neutralises `javascript:`, `vbscript:`
-  and `data:` URIs. Prefixes CSV/XLSX export cells beginning with `=`, `+`, `-`,
-  `@` with `'` to prevent formula injection.
-
-- **Schema validation on every API response** (S19) — Every response is validated
-  against the Pydantic output model before returning. A validation failure becomes
-  a logged internal error, never a malformed payload reaching the caller.
-
-- **Security gauntlet** (F34) — Synthetic malicious test files generated by
-  `tests/gauntlet/make_gauntlet.py` (no real malware; all locally generated at
-  safe sizes). Single command scores all controls: error code, time, peak memory,
-  PASS/FAIL per file. Covers all controls above.
+- One API endpoint handles all supported formats — no per-format
+  tool selection required
+- File type is verified from magic bytes, not the filename extension
+- Every failure mode returns a structured error code within 60 seconds
+  — no crashes, no hangs, no empty responses
+- Output is validated against the Pydantic schema before returning —
+  a broken internal result never reaches the caller as a malformed
+  payload

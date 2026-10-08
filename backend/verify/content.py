@@ -23,6 +23,7 @@ equation conversions, text inside pictures, formula text, and anything produced 
 
 from __future__ import annotations
 
+import html
 import re
 from collections import Counter
 from datetime import datetime, timedelta
@@ -72,11 +73,17 @@ def is_ocr_block(b: DocumentBlock) -> bool:
 
 
 def out_text(b: DocumentBlock) -> str:
-    """The block's text exactly once (a table's content and its cells are the same words)."""
+    """The block's text exactly once (a table's content and its cells are the same words).
+
+    AXTRACT's output sanitiser HTML-escapes block text (an apostrophe becomes &#x27;, & becomes &amp;).
+    That is a reversible encoding for safe display, not a change of content, so it is undone here;
+    otherwise every apostrophe would look like an invented word. Anything the sanitiser REMOVES (script
+    tags, event handlers) is genuinely absent from the output and is still reported as missing.
+    """
     rows = b.metadata.get("rows") if isinstance(b.metadata, dict) else None
     if b.type == T.TABLE and isinstance(rows, list):
         return " ".join(str(c) for r in rows if isinstance(r, list) for c in r if c)
-    return b.content if isinstance(b.content, str) else ""
+    return html.unescape(b.content) if isinstance(b.content, str) else ""
 
 
 def _clip(s: str, n: int = 200) -> str:

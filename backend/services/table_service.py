@@ -300,6 +300,119 @@ def merge_two_tables(table1: DocumentBlock, table2: DocumentBlock) -> DocumentBl
     )
 
 
+def reconstruct_table_from_ocr(
+    blocks: list["DocumentBlock"], page: int
+) -> tuple["DocumentBlock", list["DocumentBlock"]] | None:
+    """Rebuild a table from OCR text blocks on one page using box geometry.
+
+    Groups OCR blocks into visual lines (y) and columns (x), then keeps the
+    structure only when it genuinely looks tabular: at least two lines that
+    align into at least two consistent columns. Prose (one full-width block
+    per line) never qualifies. Returns ``(table_block, consumed_blocks)``
+    or ``None`` when no confident table exists.
+    """
+    ocr = [
+        b for b in blocks
+        if b.page == page and b.bbox and b.extractor == "rapidocr"
+        and b.type == BlockType.PARAGRAPH
+    ]
+    if len(ocr) < 4:
+        return None
+
+    def yc(b) -> float:
+        return (b.bbox[1] + b.bbox[3]) / 2
+
+    heights = sorted(b.bbox[3] - b.bbox[1] for b in ocr)
+    med_h = max(heights[len(heights) // 2], 0.004)
+
+    # 1. visual lines: y-centers within 0.6 * median height
+    lines: list[list] = []
+    for b in sorted(ocr, key=yc):
+        if lines and abs(yc(b) - sum(yc(x) for x in lines[-1]) / len(lines[-1])) <= 0.6 * med_h:
+            lines[-1].append(b)
+        else:
+            lines.append([b])
+    for ln in lines:
+        ln.sort(key=lambda b: b.bbox[0])
+
+    multi = [ln for ln in lines if len(ln) >= 2]
+    if len(multi) < 2:
+        return None
+
+    # 2. column clusters from left edges of blocks in multi-cell lines
+    #    (left edges are stable for left-aligned columns; numbers under a
+    #    header still start near the same x)
+    edges = sorted(b.bbox[0] for ln in multi for b in ln)
+    clusters: list[list[float]] = []
+    for e in edges:
+        if clusters and e - clusters[-1][-1] <= 0.045:
+            clusters[-1].append(e)
+        else:
+            clusters.append([e])
+    col_lefts = [sum(c) / len(c) for c in clusters]
+    if len(col_lefts) < 2:
+        return None
+
+    # 3. assign blocks to columns; a line is a table row only when every
+    #    block maps cleanly to a distinct column
+    tol = 0.055
+    grid: list[tuple[list, list[str]]] = []
+    for ln in multi:
+        row: list[str | None] = [None] * len(col_lefts)
+        ok = True
+        for b in ln:
+            ci = min(range(len(col_lefts)), key=lambda i: abs(b.bbox[0] - col_lefts[i]))
+            if abs(b.bbox[0] - col_lefts[ci]) > tol or row[ci] is not None:
+                ok = False
+                break
+            row[ci] = " ".join(b.content.split())
+        if ok:
+            grid.append((ln, [" ".join(r.split()) if r else "" for r in row]))  # type: ignore[union-attr]
+
+    if len(grid) < 2:
+        return None
+
+    rows = [r for _, r in grid]
+    n_cols = len(col_lefts)
+    cells = sum(1 for r in rows for c in r if c)
+    if n_cols < 2 or len(rows) < 2 or cells < 6 or cells / (len(rows) * n_cols) < 0.55:
+        return None
+    strong_cols = sum(
+        1 for c in range(n_cols) if sum(1 for r in rows if r[c]) >= 2
+    )
+    if strong_cols < 2:
+        return None
+
+    # 4. build the block
+    consumed = [b for ln, _ in grid for b in ln]
+    x0 = min(b.bbox[0] for b in consumed)
+    y0 = min(b.bbox[1] for b in consumed)
+    x1 = max(b.bbox[2] for b in consumed)
+    y1 = max(b.bbox[3] for b in consumed)
+    conf = min(b.confidence or 0.0 for b in consumed) or None
+
+    content = "\n".join(" | ".join(r) for r in rows)
+    block = DocumentBlock(
+        id=f"p{page}-ocr-table",
+        type=BlockType.TABLE,
+        content=content,
+        page=page,
+        bbox=(round(x0, 6), round(y0, 6), round(x1, 6), round(y1, 6)),
+        confidence=round(conf, 4) if conf else None,
+        extractor="rapidocr",
+        reading_order=None,
+        requires_review=False,
+        metadata={
+            "rows": rows,
+            "row_count": len(rows),
+            "col_count": n_cols,
+            "header": rows[0],
+            "source": "ocr_reconstruction",
+        },
+    )
+    return block, consumed
+
+
 def enhance_table_block(block: DocumentBlock) -> DocumentBlock:
     """Enhance a table block with advanced parsing metadata."""
     if block.type != "table":

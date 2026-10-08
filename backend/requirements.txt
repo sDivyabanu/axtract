@@ -46,3 +46,4 @@ httpx
 pytest
 reportlab          # BSD: fixture PDFs
 matplotlib         # fixture charts / rendered equations
+python-dotenv

@@ -15,12 +15,37 @@ interface AuthState {
   session: Session | null;
   loading: boolean;
   configured: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: string | null; confirmed?: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
+
+function friendlyAuthError(error: { message?: string; code?: string }): string {
+  const msg = error.message ?? "";
+  const code = error.code ?? "";
+  const lower = msg.toLowerCase();
+  if (code === "over_email_send_rate_limit" || lower.includes("rate limit")) {
+    return "Too many verification emails sent — the free tier allows only a few per hour. Wait a bit and retry, or disable 'Confirm email' in the Supabase dashboard (Authentication → Sign In / Providers) to skip email verification entirely.";
+  }
+  if (code === "user_already_exists" || lower.includes("already registered")) {
+    return "An account with this email already exists. Try signing in instead.";
+  }
+  if (code === "invalid_credentials" || lower.includes("invalid login credentials")) {
+    return "Incorrect email or password.";
+  }
+  if (lower.includes("not confirmed")) {
+    return "Please confirm your email first — check your inbox for the verification link.";
+  }
+  if (code === "email_address_invalid" || (lower.includes("invalid") && lower.includes("email"))) {
+    return "Please enter a valid email address.";
+  }
+  if (lower.includes("password")) {
+    return msg;
+  }
+  return msg || "Something went wrong. Please try again.";
+}
 
 const noopAuth: AuthState = {
   user: null,
@@ -69,8 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signUp(email: string, password: string) {
     const supabase = createClient();
     if (!supabase) return { error: "Supabase not configured" };
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return { error: friendlyAuthError(error) };
+    return { error: null, confirmed: !!data.session };
   }
 
   async function signIn(email: string, password: string) {
@@ -80,7 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
     });
-    return { error: error?.message ?? null };
+    if (error) return { error: friendlyAuthError(error) };
+    return { error: null };
   }
 
   async function signOut() {
