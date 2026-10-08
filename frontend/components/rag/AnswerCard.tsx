@@ -20,8 +20,8 @@ function CitationChip({ c, onSelect }: { c: Citation; onSelect: (c: Citation) =>
   return (
     <span className="relative inline-block" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <button type="button" onClick={() => onSelect(c)}
-        className={`mx-0.5 rounded px-1.5 py-0.5 align-baseline text-xs font-semibold ${
-          flagged ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : "bg-blue-100 text-blue-800 hover:bg-blue-200"}`}
+        className={`mx-0.5 rounded-full px-1.5 py-0.5 align-baseline text-xs font-semibold ${
+          flagged ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}`}
         title={`${c.filename}, page ${c.pages.join(", ")}`}>
         {c.n}
       </button>
@@ -67,14 +67,14 @@ export default function AnswerCard({
   }
 
   return (
-    <div data-answer className="rounded-lg border border-gray-200 bg-white p-4">
+    <div data-answer className="rounded-2xl border border-gray-200 bg-white p-6 shadow-card">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">route: {answer.route}</span>
-        <span className={`rounded px-2 py-0.5 ${answer.mode === "extractive" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
+        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600">route: {answer.route}</span>
+        <span className={`rounded-full px-2.5 py-0.5 font-medium ${answer.mode === "extractive" ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"}`}>
           {answer.mode === "llm" ? `LLM · ${answer.model}` : answer.mode === "computed" ? "Computed by table engine · no LLM arithmetic" : "LLM offline – extractive mode"}
         </span>
         {g && (
-          <span className={`rounded px-2 py-0.5 font-medium ${allVerified ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+          <span className={`rounded-full px-2.5 py-0.5 font-medium ${allVerified ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
             Grounding {g.verified}/{g.total} claims verified
           </span>
         )}
@@ -82,13 +82,13 @@ export default function AnswerCard({
       </div>
 
       {answer.refusal ? (
-        <div className="rounded border border-amber-300 bg-amber-50 p-3">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
           <div className="text-base font-semibold text-amber-900">DealLens refused to compute this</div>
           <p className="mt-1 text-sm text-amber-900">{answer.refusal}</p>
           <p className="mt-1 text-xs text-amber-800">Mixing incompatible units would produce a wrong number, so no number is shown.</p>
         </div>
       ) : answer.abstained ? (
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
           <div className="text-base font-semibold text-gray-800">Not found in this data room</div>
           <p className="mt-1 text-sm text-gray-600">
             DealLens will not guess. {answer.abstain_reason === "no_documents" ? "No documents are indexed yet." : "The retrieved passages do not answer the question."}
@@ -135,18 +135,18 @@ export default function AnswerCard({
       {answer.badges.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {answer.badges.map((b) => (
-            <span key={b.label} className={`rounded px-2 py-0.5 text-xs font-medium ${LEVEL[b.level]}`}>⚠ {b.label}</span>
+            <span key={b.label} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${LEVEL[b.level]}`}>⚠ {b.label}</span>
           ))}
         </div>
       )}
 
       {answer.citations.length > 0 && (
         <div className="mt-3 border-t border-gray-100 pt-2">
-          <div className="mb-1 text-xs font-semibold text-gray-500">Sources</div>
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Sources</div>
           <ul className="space-y-1 text-xs text-gray-700">
             {answer.citations.map((c) => (
               <li key={c.n} className="flex items-start gap-2">
-                <button type="button" onClick={() => onSelectCitation(c)} className="rounded bg-blue-100 px-1.5 font-semibold text-blue-800 hover:bg-blue-200">{c.n}</button>
+                <button type="button" onClick={() => onSelectCitation(c)} className="rounded-full bg-blue-100 px-1.5 font-semibold text-blue-600 hover:bg-blue-200">{c.n}</button>
                 <span className="min-w-0">
                   <b>{c.filename}</b> · p.{c.pages.join(", ")}
                   {c.printed_pages.length > 0 && <span className="text-gray-500"> (printed {c.printed_pages.join(", ")})</span>}
@@ -161,7 +161,7 @@ export default function AnswerCard({
       {answer.pipeline !== "baseline" && (
         <div className="mt-3 flex items-center gap-2 text-xs">
           <button type="button" onClick={downloadPack} disabled={packBusy}
-            className="rounded border border-gray-300 px-2 py-1 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            className="rounded-full border border-gray-200 bg-white px-3 py-1 font-medium text-gray-700 shadow-card hover:shadow-lift transition disabled:opacity-50">
             {packBusy ? "Building…" : "Export Evidence Pack (PDF)"}
           </button>
           {packSha && <span className="text-gray-500">{packSha === "failed" ? "Export failed" : `SHA-256 ${packSha.slice(0, 16)}…`}</span>}

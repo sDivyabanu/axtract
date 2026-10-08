@@ -15,7 +15,7 @@ export default function CropPreview({ docId, page, bbox, width = 300 }: { docId:
   const imgH = nat ? (imgW * nat.h) / nat.w : 0;
   const height = Math.min(200, Math.max(36, (y1 - y0) * imgH));
   return (
-    <div className="relative overflow-hidden rounded border border-gray-300 bg-white shadow-lg" style={{ width, height: nat ? height : 60 }}>
+    <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lift" style={{ width, height: nat ? height : 60 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={previewPageUrl(docId, page, 110)}

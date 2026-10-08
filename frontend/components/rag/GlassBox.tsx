@@ -8,13 +8,13 @@ export default function GlassBox({ answer }: { answer: Answer }) {
   const [open, setOpen] = useState(false);
   const g = answer.glass_box;
   return (
-    <div className="mt-3 rounded border border-gray-200 text-xs">
-      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-3 py-1.5 text-gray-600 hover:bg-gray-50">
-        <span className="font-medium">Glass box — how this answer was produced</span>
+    <div className="mt-3 rounded-xl border border-gray-200 text-xs shadow-card">
+      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between rounded-xl px-4 py-2 text-gray-600 hover:bg-gray-50 transition">
+        <span className="font-semibold">Glass box — how this answer was produced</span>
         <span>{open ? "▾" : "▸"}</span>
       </button>
       {open && (
-        <div className="space-y-3 border-t border-gray-200 p-3">
+        <div className="space-y-3 border-t border-gray-200 p-4">
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             <span><b>Route:</b> {g.route}</span>
             <span><b>Mode:</b> {answer.mode === "llm" ? `LLM (${answer.model})` : "extractive (no generation)"}</span>
@@ -25,16 +25,16 @@ export default function GlassBox({ answer }: { answer: Answer }) {
           {!g.llm.available && <p className="rounded bg-amber-50 p-2 text-amber-800">LLM offline: {g.llm.reason}. Answers are extractive.</p>}
 
           <div>
-            <div className="mb-1 font-semibold text-gray-600">Stage timings</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Stage timings</div>
             <div className="flex flex-wrap gap-2">
               {answer.stages.map((s) => (
-                <span key={s.name} className="rounded bg-gray-100 px-2 py-0.5">{s.name} <b>{s.ms} ms</b></span>
+                <span key={s.name} className="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium">{s.name} <b>{s.ms} ms</b></span>
               ))}
             </div>
           </div>
 
           <div>
-            <div className="mb-1 font-semibold text-gray-600">Retrieved evidence (BM25 + dense → RRF → cross-encoder rerank)</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Retrieved evidence (BM25 + dense → RRF → cross-encoder rerank)</div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="text-gray-500">
@@ -63,8 +63,8 @@ export default function GlassBox({ answer }: { answer: Answer }) {
           </div>
           {g.plan != null && (
             <div>
-              <div className="mb-1 font-semibold text-gray-600">Table plan (executed by our code, not by the LLM)</div>
-              <pre className="overflow-x-auto rounded bg-gray-50 p-2">{JSON.stringify(g.plan, null, 2)}</pre>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Table plan (executed by our code, not by the LLM)</div>
+              <pre className="overflow-x-auto rounded-xl bg-gray-50 p-3">{JSON.stringify(g.plan, null, 2)}</pre>
             </div>
           )}
         </div>

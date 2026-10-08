@@ -6,6 +6,7 @@ import { previewPageUrl } from "@/lib/api";
 import { rag, type HeatBlock } from "@/lib/rag";
 import SourceHighlight from "./SourceHighlight";
 
+
 export interface Highlight {
   page: number;
   bbox: BBox | null;
@@ -49,21 +50,21 @@ export default function EvidenceViewer({ docId, filename, pageCount, highlights,
   const others = Array.from(new Set(highlights.filter((h) => h.page !== current && h.bbox).map((h) => h.page))).sort((a, b) => a - b);
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white">
-      <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-2 text-xs">
+    <div className="flex h-full flex-col rounded-2xl border border-gray-200 bg-white shadow-card">
+      <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-gray-200 p-3 text-xs">
         <div className="min-w-0">
           <div className="truncate font-medium text-gray-800">{filename ?? "Source document"}</div>
           <div className="flex items-center gap-1 text-gray-500">
             <button type="button" disabled={current <= 1} onClick={() => setCurrent((p) => p - 1)}
-              className="rounded border border-gray-300 px-1.5 hover:bg-gray-50 disabled:opacity-30">&larr;</button>
+              className="rounded-full border border-gray-200 px-1.5 hover:bg-gray-50 disabled:opacity-30">&larr;</button>
             <span>Page {current} / {total}</span>
             <button type="button" disabled={current >= total} onClick={() => setCurrent((p) => p + 1)}
-              className="rounded border border-gray-300 px-1.5 hover:bg-gray-50 disabled:opacity-30">&rarr;</button>
+              className="rounded-full border border-gray-200 px-1.5 hover:bg-gray-50 disabled:opacity-30">&rarr;</button>
             {others.length > 0 && (
               <span className="ml-2">
                 also on:{" "}
                 {others.map((p) => (
-                  <button key={p} type="button" onClick={() => setCurrent(p)} className="mr-1 text-blue-600 underline">p.{p}</button>
+                  <button key={p} type="button" onClick={() => setCurrent(p)} className="mr-1 font-medium text-blue-600 hover:text-blue-700 underline">p.{p}</button>
                 ))}
               </span>
             )}
@@ -75,7 +76,7 @@ export default function EvidenceViewer({ docId, filename, pageCount, highlights,
           </label>
         )}
         {onClose && (
-          <button type="button" onClick={onClose} aria-label="Close viewer" className="rounded p-1 text-gray-400 hover:bg-gray-100">✕</button>
+          <button type="button" onClick={onClose} aria-label="Close viewer" className="rounded-full p-1 text-gray-400 hover:bg-gray-100 transition">✕</button>
         )}
       </div>
       <div className="flex-1 overflow-auto bg-gray-100 p-2">
@@ -120,7 +121,7 @@ function Page({ docId, page, boxes, heat }: { docId: string; page: number; boxes
   }, [loaded, boxes, size.height]);
 
   if (error) {
-    return <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">Could not load page {page}.</div>;
+    return <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">Could not load page {page}.</div>;
   }
   return (
     <div ref={wrapRef} className="relative inline-block max-w-full">

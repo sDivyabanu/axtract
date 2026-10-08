@@ -8,16 +8,16 @@ export default function ReceiptCard({ receipt, onOperand }: { receipt: Receipt; 
   const [showAll, setShowAll] = useState(false);
   const lowConf = receipt.min_confidence != null && receipt.min_confidence < 0.85;
   return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-sm">
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 text-sm shadow-card">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Number receipt · {receipt.op.replace("_", " ")}</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Number receipt · {receipt.op.replace("_", " ")}</span>
           <div className="text-base font-semibold text-gray-900">{receipt.title}</div>
         </div>
         <div className="text-lg font-bold tabular-nums text-emerald-800">{receipt.result_display}</div>
       </div>
       <div className="mt-1 font-mono text-xs text-gray-700">{receipt.formula}</div>
-      <ul className="mt-2 divide-y divide-emerald-100 rounded border border-emerald-100 bg-white">
+      <ul className="mt-2 divide-y divide-emerald-100 rounded-xl border border-emerald-100 bg-white">
         {(showAll ? receipt.operands : receipt.operands.slice(0, 6)).map((o, i) => (
           <li key={i}>
             <button type="button" onClick={() => onOperand(o)}

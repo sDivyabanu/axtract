@@ -8,17 +8,17 @@ export default function TopNav() {
   const item = (href: string, label: string, active: boolean) => (
     <Link
       href={href}
-      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"
+      className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+        active ? "bg-blue-600 text-white shadow-card" : "text-gray-600 hover:bg-gray-100"
       }`}
     >
       {label}
     </Link>
   );
   return (
-    <header className="border-b border-gray-200 bg-white">
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-2">
-        <span className="text-sm font-bold tracking-tight">AXTRACT</span>
+    <header className="border-b border-gray-200 bg-white shadow-card">
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-2.5">
+        <span className="font-display text-sm font-bold tracking-tight">AXTRACT</span>
         <nav className="flex items-center gap-1">
           {item("/", "Parser", path === "/")}
           {item("/rooms", "DealLens", path.startsWith("/rooms"))}
