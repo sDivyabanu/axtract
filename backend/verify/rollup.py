@@ -320,6 +320,25 @@ def summarize(
 # ---------------------------------------------------------------------------
 
 
+def merge_units(*groups: Iterable[UnitChecks]) -> list[UnitChecks]:
+    """Combine the per-unit checks produced by different layers (integrity, completeness, ...).
+
+    Units are matched by key; their checks are concatenated in the order the layers are given.
+    """
+    merged: dict[str, UnitChecks] = {}
+    for group in groups:
+        for uc in group:
+            cur = merged.get(uc.unit.key)
+            if cur is None:
+                merged[uc.unit.key] = UnitChecks(unit=uc.unit, checks=list(uc.checks))
+            else:
+                cur.checks.extend(uc.checks)
+                if cur.unit.label is None and uc.unit.label is not None:
+                    cur.unit = uc.unit
+    return list(merged.values())
+
+
+
 def build_report(
     units: Sequence[UnitChecks],
     issues: Sequence[Issue] = (),
