@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FileSearch, History, LogIn, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
+import { BookOpen, FileSearch, History, LogIn, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export function Logo({ size = 32 }: { size?: number }) {
@@ -28,11 +28,13 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: "/workspace", label: "New extraction", icon: Plus, match: (p) => p.startsWith("/workspace") },
+  { href: "/rooms", label: "DealLens", icon: BookOpen, match: (p) => p.startsWith("/rooms") },
   { href: "/history", label: "Document history", icon: History, needsAuth: true, match: (p) => p.startsWith("/history") },
 ];
 
 const TITLES: [(p: string) => boolean, string, string | null][] = [
   [(p) => p.startsWith("/history"), "Document history", "Library"],
+  [(p) => p.startsWith("/rooms"), "DealLens", "Data Rooms"],
   [(p) => p.startsWith("/workspace"), "Extraction workspace", null],
   [() => true, "Extraction workspace", null],
 ];
