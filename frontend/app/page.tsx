@@ -334,7 +334,7 @@ export default function Home() {
             </div>
           )}
           {activeTab.status === "done" && activeTab.result && (
-            <ResultView result={activeTab.result} validationActions={validationActions} />
+            <ResultView key={activeTab.id} result={activeTab.result} validationActions={validationActions} />
           )}
         </div>
       )}

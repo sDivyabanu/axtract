@@ -1,4 +1,4 @@
-# SECURITY/tests/test_office_scan.py
+# security/tests/test_office_scan.py
 
 import os
 import zipfile
@@ -7,7 +7,7 @@ import tempfile
 import openpyxl
 import pytest
 
-from SECURITY.office_scan import (
+from security.office_scan import (
     scan_office,
     scan_office_zip,
     scan_xlsx_formulas,
