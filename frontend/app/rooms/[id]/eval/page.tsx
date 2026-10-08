@@ -16,8 +16,8 @@ const pct = (v: number | null | undefined) => (v == null ? "n/a" : `${Math.round
 
 function Bar({ value, color }: { value: number | null; color: string }) {
   return (
-    <div className="h-4 w-full rounded bg-gray-100">
-      <div className={`h-4 rounded ${color}`} style={{ width: `${Math.round((value ?? 0) * 100)}%` }} />
+    <div className="h-4 w-full rounded-full bg-gray-100">
+      <div className={`h-4 rounded-full ${color}`} style={{ width: `${Math.round((value ?? 0) * 100)}%` }} />
     </div>
   );
 }
@@ -29,7 +29,7 @@ function Inner() {
 
   if (error) {
     return (
-      <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
         {error}
         <pre className="mt-2 rounded bg-white p-2 text-xs">backend/.venv/bin/python scripts/run_rag_eval.py</pre>
       </div>
@@ -38,13 +38,13 @@ function Inner() {
   if (!r) return <p className="text-sm text-gray-500">Loading…</p>;
   const b = r.summary.baseline, d = r.summary.dealLens;
   return (
-    <div className="space-y-6">
+    <div className="ax-rise space-y-6">
       <p className="text-sm text-gray-600">
         Golden questions on the Project Falcon data room, run live through both pipelines with the same model (<b>{r.llm}</b>).
         {" "}{r.n_questions} questions · run {r.ts_iso}. Judging is mechanical and identical for both; nothing is edited by hand.
       </p>
 
-      <section className="rounded-lg border border-gray-200 p-4" data-eval>
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-card" data-eval>
         <div className="mb-3 flex items-center gap-4 text-xs text-gray-600">
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-gray-400" />Baseline</span>
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-blue-600" />DealLens</span>
@@ -68,8 +68,8 @@ function Inner() {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-gray-600">Accuracy by question type</h2>
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Accuracy by question type</h2>
+        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-card">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500"><tr><th className="px-3 py-2">Type</th><th className="px-3 py-2">Baseline</th><th className="px-3 py-2">DealLens</th></tr></thead>
             <tbody className="divide-y divide-gray-100">
@@ -82,8 +82,8 @@ function Inner() {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-gray-600">Every question</h2>
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Every question</h2>
+        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-card">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500"><tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Question</th><th className="px-3 py-2">Baseline</th><th className="px-3 py-2">DealLens</th></tr></thead>
             <tbody className="divide-y divide-gray-100">
@@ -104,8 +104,8 @@ function Inner() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <h2 className="mb-1 font-semibold">Honest limitations</h2>
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900 shadow-card">
+        <h2 className="mb-1 font-display font-semibold">Honest limitations</h2>
         <ul className="list-disc space-y-1 pl-5">{r.limitations.map((l) => <li key={l}>{l}</li>)}</ul>
       </section>
     </div>

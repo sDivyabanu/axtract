@@ -42,15 +42,15 @@ function Inner() {
   const t1 = events.length ? new Date(events[events.length - 1].date).getTime() : 1;
 
   return (
-    <div className={view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}>
+    <div className={`ax-rise ${view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}`}>
       <div className="min-w-0 space-y-6">
         <section>
-          <h2 className="mb-1 text-sm font-semibold text-gray-600">Debt maturity wall {wall ? `· ${wall.title} (${wall.unit})` : ""}</h2>
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Debt maturity wall {wall ? `· ${wall.title} (${wall.unit})` : ""}</h2>
           {!wall ? (
-            <p className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">No debt table with maturity dates was found.</p>
+            <p className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500 shadow-card">No debt table with maturity dates was found.</p>
           ) : (
             <>
-              <div className="flex h-56 items-end gap-3 rounded-lg border border-gray-200 bg-white px-4 pb-2 pt-6" data-wall>
+              <div className="flex h-56 items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 pb-2 pt-6 shadow-card" data-wall>
                 {wall.bars.map((b) => (
                   <button key={b.year} type="button" onClick={() => setYear(b.year)} className="group flex h-full flex-1 flex-col justify-end" title={`${b.year}: ${b.display}`}>
                     <span className="mb-1 text-center text-xs font-semibold tabular-nums">{b.display}</span>
@@ -66,7 +66,7 @@ function Inner() {
         </section>
 
         <section>
-          <h2 className="mb-1 text-sm font-semibold text-gray-600">Deal timeline · {events.length} dated events</h2>
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">Deal timeline · {events.length} dated events</h2>
           {events.length === 0 ? (
             <p className="text-sm text-gray-500">No dated events found.</p>
           ) : (
@@ -84,7 +84,7 @@ function Inner() {
                 <text x="20" y="62" fontSize="11" fill="#6b7280">{events[0].date}</text>
                 <text x="780" y="62" fontSize="11" fill="#6b7280" textAnchor="end">{events[events.length - 1].date}</text>
               </svg>
-              <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 text-sm" data-timeline>
+              <ul className="divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white text-sm shadow-card" data-timeline>
                 {events.map((e, i) => (
                   <li key={i}>
                     <button type="button" onClick={() => openEvent(e)} className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-gray-50">

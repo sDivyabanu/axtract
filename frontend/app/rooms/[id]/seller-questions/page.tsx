@@ -34,7 +34,7 @@ function Inner() {
 
   if (items === null) return <p className="text-sm text-gray-500">Drafting questions from the findings…</p>;
   return (
-    <div className={view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}>
+    <div className={`ax-rise ${view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}`}>
       <div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <p className="text-sm text-gray-600">
@@ -43,27 +43,27 @@ function Inner() {
           </p>
           <span className="ml-auto flex gap-2 text-xs">
             {(["docx", "csv", "md"] as const).map((f) => (
-              <button key={f} type="button" onClick={() => download(f)} className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50">Export {f.toUpperCase()}</button>
+              <button key={f} type="button" onClick={() => download(f)} className="rounded-full border border-gray-200 bg-white px-2.5 py-1 shadow-card hover:shadow-lift transition">Export {f.toUpperCase()}</button>
             ))}
           </span>
         </div>
         <ol className="space-y-3" data-seller>
           {items.map((it, i) => (
-            <li key={it.id} className="rounded-lg border border-gray-200 bg-white p-3">
+            <li key={it.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
               <div className="mb-1 flex items-center gap-2 text-xs">
                 <span className="font-bold text-gray-500">{it.n}.</span>
-                <span className={`rounded px-2 py-0.5 font-semibold uppercase ${SEVERITY_STYLE[it.severity]}`}>{it.severity}</span>
+                <span className={`rounded-full px-2.5 py-0.5 font-semibold uppercase ${SEVERITY_STYLE[it.severity]}`}>{it.severity}</span>
                 <span className="text-gray-400">{it.kind.replace("_", " ")}</span>
                 <button type="button" onClick={() => remove(i)} className="ml-auto text-gray-400 hover:text-red-600" aria-label="Delete question">✕</button>
               </div>
               <textarea value={it.question} onChange={(e) => edit(i, e.target.value)} rows={3}
-                className="w-full resize-y rounded border border-gray-200 p-2 text-sm focus:border-gray-500 focus:outline-none" />
+                className="w-full resize-y rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
               <p className="mt-1 text-xs text-gray-500">Why: {it.why}</p>
               {it.evidence.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {it.evidence.map((e, k) => (
                     <button key={k} type="button" onClick={() => open(e)} disabled={!e.page}
-                      className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+                      className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-100 disabled:opacity-50">
                       {e.filename}{e.page ? ` p.${e.page}` : ""}
                     </button>
                   ))}

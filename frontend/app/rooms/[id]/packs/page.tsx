@@ -40,33 +40,33 @@ function Inner() {
 
   const current = runs[active];
   return (
-    <div className={view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}>
+    <div className={`ax-rise ${view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}`}>
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {packs.map((p) => (
             <button key={p.pack} type="button" onClick={() => setActive(p.pack)}
-              className={`rounded-full border px-3 py-1 text-sm ${active === p.pack ? "border-gray-900 bg-gray-900 text-white" : "border-gray-300 hover:bg-gray-50"}`}>
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition ${active === p.pack ? "border-blue-600 bg-blue-600 text-white shadow-card" : "border-gray-200 bg-white hover:bg-gray-50 shadow-card"}`}>
               {p.title}
             </button>
           ))}
           <button type="button" onClick={run} disabled={busy}
-            className="ml-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            className="ml-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card hover:bg-blue-700 disabled:opacity-50">
             {busy ? "Running…" : `Run ${packs.find((p) => p.pack === active)?.title ?? ""} pack`}
           </button>
           {current && (
             <span className="ml-auto flex gap-2 text-xs">
-              <a className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50" href={`${API_BASE_URL}/api/workspaces/${id}/packs/${active}/export?format=xlsx`}>Export XLSX</a>
-              <a className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50" href={`${API_BASE_URL}/api/workspaces/${id}/packs/${active}/export?format=csv`}>Export CSV</a>
+              <a className="rounded-full border border-gray-200 bg-white px-2.5 py-1 shadow-card hover:shadow-lift transition" href={`${API_BASE_URL}/api/workspaces/${id}/packs/${active}/export?format=xlsx`}>Export XLSX</a>
+              <a className="rounded-full border border-gray-200 bg-white px-2.5 py-1 shadow-card hover:shadow-lift transition" href={`${API_BASE_URL}/api/workspaces/${id}/packs/${active}/export?format=csv`}>Export CSV</a>
             </span>
           )}
         </div>
-        {error && <p role="alert" className="mb-3 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="mb-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {!current ? (
-          <p className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+          <p className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500 shadow-card">
             One click runs the standard questions against every relevant document. Every cell is a cited answer or “not found”.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200" data-pack>
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-card" data-pack>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-xs text-gray-500">
                 <tr><th className="px-3 py-2">Question</th>{current.columns.map((c) => <th key={c.doc_id} className="px-3 py-2">{c.filename}</th>)}</tr>
@@ -81,7 +81,7 @@ function Inner() {
                           <button type="button" onClick={() => open(cell)} className="text-left hover:underline" title="Open the source">
                             {cell.text}
                             {cell.citations?.[0] && (
-                              <span className="ml-1 text-xs text-blue-700">[p.{cell.citations[0].printed_page ?? cell.citations[0].page}]</span>
+                              <span className="ml-1 text-xs font-medium text-blue-600">[p.{cell.citations[0].printed_page ?? cell.citations[0].page}]</span>
                             )}
                             {(cell.badges ?? []).map((b) => <span key={b.label} className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-800">{b.label}</span>)}
                           </button>

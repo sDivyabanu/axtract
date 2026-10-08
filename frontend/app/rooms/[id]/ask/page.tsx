@@ -100,23 +100,23 @@ function AskPageInner() {
   }
 
   return (
-    <div className={viewer ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "mx-auto max-w-3xl"}>
+    <div className={`ax-rise ${viewer ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "mx-auto max-w-3xl"}`}>
       <div className="min-w-0">
         {readyDocs.length === 0 && (
-          <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
             No documents are ready yet. Upload files in the Data Room tab and wait for them to finish indexing.
           </p>
         )}
         {turns.length === 0 && suggestions.length > 0 && (
           <div data-suggestions className="mb-4 space-y-3">
-            <div className="text-sm font-semibold text-gray-700">Suggested questions</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">Suggested questions</div>
             {suggestions.map((d) => (
               <div key={d.doc_id}>
                 <div className="mb-1 text-xs text-gray-500">{d.filename}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {d.suggestions.map((q) => (
                     <button key={q.question} type="button" onClick={() => ask(q.question)} disabled={busy}
-                      className="rounded-full border border-gray-300 bg-white px-3 py-1 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-left text-xs text-gray-700 shadow-card hover:shadow-lift hover:border-blue-300 transition disabled:opacity-50">
                       {q.question}
                     </button>
                   ))}
@@ -129,14 +129,14 @@ function AskPageInner() {
           {turns.map((t) => (
             <div key={t.id}>
               <div className="mb-2 flex justify-end">
-                <div className="max-w-[85%] rounded-lg bg-gray-900 px-3 py-2 text-sm text-white">{t.question}</div>
+                <div className="max-w-[85%] rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-card">{t.question}</div>
               </div>
-              {t.error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{t.error}</p>}
+              {t.error && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{t.error}</p>}
               {!t.answer && !t.error && (
-                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
                   <div className="mb-2 flex flex-wrap gap-1.5 text-xs">
                     {t.stages.map((s) => (
-                      <span key={s.name} className={`rounded px-2 py-0.5 ${s.status === "done" ? "bg-green-100 text-green-800" : "animate-pulse bg-amber-100 text-amber-800"}`}>
+                      <span key={s.name} className={`rounded-full px-2.5 py-0.5 font-medium ${s.status === "done" ? "bg-green-100 text-green-800" : "animate-pulse bg-amber-100 text-amber-800"}`}>
                         {s.status === "done" ? "✓" : "…"} {s.name}{s.ms != null ? ` ${s.ms} ms` : ""}
                       </span>
                     ))}
@@ -150,7 +150,7 @@ function AskPageInner() {
         </div>
 
         <div ref={bottom} />
-        <div className="sticky bottom-0 mt-5 bg-white/90 pb-2 pt-2 backdrop-blur">
+        <div className="sticky bottom-0 mt-5 rounded-2xl bg-white/90 pb-3 pt-3 backdrop-blur">
           {readyDocs.length > 1 && (
             <details className="mb-2 text-xs text-gray-600">
               <summary className="cursor-pointer">
@@ -158,7 +158,7 @@ function AskPageInner() {
               </summary>
               <div className="mt-1 flex flex-wrap gap-2">
                 {readyDocs.map((d) => (
-                  <label key={d.doc_id} className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1">
+                  <label key={d.doc_id} className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-2 py-1 shadow-card">
                     <input type="checkbox" checked={scope.has(d.doc_id)}
                       onChange={() => setScope((s) => { const n = new Set(s); if (n.has(d.doc_id)) n.delete(d.doc_id); else n.add(d.doc_id); return n; })} />
                     {d.filename}
@@ -174,10 +174,10 @@ function AskPageInner() {
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(question); } }}
               rows={2}
               placeholder="Ask about the data room…  e.g. What is total debt maturing in 2026?"
-              className="flex-1 resize-none rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="flex-1 resize-none rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
             <button type="button" onClick={() => ask(question)} disabled={busy || !question.trim() || readyDocs.length === 0}
-              className="self-end rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50">
+              className="self-end rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card hover:bg-blue-700 disabled:opacity-50">
               {busy ? "…" : "Ask"}
             </button>
           </div>

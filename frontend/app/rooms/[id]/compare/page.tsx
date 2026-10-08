@@ -23,10 +23,10 @@ interface Result {
 function BaselineCard({ b }: { b: BaselineAnswer }) {
   const g = b.checks?.grounding;
   return (
-    <div className="rounded-lg border border-gray-300 bg-white p-4">
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">Baseline: plain text · 500-token chunks · dense only</span>
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-gray-600">{b.mode === "llm" ? `LLM · ${b.model}` : "LLM offline"}</span>
+        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600">Baseline: plain text · 500-token chunks · dense only</span>
+        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600">{b.mode === "llm" ? `LLM · ${b.model}` : "LLM offline"}</span>
         <span className="text-gray-400">{(b.total_ms / 1000).toFixed(1)} s</span>
       </div>
       <p className="whitespace-pre-wrap text-[15px] leading-7 text-gray-900">{b.text || "(no answer)"}</p>
@@ -91,36 +91,36 @@ function ComparePageInner() {
   }
 
   return (
-    <div>
+    <div className="ax-rise">
       <p className="mb-3 text-sm text-gray-600">
         The same question, asked live to a naive pipeline and to DealLens, with the same local model. Nothing is scripted.
       </p>
       <div className="mb-3 flex flex-wrap gap-2">
         {TRAPS.map((t) => (
           <button key={t.label} type="button" disabled={busy} onClick={() => run(t.q)} title={t.note}
-            className="rounded-full border border-gray-300 px-3 py-1 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+            className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium shadow-card hover:shadow-lift hover:border-blue-300 transition disabled:opacity-50">
             Trap: {t.label}
           </button>
         ))}
       </div>
       <div className="mb-5 flex gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && run(q)}
-          placeholder="Ask any question…" className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none" />
+          placeholder="Ask any question…" className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
         <button type="button" onClick={() => run(q)} disabled={busy || !q.trim()}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50">
+          className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card hover:bg-blue-700 disabled:opacity-50">
           {busy ? "Running both…" : "Compare"}
         </button>
       </div>
-      {error && <p role="alert" className="mb-3 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mb-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {busy && <p className="text-sm text-gray-500">Running the baseline, then DealLens…</p>}
       {result && (
         <div className={viewer ? "grid grid-cols-1 gap-4 xl:grid-cols-3" : "grid grid-cols-1 gap-4 lg:grid-cols-2"} data-compare>
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-500">Baseline</h2>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Baseline</h2>
             <BaselineCard b={result.baseline} />
           </div>
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-500">DealLens</h2>
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">DealLens</h2>
             <AnswerCard answer={result.dealLens} onSelectCitation={openCitation} onSelectOperand={openOperand} />
           </div>
           {viewer && (

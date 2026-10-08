@@ -21,29 +21,29 @@ function Inner() {
 
   if (items === null) return <p className="text-sm text-gray-500">Checking documents against each other…</p>;
   return (
-    <div className={view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}>
+    <div className={`ax-rise ${view ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : ""}`}>
       <div>
         <p className="mb-3 text-sm text-gray-600">
           The same figure (concept, period, unit) read from different documents. Differences larger than 0.5 % — or than rounding — are listed
           with both sides, each linked to the exact cell.
         </p>
         {items.length === 0 ? (
-          <p className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">No contradictions found across the documents.</p>
+          <p className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500 shadow-card">No contradictions found across the documents.</p>
         ) : (
           <ul className="space-y-3" data-contradictions>
             {items.map((c) => (
-              <li key={c.id} className="rounded-lg border border-red-200 bg-red-50/30 p-4">
+              <li key={c.id} className="rounded-2xl border border-red-200 bg-red-50/30 p-5 shadow-card">
                 <div className="mb-1 flex items-center gap-2">
-                  <span className={`rounded px-2 py-0.5 text-xs font-semibold uppercase ${SEVERITY_STYLE[c.severity]}`}>{c.severity}</span>
-                  <h3 className="font-semibold">{c.concept_label} · {c.period}</h3>
-                  <span className="ml-auto rounded bg-red-100 px-2 py-0.5 text-sm font-bold text-red-800">{c.gap_pct}% gap</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase ${SEVERITY_STYLE[c.severity]}`}>{c.severity}</span>
+                  <h3 className="font-display font-semibold">{c.concept_label} · {c.period}</h3>
+                  <span className="ml-auto rounded-full bg-red-100 px-2.5 py-0.5 text-sm font-bold text-red-800">{c.gap_pct}% gap</span>
                 </div>
                 <p className="text-sm text-gray-800">{c.summary}</p>
                 {c.note && <p className="mt-1 text-xs text-amber-800">{c.note}</p>}
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {[c.primary.high, c.primary.low].map((s, i) => (
                     <button key={i} type="button" onClick={() => open(s)}
-                      className={`rounded border p-2 text-left hover:bg-white ${i === 0 ? "border-red-300" : "border-green-300"}`}>
+                      className={`rounded-xl border p-3 text-left shadow-card transition hover:shadow-lift ${i === 0 ? "border-red-300" : "border-green-300"}`}>
                       <div className="text-xs text-gray-500">{s.filename} · p.{s.printed_page ?? s.page}</div>
                       <div className="text-lg font-bold tabular-nums">{s.display}</div>
                       <div className="text-xs text-gray-600">{s.label}</div>

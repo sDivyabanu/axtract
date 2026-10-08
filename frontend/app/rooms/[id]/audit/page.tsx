@@ -19,21 +19,21 @@ function AuditInner() {
   const kinds = Array.from(new Set(events.map((e) => e.event))).sort();
   const shown = filter ? events.filter((e) => e.event === filter) : events;
   return (
-    <div>
+    <div className="ax-rise">
       <p className="mb-3 text-sm text-gray-600">
         Who did what, and when. Entries hold ids, hashes and timings only — never document text.
       </p>
       <div className="mb-3 flex flex-wrap gap-1.5 text-xs">
-        <button type="button" onClick={() => setFilter("")} className={`rounded-full border px-2.5 py-1 ${filter === "" ? "bg-gray-900 text-white" : "bg-white"}`}>all ({events.length})</button>
+        <button type="button" onClick={() => setFilter("")} className={`rounded-full border px-2.5 py-1 font-medium transition ${filter === "" ? "border-blue-600 bg-blue-600 text-white shadow-card" : "border-gray-200 bg-white shadow-card"}`}>all ({events.length})</button>
         {kinds.map((k) => (
-          <button key={k} type="button" onClick={() => setFilter(k)} className={`rounded-full border px-2.5 py-1 ${filter === k ? "bg-gray-900 text-white" : "bg-white"}`}>{k}</button>
+          <button key={k} type="button" onClick={() => setFilter(k)} className={`rounded-full border px-2.5 py-1 font-medium transition ${filter === k ? "border-blue-600 bg-blue-600 text-white shadow-card" : "border-gray-200 bg-white shadow-card"}`}>{k}</button>
         ))}
       </div>
       {shown.length === 0 ? (
         <p className="text-sm text-gray-500">No events yet.</p>
       ) : (
-        <table className="w-full text-left text-xs">
-          <thead className="border-b border-gray-200 text-gray-500">
+        <table className="w-full text-left text-xs rounded-2xl">
+          <thead className="border-b border-gray-200 text-xs font-semibold uppercase tracking-wider text-gray-500">
             <tr><th className="py-1.5 pr-3">Time</th><th className="pr-3">Event</th><th className="pr-3">Reference</th><th>Detail</th></tr>
           </thead>
           <tbody>
