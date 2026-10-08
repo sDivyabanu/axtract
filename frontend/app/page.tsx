@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import FileDropzone from "@/components/FileDropzone";
 import ResultView from "@/components/ResultView";
-import { getDocumentResult, uploadDocument } from "@/lib/api-authenticated";
+import {
+  escalateValidation,
+  getDocumentResult,
+  promoteRecovery,
+  uploadDocument,
+} from "@/lib/api-authenticated";
+import type { ValidationActions } from "@/components/ValidationPanel";
 import { ApiError, parseDocument } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { DocumentResponse } from "@/lib/types";
@@ -16,6 +22,8 @@ interface DocTab {
   status: TabStatus;
   result: DocumentResponse | null;
   error: string | null;
+  // Set when the result is saved in history: secondary validation needs the stored original.
+  savedId: string | null;
 }
 
 let nextTabId = 1;
@@ -42,6 +50,8 @@ export default function Home() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   function handleFilesSelected(incoming: File[]) {
     setPendingFiles((prev) => [...prev, ...incoming]);
@@ -65,6 +75,7 @@ export default function Home() {
               status: "done",
               result: saved.result,
               error: null,
+              savedId,
             },
           ]);
           setActiveTabId((current) => current ?? `tab-${nextTabId - 1}`);
@@ -78,6 +89,7 @@ export default function Home() {
               name: "Saved document",
               status: "error",
               result: null,
+              savedId: null,
               error:
                 err instanceof ApiError
                   ? `[${err.code}] ${err.message}`
@@ -106,6 +118,7 @@ export default function Home() {
       status: "parsing",
       result: null,
       error: null,
+      savedId: null,
     }));
     setTabs((prev) => [...prev, ...newTabs]);
     setActiveTabId((current) => current ?? newTabs[0].id);
@@ -129,9 +142,12 @@ export default function Home() {
       // Otherwise fall back to the anonymous parse endpoint.
       try {
         let result: DocumentResponse;
+        let savedDocId: string | null = null;
         if (user) {
           try {
-            result = (await uploadDocument(file)).result;
+            const saved = await uploadDocument(file);
+            result = saved.result;
+            savedDocId = saved.document_id;
           } catch (err) {
             if (!(err instanceof ApiError) || !SAVE_UNAVAILABLE.has(err.code)) throw err;
             setNotice(
@@ -142,7 +158,7 @@ export default function Home() {
         } else {
           result = await parseDocument(file);
         }
-        await updateTab(tabId, { status: "done", result, error: null });
+        await updateTab(tabId, { status: "done", result, error: null, savedId: savedDocId });
       } catch (err) {
         const message =
           err instanceof ApiError
@@ -182,6 +198,44 @@ export default function Home() {
   }
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  const validationActions: ValidationActions | undefined =
+    activeTab?.savedId && user
+      ? {
+          busy: verifyBusy,
+          error: verifyError,
+          onEscalate: async () => {
+            const { id, savedId } = activeTab;
+            setVerifyBusy(true);
+            setVerifyError(null);
+            try {
+              const out = await escalateValidation(savedId!);
+              setTabs((prev) =>
+                prev.map((t) =>
+                  t.id === id && t.result ? { ...t, result: { ...t.result, validation: out.validation } } : t,
+                ),
+              );
+            } catch (err) {
+              setVerifyError(err instanceof Error ? err.message : "Secondary validation failed.");
+            } finally {
+              setVerifyBusy(false);
+            }
+          },
+          onPromote: async (ids, reason) => {
+            const { id, savedId } = activeTab;
+            setVerifyBusy(true);
+            setVerifyError(null);
+            try {
+              const out = await promoteRecovery(savedId!, ids, reason);
+              setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, result: out.result } : t)));
+            } catch (err) {
+              setVerifyError(err instanceof Error ? err.message : "Could not accept the recovery.");
+            } finally {
+              setVerifyBusy(false);
+            }
+          },
+        }
+      : undefined;
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
@@ -280,7 +334,7 @@ export default function Home() {
             </div>
           )}
           {activeTab.status === "done" && activeTab.result && (
-            <ResultView result={activeTab.result} />
+            <ResultView key={activeTab.id} result={activeTab.result} validationActions={validationActions} />
           )}
         </div>
       )}

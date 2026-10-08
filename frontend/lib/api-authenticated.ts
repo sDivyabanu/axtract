@@ -1,6 +1,6 @@
 import { API_BASE_URL, ApiError } from "./api";
 import { createClient } from "./supabase";
-import type { DocumentResponse } from "./types";
+import type { DocumentResponse, ValidationReport } from "./types";
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -136,4 +136,26 @@ export async function deleteDocument(documentId: string): Promise<void> {
   if (!response.ok) {
     throw new ApiError("DELETE_FAILED", "Failed to delete document.");
   }
+}
+
+/** Re-read the units Verify flagged with secondary readers. Stores candidates; changes no output. */
+export async function escalateValidation(
+  documentId: string,
+): Promise<{ validation: ValidationReport; notes: string[] }> {
+  const response = await authFetch(`/api/documents/${documentId}/verify/escalate`, { method: "POST" });
+  return handleResponse(response);
+}
+
+/** Explicitly accept escalation candidates. The server keeps the earlier result and saves a new one. */
+export async function promoteRecovery(
+  documentId: string,
+  recoveryIds: string[],
+  reason: string,
+): Promise<{ result: DocumentResponse }> {
+  const response = await authFetch(`/api/documents/${documentId}/verify/promote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recovery_ids: recoveryIds, reason }),
+  });
+  return handleResponse(response);
 }

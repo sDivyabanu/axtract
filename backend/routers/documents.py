@@ -15,6 +15,8 @@ import tempfile
 from io import BytesIO
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
@@ -25,6 +27,7 @@ from crypto.encryption import decrypt_document, encrypt_document, get_key_versio
 from db import prisma_client as db
 from db.storage import delete_from_storage, download_encrypted, storage_path, upload_encrypted
 from extractors.registry import get_extractor
+from models.document import DocumentResponse
 from models.errors import AppError
 from services import preview_service
 from services.parse_service import parse_upload
@@ -277,3 +280,72 @@ async def delete_document_endpoint(document_id: str, user_id: str = Depends(get_
             logger.warning("Failed to delete a storage object for document %s", document_id)
 
     await db.delete_document(document_id, user_id)
+
+
+# ---------------------------------------------------------------------------------------------
+# AXTRACT Verify: targeted escalation and explicit recovery (never part of the normal parse path)
+# ---------------------------------------------------------------------------------------------
+
+
+class PromoteBody(BaseModel):
+    recovery_ids: list[str] = Field(min_length=1, max_length=50)
+    reason: str = Field(min_length=3, max_length=500)
+
+
+async def _load_saved(document_id: str, user_id: str):
+    doc = await db.get_document(document_id, user_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    output = await db.get_latest_output(document_id, user_id)
+    version = await db.get_latest_version(document_id)
+    if not output or not version:
+        raise HTTPException(status_code=404, detail="No processing result available.")
+    resp = DocumentResponse.model_validate(_as_dict(output["response_json"]))
+    if not resp.validation:
+        raise HTTPException(status_code=409, detail="This result has no validation report to escalate.")
+    return resp, version
+
+
+def _escalate_sync(plaintext: bytes, resp: DocumentResponse):
+    from verify.recovery import escalate
+
+    deadline.start()
+    with tempfile.NamedTemporaryFile(suffix=f".{resp.file_type}", delete=False) as tmp:
+        tmp.write(plaintext)
+        path = Path(tmp.name)
+    try:
+        return escalate(path, resp, resp.validation, budget_s=40.0)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@router.post("/{document_id}/verify/escalate")
+async def escalate_validation(document_id: str, user_id: str = Depends(get_user_id)):
+    """Re-read the units Verify flagged with secondary providers. Stores candidates; changes no output."""
+    resp, version = await _load_saved(document_id, user_id)
+    plaintext = await _decrypt_original(version)
+    try:
+        esc = await asyncio.wait_for(run_in_threadpool(_escalate_sync, plaintext, resp), timeout=HARD_LIMIT_SECONDS)
+    except asyncio.TimeoutError:
+        raise AppError("TIMEOUT", f"Escalation exceeded the {HARD_LIMIT_SECONDS} second limit.", status_code=504)
+    resp.validation = esc.report.model_dump(mode="json")
+    await db.update_latest_output_json(document_id, user_id, resp.model_dump_json())
+    return {"recoveries": [r.model_dump(mode="json") for r in esc.recoveries], "notes": esc.notes, "validation": resp.validation}
+
+
+@router.post("/{document_id}/verify/promote")
+async def promote_recovery(document_id: str, body: PromoteBody, user_id: str = Depends(get_user_id)):
+    """Explicitly accept escalation candidates. Saved as a NEW result; the earlier result is kept for audit."""
+    from verify.recovery import PromotionRefused, promote
+
+    resp, version = await _load_saved(document_id, user_id)
+    try:
+        promoted = promote(resp, resp.validation, body.recovery_ids, decided_by="explicit_request", reason=body.reason)
+    except PromotionRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    run = await db.create_processing_run(document_id, str(version["id"]), user_id)
+    run_id = str(run["id"])
+    out = promoted.response
+    await db.save_document_output(run_id, out.model_dump_json(), out.markdown)
+    await db.complete_processing_run(run_id, status="completed", processing_time_ms=0, page_count=out.page_count, block_count=len(out.blocks))
+    return {"document_id": document_id, "processing_run_id": run_id, "result": json.loads(out.model_dump_json())}

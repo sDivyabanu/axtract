@@ -9,6 +9,8 @@ interface SourceViewerProps {
   documentId: string;
   pageCount: number;
   selectedBlock: DocumentBlock | null;
+  /** An explicit location (e.g. a validation issue). Takes precedence over the selected block. */
+  focus?: (BlockPreview & { key: string }) | null;
   onClose: () => void;
 }
 
@@ -24,15 +26,17 @@ export default function SourceViewer({
   documentId,
   pageCount,
   selectedBlock,
+  focus = null,
   onClose,
 }: SourceViewerProps) {
-  const target = previewTarget(selectedBlock);
+  const target = focus ?? previewTarget(selectedBlock);
   const [viewerPage, setViewerPage] = useState(target?.page ?? 1);
   const [goInput, setGoInput] = useState("");
 
-  const [trackedBlockId, setTrackedBlockId] = useState(selectedBlock?.id);
-  if (trackedBlockId !== selectedBlock?.id) {
-    setTrackedBlockId(selectedBlock?.id);
+  const trackKey = focus ? `focus:${focus.key}` : selectedBlock?.id;
+  const [trackedBlockId, setTrackedBlockId] = useState(trackKey);
+  if (trackedBlockId !== trackKey) {
+    setTrackedBlockId(trackKey);
     if (target) setViewerPage(Math.min(Math.max(1, target.page), pageCount));
   }
 

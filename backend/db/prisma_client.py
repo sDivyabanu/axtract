@@ -627,3 +627,21 @@ async def get_version_storage_paths(document_id: str) -> list[str]:
         document_id,
     )
     return [r["storage_path"] for r in rows]
+
+
+async def update_latest_output_json(document_id: str, user_id: str, response_json: str) -> bool:
+    """Replace the saved JSON of the user's latest completed output (used to store escalation candidates)."""
+    pool = await get_pool()
+    result = await pool.execute(
+        """
+        UPDATE document_outputs SET response_json = $1::jsonb
+        WHERE id = (
+            SELECT o.id FROM document_outputs o
+            JOIN processing_runs pr ON pr.id = o.processing_run_id
+            WHERE pr.document_id = $2 AND pr.user_id = $3 AND pr.status = 'completed'
+            ORDER BY o.created_at DESC LIMIT 1
+        )
+        """,
+        response_json, document_id, user_id,
+    )
+    return result.endswith("1")
