@@ -175,17 +175,24 @@ class _SlideReader:
         uri = data.get("uri", "") if data is not None else ""
         if uri == _TABLE_URI:
             tbl = data.find(q("a", "tbl"))
-            rows = []
-            merged = False
-            for tr in tbl.findall(q("a", "tr")):
-                row = []
-                for tc in tr.findall(q("a", "tc")):
+            rows: list[list[str | None]] = []
+            regions: list[list[int]] = []
+            for r, tr in enumerate(tbl.findall(q("a", "tr"))):
+                row: list[str | None] = []
+                for c, tc in enumerate(tr.findall(q("a", "tc"))):
+                    if tc.get("hMerge") in ("1", "true") or tc.get("vMerge") in ("1", "true"):
+                        row.append(None)  # covered by a merge: same convention as the extraction's grid
+                        continue
                     row.append(" ".join(t for t in (_para_text(p) for p in tc.iter(q("a", "p"))) if t.strip()))
-                    merged = merged or any(tc.get(k) for k in ("gridSpan", "rowSpan", "hMerge", "vMerge"))
+                    cs, rs = int(tc.get("gridSpan", "1") or 1), int(tc.get("rowSpan", "1") or 1)
+                    if cs > 1 or rs > 1:
+                        regions.append([r, c, rs, cs])
                 rows.append(row)
-            cols = len(tbl.find(q("a", "tblGrid")).findall(q("a", "gridCol"))) if tbl.find(q("a", "tblGrid")) is not None else max((len(r) for r in rows), default=0)
-            self._add(SourceObjectType.TABLE, el, xf, name, text=" ".join(c for r in rows for c in r),
-                      rows=rows, row_count=len(rows), col_count=cols, has_merged_cells=merged)
+            grid = tbl.find(q("a", "tblGrid"))
+            cols = len(grid.findall(q("a", "gridCol"))) if grid is not None else max((len(r) for r in rows), default=0)
+            self._add(SourceObjectType.TABLE, el, xf, name, text=" ".join(c for r in rows for c in r if c),
+                      rows=rows, row_count=len(rows), col_count=cols, has_merged_cells=bool(regions),
+                      merged_regions=sorted(regions))
         elif uri == _CHART_URI:
             ch = data.find(q("c", "chart"))
             cpart = self.rels.get(ch.get(q("r", "id"), ""), ("", ""))[1] if ch is not None else ""

@@ -152,7 +152,9 @@ def decide_unit(
         }
     )
     minor = [i for i in open_issues if i.severity not in policy.review_severities | policy.fatal_severities]
-    minor_note = [f"{len(minor)} informational/low issue(s) recorded; they do not change the status"] if minor else []
+    minor_note = (
+        [f"{len(minor)} informational/low issue(s) recorded; they do not change the status ("
+         + ", ".join(sorted({i.code for i in minor})) + ")"] if minor else [])
 
     # 1. FAILED
     errored = [c for c in checks if c.outcome == CheckOutcome.ERROR]

@@ -98,6 +98,7 @@ def _shared_strings(pkg: Package) -> list[str]:
 
 def _parse_sheet(pkg: Package, part: str, shared: list[str], opts: InventoryOptions, budget: dict) -> dict:
     cells: dict[str, str] = {}
+    types: dict[str, str] = {}  # n(umber), s(tring), b(oolean), e(rror), d(ate)
     formulas: dict[str, str] = {}
     formula_uncached = 0
     hidden_rows: list[int] = []
@@ -130,6 +131,7 @@ def _parse_sheet(pkg: Package, part: str, shared: list[str], opts: InventoryOpti
                 if val.strip():
                     if len(cells) < opts.max_cells:
                         cells[ref] = val
+                        types[ref] = {"s": "s", "str": "s", "inlineStr": "s", "b": "b", "e": "e", "d": "d"}.get(t, "n")
                         rc = split_ref(ref)
                         if rc:
                             min_r, max_r = min(min_r, rc[0]), max(max_r, rc[0])
@@ -154,7 +156,7 @@ def _parse_sheet(pkg: Package, part: str, shared: list[str], opts: InventoryOpti
     used = None
     if cells and max_r:
         used = f"{num_to_col(min_c)}{min_r}:{num_to_col(max_c)}{max_r}"
-    return dict(cells=cells, formulas=formulas, formula_uncached=formula_uncached, hidden_rows=hidden_rows,
+    return dict(cells=cells, types=types, formulas=formulas, formula_uncached=formula_uncached, hidden_rows=hidden_rows,
                 hidden_cols=hidden_cols, merged=merged, drawing_rid=drawing_rid, table_rids=table_rids,
                 used_range=used, truncated=truncated)
 
@@ -230,6 +232,8 @@ def inventory_xlsx(path: Path, opts: InventoryOptions | None = None) -> SourceIn
             sheets = wb.find(q("main", "sheets"))
             entries = list(sheets) if sheets is not None else []
             inv.properties["sheet_count"] = len(entries)
+            wb_pr = wb.find(q("main", "workbookPr"))
+            inv.properties["date1904"] = bool(wb_pr is not None and wb_pr.get("date1904") in ("1", "true"))
             for pos, sh in enumerate(entries, start=1):
                 name = sh.get("name", f"Sheet{pos}")
                 unit = UnitRef(type=UnitType.SHEET, index=pos, label=name)
@@ -249,7 +253,8 @@ def inventory_xlsx(path: Path, opts: InventoryOptions | None = None) -> SourceIn
                     su.objects.append(SourceObject(
                         id=f"xlsx:sheet{pos}:cells", type=SourceObjectType.CELL_REGION, unit=unit,
                         locator=SourceLocator(part=part, cell_range=s["used_range"]), kind=DET, engine=f"ooxml:{part}",
-                        metadata={"cells": s["cells"], "non_empty_cells": len(s["cells"]), "truncated": s["truncated"]}))
+                        metadata={"cells": s["cells"], "cell_types": s["types"], "formula_cells": sorted(s["formulas"]),
+                                  "non_empty_cells": len(s["cells"]), "truncated": s["truncated"]}))
                 for i, ref in enumerate(s["merged"], start=1):
                     su.objects.append(SourceObject(
                         id=f"xlsx:sheet{pos}:merge{i}", type=SourceObjectType.MERGED_RANGE, unit=unit,

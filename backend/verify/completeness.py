@@ -377,8 +377,12 @@ def _pptx(ctx: _Ctx) -> None:
             if p:
                 ctx.match(o, MatchStatus.MATCHED, [b for b in tbl_blocks if b.id == p.block_id], p.score, p.reasons)
             else:
-                ctx.find(u, "possible_missing_table", f"A {o.metadata.get('row_count')}x{o.metadata.get('col_count')} table on slide {u.index} has no matching extracted table.",
-                         obj=o, source=(o.text or "")[:200], extracted=f"{len(tbl_blocks)} table block(s) on the slide, none matches")
+                flat, _ = recall(o.text, " ".join(block_text(b) for b in blocks if b.type != T.TABLE))
+                ctx.find(u, "possible_missing_table", f"A {o.metadata.get('row_count')}x{o.metadata.get('col_count')} table on slide {u.index} has no matching extracted table"
+                         + (" (its text is present as ordinary blocks; see the structure layer)." if flat >= 0.8 else "."),
+                         obj=o, severity=Severity.LOW if flat >= 0.8 else None, source=(o.text or "")[:200],
+                         extracted=f"{len(tbl_blocks)} table block(s) on the slide, none matches",
+                         detail={"text_present_as_other_blocks": flat >= 0.8})
                 ctx.match(o, MatchStatus.UNMATCHED, reasons=["no unclaimed table block matches by position, size and cell text"])
         for typ, code, label, allowed in ((SO.CHART, "possible_missing_chart", "chart", {T.CHART, T.FIGURE}),
                                           (SO.PICTURE, "possible_missing_image", "picture", MEDIA)):
@@ -466,16 +470,24 @@ def _docx(ctx: _Ctx) -> None:
     # tables
     tables = [o for o in exp if o.type == SO.TABLE]
     tblb = [b for b in blocks if b.type == T.TABLE]
-    pairs = [Pair(o.id, b.id, *_table_score(o, b, False)) for o in tables for b in tblb]
-    got = assign(pairs, 0.55)
+    pairs = []
+    for o in tables:
+        for b in tblb:
+            sc, why = _table_score(o, b, False)
+            if recall(o.text, block_text(b))[0] >= 0.6:  # same words => same table, even if rows/columns were lost
+                pairs.append(Pair(o.id, b.id, sc, why))
+    got = assign(pairs, 0.25)
     for o in tables:
         p = got.get(o.id)
         if p:
             ctx.match(o, MatchStatus.MATCHED, [b for b in tblb if b.id == p.block_id], p.score, p.reasons)
         else:
-            ctx.find(u, "possible_missing_table", f"A {o.metadata.get('row_count')}x{o.metadata.get('col_count')} table at {o.locator.path} has no matching extracted table.",
-                     obj=o, source=(o.text or "")[:200], extracted=f"{len(tblb)} table block(s), none matches",
-                     detail={"path": o.locator.path})
+            flat, _ = recall(o.text, " ".join(block_text(b) for b in blocks if b.type != T.TABLE))
+            ctx.find(u, "possible_missing_table", f"A {o.metadata.get('row_count')}x{o.metadata.get('col_count')} table at {o.locator.path} has no matching extracted table"
+                     + (" (its text is present as ordinary blocks; see the structure layer)." if flat >= 0.8 else "."),
+                     obj=o, severity=Severity.LOW if flat >= 0.8 else None, source=(o.text or "")[:200],
+                     extracted=f"{len(tblb)} table block(s), none matches",
+                     detail={"path": o.locator.path, "text_present_as_other_blocks": flat >= 0.8})
             ctx.match(o, MatchStatus.UNMATCHED, reasons=["no unclaimed table matches by dimensions and cell text"])
     # pictures / charts / equations: in document order against blocks that came from the same kind of source
     for typ, code, label, sel in (

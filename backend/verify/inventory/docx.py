@@ -14,6 +14,7 @@ Contract notes:
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 
@@ -130,13 +131,22 @@ class _Reader:
         self._inline(p, text, found)
         body = "".join(text).strip()
         if body:
+            meta: dict = {"style": style or None}
             if any(style.startswith(h) for h in _HEADING_STYLES) or outline:
                 typ = SourceObjectType.HEADING
+                digits = re.search(r"(\d+)", style)
+                if digits:
+                    meta["level"], meta["level_source"] = int(digits.group(1)), "style name"
+                elif style == "title":
+                    meta["level"], meta["level_source"] = 1, "style name"
             elif has_num or "list" in style:
                 typ = SourceObjectType.LIST_ITEM
+                ilvl = ppr.find(q("w", "numPr") + "/" + q("w", "ilvl")) if ppr is not None else None
+                if ilvl is not None:
+                    meta["list_level"] = int(ilvl.get(q("w", "val"), "0"))
             else:
                 typ = SourceObjectType.TEXT
-            self._add(typ, path, body, style=style or None)
+            self._add(typ, path, body, **meta)
         for kind, node in found:
             if kind == "math":
                 self._add(SourceObjectType.EQUATION, path, "".join((n.text or "") for n in node.iter(q("m", "t"))),
@@ -157,20 +167,43 @@ class _Reader:
 
     # -- tables -------------------------------------------------------------------------------
     def _table(self, tbl, path: str) -> None:
-        rows, merged, nested = [], False, 0
+        """Rows expanded to the table grid; cells covered by a merge are None (the extraction's convention)."""
+        grid_el = tbl.find(q("w", "tblGrid"))
+        n_cols = len(grid_el.findall(q("w", "gridCol"))) if grid_el is not None else 0
+        raw: list[list[dict]] = []
+        nested = 0
         for tr in tbl.findall(q("w", "tr")):
-            row = []
+            cells, col = [], 0
             for tc in tr.findall(q("w", "tc")):
-                merged = merged or tc.find(f"{q('w', 'tcPr')}/{q('w', 'gridSpan')}") is not None or \
-                    tc.find(f"{q('w', 'tcPr')}/{q('w', 'vMerge')}") is not None
+                pr = tc.find(q("w", "tcPr"))
+                gs = pr.find(q("w", "gridSpan")) if pr is not None else None
+                vm = pr.find(q("w", "vMerge")) if pr is not None else None
+                span = int(gs.get(q("w", "val"), "1")) if gs is not None else 1
                 nested += len(list(tc.iter(q("w", "tbl"))))
-                row.append(" ".join(
-                    t for t in ("".join((n.text or "") for n in p.iter(q("w", "t"))) for p in tc.iter(q("w", "p"))) if t.strip()))
-            rows.append(row)
-        grid = tbl.find(q("w", "tblGrid"))
-        cols = len(grid.findall(q("w", "gridCol"))) if grid is not None else max((len(r) for r in rows), default=0)
-        self._add(SourceObjectType.TABLE, path, " ".join(c for r in rows for c in r),
-                  rows=rows, row_count=len(rows), col_count=cols, has_merged_cells=merged, nested_tables=nested)
+                text = " ".join(
+                    t for t in ("".join((n.text or "") for n in p.iter(q("w", "t"))) for p in tc.iter(q("w", "p"))) if t.strip())
+                vmerge = None if vm is None else ("restart" if vm.get(q("w", "val")) == "restart" else "continue")
+                cells.append({"col": col, "span": span, "vmerge": vmerge, "text": text})
+                col += span
+            n_cols = max(n_cols, col)
+            raw.append(cells)
+        rows: list[list[str | None]] = [[None] * n_cols for _ in raw]
+        regions: list[list[int]] = []
+        for r, cells in enumerate(raw):
+            for cell in cells:
+                if cell["vmerge"] == "continue":
+                    continue
+                rows[r][cell["col"]] = cell["text"]
+                rowspan = 1
+                if cell["vmerge"] == "restart":
+                    while r + rowspan < len(raw) and any(
+                            o["col"] == cell["col"] and o["vmerge"] == "continue" for o in raw[r + rowspan]):
+                        rowspan += 1
+                if rowspan > 1 or cell["span"] > 1:
+                    regions.append([r, cell["col"], rowspan, cell["span"]])
+        self._add(SourceObjectType.TABLE, path, " ".join(c for r in rows for c in r if c),
+                  rows=rows, row_count=len(rows), col_count=n_cols, has_merged_cells=bool(regions),
+                  merged_regions=sorted(regions), nested_tables=nested)
 
     def walk(self, container, prefix: str = "body") -> None:
         for i, ch in enumerate(container, start=1):
