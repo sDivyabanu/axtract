@@ -137,9 +137,10 @@ def validate_latex(latex: str) -> Validation:
 _FUNCS = {"sin", "cos", "tan", "log", "ln", "exp", "sqrt", "min", "max", "lim"}
 _VAR_RE = re.compile(r"^[A-Za-z]{1,3}([\^_](\{[\w+\-]+\}|[\w+\-]+))?$")
 _NUM_RE = re.compile(r"^\d+([.,]\d+)?([\^_](\{[\w+\-]+\}|[\w+\-]+))?$")
+_ALGEBRA_TERM_RE = re.compile(r"^\d+(?:[.,]\d+)?[A-Za-z]{1,3}([\^_](\{[\w+\-]+\}|[\w+\-]+))?$")
 _OP_RE = re.compile(r"^(=|\+|-|\*|/|\^|<|>|<=|>=|≤|≥|≠|±|×|÷|·|\(|\)|[\(\)]?[A-Za-z0-9]+[\)]?)$")
 _REL = {"=", "<", ">", "<=", ">=", "≤", "≥", "≠"}
-_OPERATORS = {"+", "-", "*", "/", "×", "÷", "·", "±"}
+_OPERATORS = {"+", "-", "−", "*", "/", "×", "÷", "·", "±"}
 
 
 # Short English words that look like 1-3 letter variables but are prose.
@@ -158,7 +159,7 @@ def _is_math_token(tok: str) -> bool:
         return False
     if t in _REL or t in _OPERATORS:
         return True
-    if _NUM_RE.match(t) or _VAR_RE.match(t):
+    if _NUM_RE.match(t) or _VAR_RE.match(t) or _ALGEBRA_TERM_RE.match(t):
         return True
     return False
 
@@ -209,7 +210,7 @@ def find_inline_equations(text: str) -> list[str]:
 
 def plain_to_latex(expr: str) -> str:
     """Deterministic plain-text -> LaTeX for the token set accepted by find_inline_equations."""
-    s = expr
+    s = expr.replace("−", "-")
     s = re.sub(r"([A-Za-z0-9\)])\^(-?\w+)", lambda m: f"{m.group(1)}^{{{m.group(2)}}}", s)
     s = re.sub(r"([A-Za-z0-9\)])_(-?\w+)", lambda m: f"{m.group(1)}_{{{m.group(2)}}}", s)
     s = s.replace("<=", r"\leq ").replace(">=", r"\geq ").replace("≤", r"\leq ").replace("≥", r"\geq ")

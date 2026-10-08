@@ -485,6 +485,27 @@ def _read_axis_chart(rgb: np.ndarray, words: list[Word], rect, hint_title: str) 
         else:
             xs = []
             flags.append("no_x_labels")
+        # OCR occasionally misses one categorical tick. Preserve the plotted
+        # point by inserting a positional placeholder when a gap is a clear
+        # multiple of the chart's regular category spacing. The value still
+        # comes from the pixels; the empty category and review flag make the
+        # unreadable label explicit instead of silently dropping the point.
+        if len(xs) >= 3 and cat_labels and x_axis is None:
+            gaps = [xs[i + 1][0] - xs[i][0] for i in range(len(xs) - 1)]
+            typical_gap = float(np.median(gaps))
+            if typical_gap > 0:
+                expanded = [xs[0]]
+                inserted = False
+                for i, gap in enumerate(gaps):
+                    multiples = int(round(gap / typical_gap))
+                    if multiples >= 2 and abs(gap / typical_gap - multiples) <= 0.25:
+                        for step in range(1, multiples):
+                            expanded.append((xs[i][0] + gap * step / multiples, ""))
+                            inserted = True
+                    expanded.append(xs[i + 1])
+                if inserted:
+                    xs = expanded
+                    flags.append("some_category_labels_unreadable")
         categories = [t for _, t in xs]
         win = max(2, int(0.004 * W))
         for ci, (cl, comps) in enumerate(typed):

@@ -89,6 +89,13 @@ class TestInlineEquations:
         assert found == ["x^2 + y^2 = r^2"]
         assert plain_to_latex(found[0]) == "x^{2} + y^{2} = r^{2}"
 
+    def test_keeps_coefficient_terms_and_unicode_minus(self):
+        found = find_inline_equations("Explain why 4x + 15 = 33 − 2x")
+        assert found == ["4x + 15 = 33 − 2x"]
+        latex = plain_to_latex(found[0])
+        assert latex == "4x + 15 = 33 - 2x"
+        assert validate_latex(latex).ok
+
     @pytest.mark.parametrize("text", [
         "state-of-the-art, well-known and/or e-mail", "Due 2024-01-05 or call 555-1234",
         "Revenue grew 10 percent year-over-year", "Let y be the answer",
@@ -146,16 +153,19 @@ class TestTables:
         assert (0, 0, 2, 1) in regions and (0, 1, 1, 2) in regions and (0, 3, 1, 2) in regions and (3, 0, 1, 5) in regions
         assert not any(rg[0] == 2 for rg in regions)
 
-    def _table(self, bid, page, rows):
+    def _table(self, bid, page, rows, bbox=(0.1, 0.1, 0.9, 0.9)):
         return DocumentBlock(
             id=bid, type=BlockType.TABLE, content="\n".join(" | ".join(r) for r in rows), page=page,
-            bbox=(0.1, 0.1, 0.9, 0.9), extractor="t", metadata={"rows": rows, "col_count": len(rows[0])},
+            bbox=bbox, extractor="t", metadata={"rows": rows, "col_count": len(rows[0])},
         )
 
     def test_three_page_chain_with_repeated_headers(self):
         h = ["Item", "Value"]
-        blocks = [self._table("a", 1, [h, ["x", "1"]]), self._table("b", 2, [h, ["y", "2"]]),
-                  self._table("c", 3, [h, ["z", "3"]])]
+        blocks = [
+            self._table("a", 1, [h, ["x", "1"]], bbox=(0.1, 0.78, 0.9, 0.98)),
+            self._table("b", 2, [h, ["y", "2"]], bbox=(0.1, 0.02, 0.9, 0.98)),
+            self._table("c", 3, [h, ["z", "3"]], bbox=(0.1, 0.02, 0.9, 0.22)),
+        ]
         blocks = [enhance_table_block(b) for b in blocks]
         out = merge_cross_page_tables(blocks)
         assert len(out) == 1
@@ -164,10 +174,39 @@ class TestTables:
         assert len(out[0].metadata["parsed_rows"]) == 4  # recomputed after the merge
 
     def test_first_row_is_kept_when_it_is_not_a_repeated_header(self):
-        blocks = [enhance_table_block(self._table("a", 1, [["Item", "Value"], ["x", "1"]])),
-                  enhance_table_block(self._table("b", 2, [["y", "2"], ["z", "3"]]))]
+        blocks = [enhance_table_block(self._table(
+            "a", 1, [["Item", "Value"], ["x", "1"]], bbox=(0.1, 0.78, 0.9, 0.98))),
+            enhance_table_block(self._table(
+                "b", 2, [["y", "2"], ["z", "3"]], bbox=(0.1, 0.02, 0.9, 0.22)))]
         out = merge_cross_page_tables(blocks)
         assert out[0].metadata["rows"] == [["Item", "Value"], ["x", "1"], ["y", "2"], ["z", "3"]]
+
+    def test_similarly_aligned_tables_away_from_page_edges_stay_separate(self):
+        a = enhance_table_block(self._table("a", 1, [["Item", "Value"], ["x", "1"]],
+                                             bbox=(0.1, 0.3, 0.9, 0.55)))
+        b = enhance_table_block(self._table("b", 2, [["Name", "Year"], ["y", "2025"]],
+                                             bbox=(0.1, 0.4, 0.9, 0.65)))
+        out = merge_cross_page_tables([a, b])
+        assert [block.id for block in out] == ["a", "b"]
+
+    def test_changed_text_headers_at_page_edges_stay_separate(self):
+        a = enhance_table_block(self._table("a", 1, [["Item", "Value"], ["x", "1"]],
+                                             bbox=(0.1, 0.78, 0.9, 0.98)))
+        b = enhance_table_block(self._table("b", 2, [["Name", "Year"], ["y", "2025"]],
+                                             bbox=(0.1, 0.02, 0.9, 0.22)))
+        out = merge_cross_page_tables([a, b])
+        assert [block.id for block in out] == ["a", "b"]
+
+    def test_repeated_body_labels_at_page_edges_stay_separate(self):
+        header = ["", "2006", "2007", "2008", "2009"]
+        a = enhance_table_block(self._table("a", 1, [
+            header, ["Economics", "A", "B", "C", "D"], ["Politics", "A", "B", "C", "D"]
+        ], bbox=(0.1, 0.78, 0.9, 0.98)))
+        b = enhance_table_block(self._table("b", 2, [
+            header, ["Economics", "Yes", "No", "Yes", "No"], ["Politics", "No", "Yes", "No", "Yes"]
+        ], bbox=(0.1, 0.02, 0.9, 0.22)))
+        out = merge_cross_page_tables([a, b])
+        assert [block.id for block in out] == ["a", "b"]
 
     def test_order_of_other_blocks_is_preserved(self):
         p = lambda i: DocumentBlock(id=f"p{i}", type=BlockType.PARAGRAPH, content="t", page=1, extractor="t")

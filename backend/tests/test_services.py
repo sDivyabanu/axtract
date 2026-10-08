@@ -34,7 +34,7 @@ class TestLayoutService:
     def test_header_footer_detection(self):
         blocks = [
             DocumentBlock(
-                id="h", type=BlockType.PARAGRAPH, content="Page header",
+                id="h1", type=BlockType.PARAGRAPH, content="Annual Report",
                 page=1, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test", metadata={"route": "digital"},
             ),
             DocumentBlock(
@@ -45,12 +45,27 @@ class TestLayoutService:
                 id="f", type=BlockType.PARAGRAPH, content="Page 1",
                 page=1, bbox=(0.4, 0.95, 0.6, 0.98), extractor="test", metadata={"route": "digital"},
             ),
+            DocumentBlock(
+                id="h2", type=BlockType.PARAGRAPH, content="Annual Report",
+                page=2, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test", metadata={"route": "digital"},
+            ),
+            DocumentBlock(
+                id="f2", type=BlockType.PARAGRAPH, content="Page 2",
+                page=2, bbox=(0.4, 0.95, 0.6, 0.98), extractor="test", metadata={"route": "digital"},
+            ),
+            DocumentBlock(
+                id="oneoff", type=BlockType.PARAGRAPH, content="Section opener",
+                page=3, bbox=(0.1, 0.02, 0.5, 0.05), extractor="test", metadata={"route": "digital"},
+            ),
         ]
         ordered = assign_reading_order(blocks)
         types = {b.id: b.type for b in ordered}
-        assert types["h"] == BlockType.HEADER
+        assert types["h1"] == BlockType.HEADER
+        assert types["h2"] == BlockType.HEADER
         assert types["b"] == BlockType.PARAGRAPH
         assert types["f"] == BlockType.FOOTER
+        assert types["f2"] == BlockType.FOOTER
+        assert types["oneoff"] == BlockType.PARAGRAPH
 
     def test_no_header_footer_for_non_page_content(self):
         """Slides / standalone images have no running headers, whatever their position."""

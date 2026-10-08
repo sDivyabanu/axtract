@@ -458,6 +458,23 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
         if not _budget_ok():
             result.errors.append(DocumentError(code="REGION_ROUTING_SKIPPED", message="Time budget reached; remaining pages were not analysed for charts/equations.", page=pno))
             break
+        page_figures = [b for b in blocks if b.page == pno and b.type == BlockType.FIGURE
+                        and b.bbox is not None]
+        page_candidates = [b for b in blocks if b.page == pno
+                           and b.metadata.get("formula_candidate") and b.bbox is not None]
+        must_analyze_pixels = pno in candidate_pages or pno in scanned_pages
+        raster_figures = [b for b in page_figures
+                          if b.metadata.get("image_width", 0) and b.metadata.get("image_height", 0)]
+        # PDF vector charts have already been checked by the vector reader
+        # above. Rendering those pages and OCR-reading every rejected table
+        # candidate is both slow and redundant; reserve pixel routing for
+        # embedded raster figures and scanned/formula candidate pages.
+        if not must_analyze_pixels and not raster_figures:
+            continue
+        if not must_analyze_pixels and analyzed >= MAX_FIGURES_ANALYZED:
+            for blk in page_figures:
+                blk.metadata.setdefault("flags", []).append("not_analyzed_figure_limit")
+            continue
         try:
             img = image_of(pno)
         except Exception as exc:  # noqa: BLE001
@@ -466,7 +483,9 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
         regions = []
         try:
-            regions = models.detect_layout(img) if (figure_pages | candidate_pages | scanned_pages) else []
+            # Layout inference is useful for equation candidates and scanned pages;
+            # figure crops are already routed through the visual classifier below.
+            regions = models.detect_layout(img) if must_analyze_pixels else []
         except Exception:  # noqa: BLE001
             logger.exception("layout detection failed on page %s", pno)
 
@@ -477,8 +496,8 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
             return best.cls if best is not None and _iou(best.bbox, bbox) >= 0.3 else None
 
         # 2a. figures
-        for i, blk in enumerate(list(blocks)):
-            if blk.page != pno or blk.type != BlockType.FIGURE or blk.bbox is None:
+        for blk in page_figures:
+            if blk not in blocks:
                 continue
             if analyzed >= MAX_FIGURES_ANALYZED:
                 blk.metadata.setdefault("flags", []).append("not_analyzed_figure_limit")
@@ -496,8 +515,8 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
             blocks[idx] = _to_chart(blk, payload) if kind == "chart" else _to_equation(blk, payload)
 
         # 2b. formula candidates in the text layer: re-read the rendered crop
-        for blk in list(blocks):
-            if blk.page != pno or not blk.metadata.get("formula_candidate") or blk.bbox is None:
+        for blk in page_candidates:
+            if blk not in blocks:
                 continue
             if not _budget_ok() or not models.latex_model_available():
                 blk.metadata.setdefault("flags", []).append("formula_not_checked")
@@ -601,7 +620,7 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 def _inline_text_equations(result: ExtractionResult, file_path: Path, pages: set[int]) -> None:
     import pypdfium2 as pdfium
 
-    from services.preview_service import _find, _pdfium_lock, _range_box
+    from services.preview_service import _pdfium_lock
 
     targets = []
     for blk in result.blocks:
@@ -614,16 +633,25 @@ def _inline_text_equations(result: ExtractionResult, file_path: Path, pages: set
 
     with _pdfium_lock:
         pdf = pdfium.PdfDocument(str(file_path))
+        text_pages: dict[int, tuple[object, object]] = {}
         try:
             n = 0
             for blk, found in targets:
+                page_index = blk.page - 1
+                if page_index not in text_pages:
+                    page = pdf[page_index]
+                    text_pages[page_index] = (page, page.get_textpage())
+                page, textpage = text_pages[page_index]
                 for expr in found:
                     latex = plain_to_latex(expr)
                     if not validate_latex(latex).ok:
                         continue
-                    hit = _find(pdf, expr, blk.page - 1)
+                    # The expression came from this page's own text layer. Searching every
+                    # later page when it is absent here is both unnecessary and very costly
+                    # on long math documents. Reuse this page's TextPage for all its matches.
+                    hit = textpage.search(expr, match_case=False).get_next()
                     pw_ph = blk.metadata.get("page_size_pt")
-                    bbox = _range_box(pdf, hit[0], hit[1], hit[2]) if hit and hit[0] == blk.page - 1 else None
+                    bbox = _range_box_on_textpage(page, textpage, hit[0], hit[0] + hit[1]) if hit else None
                     result.blocks.append(make_equation_block(
                         f"p{blk.page}-ieq{n}", blk.page, bbox or blk.bbox, latex, "text_layer", 0.8, [],
                         extractor="text_layer",
@@ -634,4 +662,29 @@ def _inline_text_equations(result: ExtractionResult, file_path: Path, pages: set
                     ))
                     n += 1
         finally:
+            for _page, textpage in text_pages.values():
+                textpage.close()
             pdf.close()
+
+
+def _range_box_on_textpage(page, textpage, start: int, end: int) -> BBox | None:
+    """Get a normalized character range box without reopening the page text layer."""
+    width, height = page.get_size()
+    end = min(end, textpage.count_chars())
+    xs0, ys0, xs1, ys1 = [], [], [], []
+    for index in range(start, end):
+        left, bottom, right, top = textpage.get_charbox(index)
+        if right - left <= 0 or top - bottom <= 0:
+            continue
+        xs0.append(left)
+        ys0.append(bottom)
+        xs1.append(right)
+        ys1.append(top)
+    if not xs0 or width <= 0 or height <= 0:
+        return None
+    return (
+        round(min(xs0) / width, 6),
+        round(1 - max(ys1) / height, 6),
+        round(max(xs1) / width, 6),
+        round(1 - min(ys0) / height, 6),
+    )

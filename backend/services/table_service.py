@@ -163,6 +163,7 @@ def match_table_continuation(
     2. Similar column widths/alignment
     3. table2 is on the next page
     4. Similar bbox horizontal position
+    5. The first table reaches the bottom of its page and the next starts near the top
     """
     last_page = max(table1.metadata.get("merged_from_pages", [table1.page]))
     if last_page + 1 != table2.page:
@@ -175,8 +176,9 @@ def match_table_continuation(
     if col_count1 == 0 or col_count2 == 0:
         return False
     
-    # Allow ±1 column variance
-    if abs(col_count1 - col_count2) > 1:
+    # A change in parsed column count is a strong sign that the next page
+    # contains another table, even when it shares the same page margins.
+    if col_count1 != col_count2:
         return False
     
     # Check horizontal alignment similarity
@@ -185,6 +187,12 @@ def match_table_continuation(
     
     if not bbox1 or not bbox2:
         return False
+
+    # Tables on unrelated pages often reuse the same column count and page
+    # margins. A real cross-page continuation should touch both page edges;
+    # otherwise preserving separate table blocks is safer.
+    if bbox1[3] < 0.75 or bbox2[1] > 0.25:
+        return False
     
     # Check if horizontal positions are similar (within 5% of page width)
     x1_diff = abs(bbox1[0] - bbox2[0])
@@ -192,6 +200,33 @@ def match_table_continuation(
     
     if x1_diff > 0.05 or x2_diff > 0.05:
         return False
+
+    rows1 = table1.metadata.get("rows", [])
+    rows2 = table2.metadata.get("rows", [])
+    if rows1 and rows2:
+        header1 = [str(c).strip().lower() for c in rows1[0] if c not in (None, "")]
+        header2 = [str(c).strip().lower() for c in rows2[0] if c not in (None, "")]
+        # When both first rows look like labels, changed headers distinguish a
+        # new table. A continuation with no repeated header remains eligible.
+        header1_like = len(header1) >= 2 and all(not is_numeric_cell(c) for c in header1)
+        header2_like = len(header2) >= 2 and all(not is_numeric_cell(c) for c in header2)
+        if header1_like and header2_like and header1 != header2:
+            return False
+
+        # Repeated row labels are evidence of two parallel tables (for example,
+        # the same course list with a different measure), not a continued list
+        # split at a page break.
+        body_labels1 = {
+            " ".join(str(row[0]).lower().split())
+            for row in rows1[1:] if row and row[0] not in (None, "")
+        }
+        body_labels2 = {
+            " ".join(str(row[0]).lower().split())
+            for row in rows2[1:] if row and row[0] not in (None, "")
+        }
+        smaller_label_set = min(len(body_labels1), len(body_labels2))
+        if smaller_label_set >= 2 and len(body_labels1 & body_labels2) / smaller_label_set >= 0.5:
+            return False
     
     return True
 

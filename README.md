@@ -255,8 +255,8 @@ The route and service do not need to change.
 | Multi-format ingestion (PDF/DOCX/PPTX/XLSX/JPG/PNG) | Implemented |
 | Digital PDF text extraction | Implemented |
 | PDF heading detection (font analysis) | Implemented |
-| PDF table extraction | Implemented (PyMuPDF find_tables) |
-| PDF figure detection | Implemented |
+| PDF table extraction | Implemented (PyMuPDF find_tables with plausibility checks) |
+| PDF figure detection | Implemented (image and vector chart signals; chart data remains unextracted) |
 | Scanned PDF → OCR | Implemented (adaptive routing) |
 | Mixed digital/scanned PDF | Implemented (per-page routing) |
 | Image OCR (JPG/PNG) | Implemented (RapidOCR) |
