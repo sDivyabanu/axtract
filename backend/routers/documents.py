@@ -17,6 +17,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
@@ -30,7 +31,9 @@ from extractors.registry import get_extractor
 from models.document import DocumentResponse
 from models.errors import AppError
 from services import preview_service
+from services import progress
 from services.parse_service import parse_upload
+from services.progress_stream import SSE_HEADERS, event_stream
 from utils import deadline
 from utils.deadline import HARD_LIMIT_SECONDS
 from utils.files import get_extension, sanitize_filename
@@ -109,6 +112,20 @@ async def upload_document(
     user_id: str = Depends(get_user_id),
 ):
     """Encrypt and store the original, parse it with the standard pipeline, save the result."""
+    return await _store_and_parse(file, user_id)
+
+
+@router.post("/stream")
+async def upload_document_stream(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_user_id),
+):
+    """Same as POST /api/documents, reported live as server-sent events (authenticated like the original)."""
+    return StreamingResponse(event_stream(lambda: _store_and_parse(file, user_id)),
+                             media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+async def _store_and_parse(file: UploadFile, user_id: str):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided.")
 
@@ -159,7 +176,13 @@ async def upload_document(
             run_in_threadpool(parse_upload, BytesUpload(file=BytesIO(file_bytes), filename=filename)),
             timeout=HARD_LIMIT_SECONDS,
         )
+    except (asyncio.CancelledError, progress.Cancelled):  # the client left a streamed upload
+        await asyncio.shield(_mark_failed(doc_id, run_id, user_id, "CANCELLED", "Processing was cancelled."))
+        raise
     except asyncio.TimeoutError:
+        tracker = progress.current()
+        if tracker is not None:
+            tracker.cancelled.set()
         await _mark_failed(doc_id, run_id, user_id, "TIMEOUT", "Processing time limit exceeded.")
         raise AppError("TIMEOUT", f"Processing exceeded the {HARD_LIMIT_SECONDS} second limit.", status_code=504)
     except AppError as exc:

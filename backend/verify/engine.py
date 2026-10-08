@@ -32,6 +32,7 @@ from verify.models import ProviderInfo, ValidationFailure, ValidationReport
 from verify.order import check_order
 from verify.rollup import UnitChecks, build_report, merge_units
 from verify.structure import check_structure
+from services import progress
 
 _ENGINES = {
     "pdf": [("pypdfium2", "native text, image objects"), ("pdfplumber", "word regions, table candidates")],
@@ -68,29 +69,38 @@ def run_verification(file_path: Path, response: DocumentResponse, options: Verif
 
     def stage(name: str, fn: Callable[[], Any]) -> Any:
         t0 = time.perf_counter()
+        progress.report_engine(name, "running")
         if options.time_budget_s is not None and name != "integrity" and (t0 - t_all) > options.time_budget_s:
             failures.append(ValidationFailure(stage=name, error_type="TimeBudget",
                                               message=f"validation budget of {options.time_budget_s:.1f}s was spent before this stage"))
             timings[name] = 0.0
+            progress.report_engine(name, "skipped")
             return None
         try:
-            return fn()
+            out = fn()
+            if name == "inventory" and getattr(out, "error", None) is not None:  # the independent read of the source failed
+                progress.report_engine(name, "failed", error_type="InventoryError")
+            else:
+                progress.report_engine(name, "completed", issues=getattr(out, "issues", ()) or ())
+            return out
         except Exception as exc:  # noqa: BLE001 - validation must never take the extraction down
             failures.append(ValidationFailure(stage=name, error_type=type(exc).__name__, message=str(exc)[:300]))
+            progress.report_engine(name, "failed", error_type=type(exc).__name__)
             return None
         finally:
             timings[name] = round((time.perf_counter() - t0) * 1000, 3)
 
-    integrity = stage("integrity", lambda: run_integrity(response, ids))
     inv_opts = options.inventory
     if options.time_budget_s is not None:
         inv_opts = replace(inv_opts, time_budget_s=min(inv_opts.time_budget_s, max(options.time_budget_s * 0.6, 0.5)))
     inventory = stage("inventory", lambda: build_inventory(Path(file_path), response.file_type, inv_opts))
+    integrity = stage("integrity", lambda: run_integrity(response, ids))
     completeness = stage("completeness", lambda: check_completeness(inventory, response, ids)) if inventory is not None else None
     matches = completeness.matches if completeness is not None else None
     content = stage("content", lambda: check_content(inventory, response, matches, ids)) if matches is not None else None
     structure = stage("structure", lambda: check_structure(inventory, response, matches, ids)) if matches is not None else None
     order = stage("reading_order", lambda: check_order(inventory, response, matches, ids)) if matches is not None else None
+    progress.finish_engine()
     layers.update(integrity=integrity, content=content, structure=structure, reading_order=order)
 
     outcomes = [o for o in (integrity, completeness, content, structure, order) if o is not None]
@@ -103,6 +113,7 @@ def run_verification(file_path: Path, response: DocumentResponse, options: Verif
     elif inventory is not None:
         providers = [ProviderInfo(name=n, tier="builtin", available=False, note=f"inventory failed: {inventory.error}")
                      for n, _ in _ENGINES.get(inventory.file_type, [])]
+    progress.report("verdict", "running")
     timings["total"] = round((time.perf_counter() - t_all) * 1000, 3)
     failure = failures[0] if failures else None
     try:
