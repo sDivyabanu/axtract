@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-10-08 13:44:58",
+  "dataset": "allenai/olmOCR-bench",
+  "scorer": "olmocr.bench.benchmark",
+  "total_documents": 20,
+  "successful_documents": 20,
+  "failed_documents": 0,
+  "success_rate_pct": 100.0,
+  "total_pages": 20,
+  "total_blocks": 715,
+  "total_runtime_s": 60.21,
+  "throughput_docs_per_sec": 0.33,
+  "throughput_pages_per_sec": 0.33,
+  "latency_ms": {
+    "mean": 14495.72,
+    "median": 8195.54,
+    "p95": 48122.03,
+    "min": 2178.36,
+    "max": 48246.22,
+    "cold_start_mean": 6289.33,
+    "warm_mean": 17231.19
+  },
+  "verify_overhead": {
+    "enabled": true,
+    "mean_verify_ms": 0.0,
+    "verify_pct_of_total": 0.0
+  },
+  "memory": {
+    "peak_mb": 1393.91,
+    "current_mb": 79.54
+  },
+  "category_breakdown": {
+    "headers_footers": {
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "durations": [
+        3888.6621999554336
+      ],
+      "mean_ms": 3888.66,
+      "median_ms": 3888.66
+    },
+    "arxiv_math": {
+      "total": 12,
+      "success": 12,
+      "failed": 0,
+      "durations": [
+        5182.6402000151575,
+        5984.2346999794245,
+        7685.277299955487,
+        8705.811599968001,
+        5438.141799997538,
+        12279.151700204238,
+        10611.203100066632,
+        5727.604000130668,
+        6531.1278000008315,
+        4840.958300046623,
+        10392.096600029618,
+        15164.280300028622
+      ],
+      "mean_ms": 8211.88,
+      "median_ms": 7108.2
+    },
+    "tables": {
+      "total": 3,
+      "success": 3,
+      "failed": 0,
+      "durations": [
+        5579.741700086743,
+        45762.44250009768,
+        14015.017099911347
+      ],
+      "mean_ms": 21785.73,
+      "median_ms": 14015.02
+    },
+    "multi_column": {
+      "total": 2,
+      "success": 2,
+      "failed": 0,
+      "durations": [
+        2178.3617998007685,
+        48246.220000088215
+      ],
+      "mean_ms": 25212.29,
+      "median_ms": 25212.29
+    },
+    "old_scans_math": {
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "durations": [
+        30639.791500056162
+      ],
+      "mean_ms": 30639.79,
+      "median_ms": 30639.79
+    },
+    "old_scans": {
+      "total": 1,
+      "success": 1,
+      "failed": 0,
+      "durations": [
+        41061.68649997562
+      ],
+      "mean_ms": 41061.69,
+      "median_ms": 41061.69
+    }
+  },
+  "failures": []
+}
