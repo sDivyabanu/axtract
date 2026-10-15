@@ -117,6 +117,18 @@ def has_complete_output(pdf_path: Path, relative_path: Path, output_dir: Path) -
     )
 
 
+def median_processing_ms_per_page(results: List[Dict[str, Any]]) -> float:
+    """Compute median end-to-end document processing time normalized by pages."""
+    import statistics
+
+    per_page_ms = [
+        float(result["total_elapsed_ms"]) / int(result["pages"])
+        for result in results
+        if result.get("success") and result.get("pages", 0) > 0
+    ]
+    return statistics.median(per_page_ms) if per_page_ms else 0.0
+
+
 def run_benchmark(
     bench_dir: Path,
     output_dir: Path,
@@ -252,6 +264,10 @@ def run_benchmark(
         "latency_ms": {
             "mean": round(mean_latency, 2),
             "median": round(median_latency, 2),
+            "median_end_to_end_per_page": round(
+                median_processing_ms_per_page(results), 2
+            ),
+            "per_page_basis": "document end-to-end elapsed time divided by source page count",
             "p95": round(p95_latency, 2),
             "min": round(min(durations), 2) if durations else 0.0,
             "max": round(max(durations), 2) if durations else 0.0,
