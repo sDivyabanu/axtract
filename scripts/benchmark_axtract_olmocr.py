@@ -101,6 +101,22 @@ def process_single_pdf(
     return result_meta
 
 
+def has_complete_output(pdf_path: Path, relative_path: Path, output_dir: Path) -> bool:
+    """Return whether candidate Markdown exists for every source PDF page."""
+    import pymupdf
+
+    try:
+        with pymupdf.open(pdf_path) as document:
+            page_count = document.page_count
+    except Exception:
+        return False
+    target_dir = output_dir / relative_path.parent
+    return all(
+        (target_dir / f"{pdf_path.stem}_pg{page}_repeat1.md").is_file()
+        for page in range(1, page_count + 1)
+    )
+
+
 def run_benchmark(
     bench_dir: Path,
     output_dir: Path,
@@ -109,6 +125,7 @@ def run_benchmark(
     sample_limit: Optional[int] = None,
     workers: int = 4,
     enable_verify: bool = True,
+    skip_existing: bool = False,
 ) -> Dict[str, Any]:
     """Run AXTRACT on the benchmark dataset."""
     pdf_dir = bench_dir / "pdfs"
@@ -122,14 +139,30 @@ def run_benchmark(
             continue
         all_pdfs.append((p, rel))
 
-    logger.info(f"Discovered {len(all_pdfs)} benchmark PDFs in {pdf_dir}")
-
+    dataset_pdf_count = len(all_pdfs)
     if sample_limit and sample_limit < len(all_pdfs):
         logger.info(f"Sampling {sample_limit} PDFs out of {len(all_pdfs)}")
         # Sample evenly across categories
         import random
         random.seed(42)
         all_pdfs = random.sample(all_pdfs, sample_limit)
+
+    selected_pdf_count = len(all_pdfs)
+    skipped_existing = 0
+    if skip_existing:
+        pending = []
+        for pdf, relative_path in all_pdfs:
+            if has_complete_output(pdf, relative_path, output_dir):
+                skipped_existing += 1
+            else:
+                pending.append((pdf, relative_path))
+        all_pdfs = pending
+
+    logger.info(
+        f"Selected {selected_pdf_count} benchmark PDFs; "
+        f"processing {len(all_pdfs)} and skipping {skipped_existing} complete outputs "
+        f"(dataset contains {dataset_pdf_count})"
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -205,10 +238,12 @@ def run_benchmark(
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "dataset": "allenai/olmOCR-bench",
         "scorer": "olmocr.bench.benchmark",
-        "total_documents": len(all_pdfs),
-        "successful_documents": len(successful),
+        "total_documents": selected_pdf_count,
+        "attempted_documents": len(all_pdfs),
+        "skipped_existing_documents": skipped_existing,
+        "successful_documents": len(successful) + skipped_existing,
         "failed_documents": len(failed),
-        "success_rate_pct": round(len(successful) / len(all_pdfs) * 100, 2) if all_pdfs else 0.0,
+        "success_rate_pct": round((len(successful) + skipped_existing) / selected_pdf_count * 100, 2) if selected_pdf_count else 0.0,
         "total_pages": total_pages,
         "total_blocks": total_blocks,
         "total_runtime_s": round(total_wall_s, 2),
@@ -291,6 +326,11 @@ def main():
         action="store_true",
         help="Disable Verify engine during benchmark run",
     )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Resume by skipping PDFs whose per-page Markdown outputs already exist",
+    )
 
     args = parser.parse_args()
     summary = run_benchmark(
@@ -301,6 +341,7 @@ def main():
         sample_limit=args.sample,
         workers=args.workers,
         enable_verify=not args.no_verify,
+        skip_existing=args.skip_existing,
     )
     print(json.dumps(summary, indent=2))
 
