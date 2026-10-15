@@ -18,7 +18,7 @@ async function getAccessToken(): Promise<string> {
   return session.access_token;
 }
 
-async function authFetch(
+export async function authFetch(
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
@@ -39,7 +39,7 @@ async function authFetch(
   }
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+export async function handleResponse<T>(response: Response): Promise<T> {
   let payload: unknown;
   try {
     payload = await response.json();
