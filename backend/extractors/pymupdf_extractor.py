@@ -405,7 +405,6 @@ class PyMuPDFExtractor(BaseExtractor):
                 if ref.isdigit():
                     content = re.sub(rf"(?<=[A-Za-z]){re.escape(ref)},?(?=\b|\s|$)", "", content)
                     content = re.sub(rf"(?<!\w){re.escape(ref)}(?!\w)", "", content)
-            content = re.sub(r"(?<=[A-Za-z]),(?=\s|$)", "", content)
             font_sizes.append(max_size)
             raw_blocks.append({"content": content.strip(), "bbox": bbox, "font_size": max_size,
                                "is_bold": is_bold, "math_font": math_font,

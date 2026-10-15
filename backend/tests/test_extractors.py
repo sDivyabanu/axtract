@@ -26,6 +26,20 @@ class TestPyMuPDFExtractor:
         assert len(result.blocks) > 0
         assert all(b.extractor == "pymupdf" for b in result.blocks)
 
+    def test_preserves_commas_in_digital_pdf_text(self, tmp_path):
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((72, 100), "Smith, Jones, and Lee.", fontsize=11)
+        path = tmp_path / "commas.pdf"
+        doc.save(str(path))
+        doc.close()
+
+        result = PyMuPDFExtractor().extract(path)
+        text = "\n".join(block.content for block in result.blocks)
+        assert "Smith, Jones, and Lee." in text
+
     def test_heading_detection(self, tmp_path):
         """Heading detection needs multiple blocks with varied font sizes."""
         import pymupdf
