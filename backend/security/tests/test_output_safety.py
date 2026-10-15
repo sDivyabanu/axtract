@@ -77,6 +77,12 @@ def test_sanitise_block_text_xss():
     assert "Normal text" in result
 
 
+def test_sanitise_block_text_preserves_markdown_entities_and_quotes():
+    text = "Research &amp; development &#x27;quoted&#x27; \"text\" <img src=x>"
+    result = sanitise_block_text(text)
+    assert result == "Research &amp; development &#x27;quoted&#x27; \"text\" &lt;img src=x&gt;"
+
+
 def test_sanitise_markdown_link():
     result = sanitise_markdown(_MD_JS_LINK)
     assert "javascript:" not in result

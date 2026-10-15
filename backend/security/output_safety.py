@@ -87,8 +87,11 @@ def safe_cell_value(value: Any) -> str:
 
 def sanitise_block_text(text: str) -> str:
     """
-    Full sanitisation pipeline for one extracted text block.
-    Call before emitting to any HTML or Markdown output.
+    Sanitise extracted text for Markdown output without changing ordinary text.
+
+    The result is still safe to pass through a Markdown renderer: raw HTML
+    brackets are encoded, while ampersands and quotes remain literal so text
+    such as ``&amp;`` and ``&#x27;`` is not rewritten in the Markdown source.
     """
     if not text:
         return text
@@ -98,8 +101,10 @@ def sanitise_block_text(text: str) -> str:
     # 2. neutralise dangerous URIs anywhere in text
     t = DANGEROUS_URI_RE.sub(
         lambda m: 'blocked:', t)
-    # 3. HTML-escape
-    t = html.escape(t, quote=True)
+    # Encode raw HTML tags without HTML-escaping normal Markdown text. Escaping
+    # ampersands and quotes here changes the extracted text (and leaks entities
+    # into downstream Markdown consumers such as the benchmark scorer).
+    t = t.replace('<', '&lt;').replace('>', '&gt;')
     return t
 # REPLACE sanitise_markdown in security/output_safety.py
 
