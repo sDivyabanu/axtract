@@ -223,6 +223,20 @@ unsupported format, corrupt file, empty file, invalid magic bytes, heading detec
 normalized bounding boxes, layout ordering, multi-column detection, header/footer
 classification, Markdown generation for all block types.
 
+## Batch PDF to Markdown
+
+Convert a folder of PDFs recursively, writing one Markdown file for each PDF. The input
+subfolder structure is preserved so repeated PDF filenames do not overwrite each other.
+Each file is isolated: failed PDFs are reported after the rest of the batch finishes, and
+the command exits with status 1 if any file failed.
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\axtract_batch.py .\input-pdfs .\markdown-output
+```
+
+The default is one worker for predictable CPU and model memory use. Add `--workers 2` to
+process multiple PDFs concurrently on a machine with adequate resources.
+
 ## Evaluation & Benchmarking
 
 See [evaluation/README.md](evaluation/README.md) for detailed metrics documentation.
