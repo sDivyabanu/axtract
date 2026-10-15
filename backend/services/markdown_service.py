@@ -6,6 +6,8 @@ Uses the blocks' reading_order (from layout_service) when available.
 
 from __future__ import annotations
 
+import re
+
 from models.document import BlockType, DocumentBlock
 
 
@@ -52,6 +54,11 @@ def _block_to_markdown(block: DocumentBlock) -> str:
     content = block.content.strip()
     if not content:
         return ""
+    # A PDF can contain isolated dollar signs as glyphs or OCR noise. Emitting
+    # those as Markdown math delimiters can make downstream renderers treat a
+    # large span of ordinary text as an equation. The character reference
+    # renders as a literal dollar while keeping the Markdown source unambiguous.
+    content = re.sub(r"(?m)^[ \t]*\$[ \t]*$", "&#36;", content)
 
     match block.type:
         case BlockType.HEADING:

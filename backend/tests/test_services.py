@@ -180,6 +180,16 @@ class TestLayoutService:
 
 
 class TestMarkdownService:
+    def test_isolated_dollar_lines_are_not_math_delimiters(self):
+        block = DocumentBlock(
+            id="math-noise", type=BlockType.PARAGRAPH,
+            content="Before\n$\nordinary extracted text\n$\nAfter",
+            page=1, extractor="test",
+        )
+        markdown = blocks_to_markdown([block])
+        assert "Before\n&#36;\nordinary extracted text\n&#36;\nAfter" in markdown
+        assert not any(line.strip() == "$" for line in markdown.splitlines())
+
     def test_heading_levels(self):
         blocks = [
             DocumentBlock(
