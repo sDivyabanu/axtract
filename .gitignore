@@ -50,3 +50,6 @@ backend/data/
 # RAG model cache (fetched by scripts/setup_rag.sh); keep only the checksum manifest
 backend/model_weights/rag/*
 !backend/model_weights/rag/MANIFEST.sha256
+
+# Smart Benchmark Runner workspace (run outputs, reports, logs)
+/benchmark_runs/

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from models.errors import AppError, ErrorInfo, ErrorResponse
-from routers import auth, documents, health, parse, preview, rag
+from routers import auth, benchmark, documents, health, parse, preview, rag
 
 # Optional backend settings (Supabase, database, encryption key). Real environment wins.
 load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
@@ -82,6 +82,7 @@ app.include_router(preview.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(rag.router)
+app.include_router(benchmark.router)
 
 
 
