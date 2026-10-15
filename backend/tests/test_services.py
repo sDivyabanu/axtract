@@ -103,6 +103,28 @@ class TestLayoutService:
         assert contents.index("Left column top") < contents.index("Right column top")
         assert contents.index("Left column bottom") < contents.index("Right column top")
 
+    def test_multi_column_ordering_with_narrow_gutter(self):
+        blocks = [
+            DocumentBlock(id="l1", type=BlockType.PARAGRAPH, content="L top", page=1, bbox=(0.04, 0.1, 0.495, 0.2), extractor="test"),
+            DocumentBlock(id="l2", type=BlockType.PARAGRAPH, content="L bottom", page=1, bbox=(0.04, 0.4, 0.495, 0.5), extractor="test"),
+            DocumentBlock(id="r1", type=BlockType.PARAGRAPH, content="R top", page=1, bbox=(0.51, 0.1, 0.96, 0.2), extractor="test"),
+            DocumentBlock(id="r2", type=BlockType.PARAGRAPH, content="R bottom", page=1, bbox=(0.51, 0.4, 0.96, 0.5), extractor="test"),
+        ]
+        ordered = assign_reading_order(blocks)
+        contents = [b.content for b in ordered]
+        assert contents == ["L top", "L bottom", "R top", "R bottom"]
+
+    def test_full_width_heading_splits_column_flow(self):
+        blocks = [
+            DocumentBlock(id="l1", type=BlockType.PARAGRAPH, content="Before left", page=1, bbox=(0.05, 0.1, 0.45, 0.2), extractor="test"),
+            DocumentBlock(id="r1", type=BlockType.PARAGRAPH, content="Before right", page=1, bbox=(0.55, 0.1, 0.95, 0.2), extractor="test"),
+            DocumentBlock(id="h", type=BlockType.HEADING, content="Full width", page=1, bbox=(0.05, 0.3, 0.95, 0.36), extractor="test"),
+            DocumentBlock(id="l2", type=BlockType.PARAGRAPH, content="After left", page=1, bbox=(0.05, 0.4, 0.45, 0.5), extractor="test"),
+            DocumentBlock(id="r2", type=BlockType.PARAGRAPH, content="After right", page=1, bbox=(0.55, 0.4, 0.95, 0.5), extractor="test"),
+        ]
+        contents = [b.content for b in assign_reading_order(blocks)]
+        assert contents == ["Before left", "Before right", "Full width", "After left", "After right"]
+
     def test_blocks_without_bbox(self):
         blocks = [
             DocumentBlock(

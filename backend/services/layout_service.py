@@ -158,29 +158,35 @@ def _detect_columns(blocks: list[DocumentBlock]) -> list[tuple[float, float]]:
     if len(blocks_with_bbox) < 3:
         return [(0.0, 1.0)]
 
-    # Collect x-midpoints
-    x_mids = sorted((b.bbox[0] + b.bbox[2]) / 2 for b in blocks_with_bbox)
+    # Full-width titles and callouts should not fill the gutter or bias the
+    # column bounds. Most text columns occupy substantially less than 70% of
+    # the page width, even when the two columns have different widths.
+    column_blocks = [b for b in blocks_with_bbox if b.bbox[2] - b.bbox[0] < 0.70]
+    if len(column_blocks) < 4:
+        return [(0.0, 1.0)]
 
-    # Simple gap-based column detection
-    # Look for a significant gap in x-midpoints near the center
-    page_width = 1.0
-    center = page_width / 2
-    min_gap = 0.05  # Minimum gap to consider a column break
+    # Examine possible gutters throughout the middle 70% of the page. A
+    # small normalized threshold admits narrow gutters while the requirement
+    # for multiple blocks on each side avoids splitting an isolated paragraph.
+    min_gap = 0.015
+    candidates: list[tuple[float, float]] = []
+    for left in column_blocks:
+        cut = left.bbox[2] + min_gap
+        if not 0.15 <= cut <= 0.85:
+            continue
+        left_side = [b for b in column_blocks if (b.bbox[0] + b.bbox[2]) / 2 < cut]
+        right_side = [b for b in column_blocks if (b.bbox[0] + b.bbox[2]) / 2 > cut]
+        if len(left_side) < 2 or len(right_side) < 2:
+            continue
+        left_max = max(b.bbox[2] for b in left_side)
+        right_min = min(b.bbox[0] for b in right_side)
+        gap = right_min - left_max
+        if gap >= min_gap:
+            candidates.append((gap, (left_max + right_min) / 2))
 
-    # Check if there's a clear bimodal distribution
-    left_blocks = [x for x in x_mids if x < center - min_gap]
-    right_blocks = [x for x in x_mids if x > center + min_gap]
-
-    if len(left_blocks) >= 2 and len(right_blocks) >= 2:
-        # Likely two columns
-        left_max = max(b.bbox[2] for b in blocks_with_bbox if (b.bbox[0] + b.bbox[2]) / 2 < center)
-        right_min = min(b.bbox[0] for b in blocks_with_bbox if (b.bbox[0] + b.bbox[2]) / 2 > center)
-
-        if right_min > left_max + min_gap:
-            return [
-                (0.0, (left_max + right_min) / 2),
-                ((left_max + right_min) / 2, 1.0),
-            ]
+    if candidates:
+        _, split = max(candidates, key=lambda candidate: candidate[0])
+        return [(0.0, split), (split, 1.0)]
 
     return [(0.0, 1.0)]
 
@@ -194,28 +200,45 @@ def _sort_by_columns(
         # Single column: sort by vertical position
         return sorted(blocks, key=lambda b: (b.bbox[1] if b.bbox else 0.0))
 
-    # Assign blocks to columns
-    column_blocks: list[list[DocumentBlock]] = [[] for _ in columns]
+    split = columns[0][1]
+    spanning = [
+        b for b in blocks
+        if b.bbox is not None and b.bbox[0] < split < b.bbox[2]
+        and b.bbox[2] - b.bbox[0] >= 0.65
+    ]
+    spanning.sort(key=lambda b: (b.bbox[1], b.bbox[0]))
+    spanning_ids = {id(b) for b in spanning}
 
-    for block in blocks:
-        if block.bbox is None:
-            column_blocks[0].append(block)
-            continue
-
-        x_mid = (block.bbox[0] + block.bbox[2]) / 2
-        assigned = False
-        for i, (col_start, col_end) in enumerate(columns):
-            if col_start <= x_mid <= col_end:
-                column_blocks[i].append(block)
-                assigned = True
-                break
-        if not assigned:
-            column_blocks[0].append(block)
-
-    # Sort each column by vertical position, then concatenate columns
+    # A page-wide heading divides the column flow into sections. Within each
+    # section, read the left column before the right, then continue below the
+    # spanning block.
     result: list[DocumentBlock] = []
-    for col in column_blocks:
-        col.sort(key=lambda b: b.bbox[1] if b.bbox else 0.0)
-        result.extend(col)
+    section_blocks = [b for b in blocks if id(b) not in spanning_ids]
+    previous_bottom = 0.0
+    for span in spanning:
+        section = [
+            b for b in section_blocks
+            if (b.bbox[1] if b.bbox else 0.0) >= previous_bottom
+            and (b.bbox[1] if b.bbox else 0.0) < span.bbox[1]
+        ]
+        result.extend(_sort_column_section(section, split))
+        result.append(span)
+        previous_bottom = span.bbox[3]
 
+    section = [
+        b for b in section_blocks
+        if (b.bbox[1] if b.bbox else 0.0) >= previous_bottom
+    ]
+    result.extend(_sort_column_section(section, split))
     return result
+
+
+def _sort_column_section(blocks: list[DocumentBlock], split: float) -> list[DocumentBlock]:
+    """Read a vertical section of a two-column page, left column first."""
+    left: list[DocumentBlock] = []
+    right: list[DocumentBlock] = []
+    for block in blocks:
+        midpoint = (block.bbox[0] + block.bbox[2]) / 2 if block.bbox else 0.0
+        (left if midpoint < split else right).append(block)
+    key = lambda b: (b.bbox[1] if b.bbox else 0.0, b.bbox[0] if b.bbox else 0.0)
+    return sorted(left, key=key) + sorted(right, key=key)
