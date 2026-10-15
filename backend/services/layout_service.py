@@ -81,7 +81,7 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
     repeated_regions: set[tuple[str, int]] = set()
     occurrence_pages: dict[tuple[str, int], set[int]] = {}
     for block in blocks:
-        if block.bbox is None or len(block.content.split()) > 12:
+        if block.bbox is None or len(block.content.split()) > 40 or len(block.content) > 300:
             continue
         center_y = round((block.bbox[1] + block.bbox[3]) / 2, 1)
         key = (_normalized_text(block.content), center_y)
@@ -106,13 +106,23 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
                 mid_y = (y1 + y2) / 2
                 position_key = (_normalized_text(block.content), round(mid_y, 1))
                 is_page_number = bool(re.fullmatch(r"(?:page\s*)?\d{1,4}", block.content.strip(), re.I))
+                font_size = block.metadata.get("font_size")
+                body_font_size = block.metadata.get("body_font_size")
+                small_margin_line = (
+                    isinstance(font_size, (int, float))
+                    and isinstance(body_font_size, (int, float))
+                    and body_font_size > 0
+                    and font_size <= body_font_size * 0.85
+                    and len(block.content.split()) <= 40
+                    and len(block.content) <= 300
+                )
 
-                if (mid_y < _HEADER_THRESHOLD and position_key in repeated_regions
+                if (mid_y < _HEADER_THRESHOLD and (position_key in repeated_regions or small_margin_line)
                         and block.type == BlockType.PARAGRAPH):
                     block.type = BlockType.HEADER
                     header_blocks.append(block)
                 elif (mid_y > _FOOTER_THRESHOLD and block.type == BlockType.PARAGRAPH
-                      and (position_key in repeated_regions or is_page_number)):
+                      and (position_key in repeated_regions or is_page_number or small_margin_line)):
                     block.type = BlockType.FOOTER
                     footer_blocks.append(block)
                 else:

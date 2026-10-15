@@ -67,6 +67,33 @@ class TestLayoutService:
         assert types["f2"] == BlockType.FOOTER
         assert types["oneoff"] == BlockType.PARAGRAPH
 
+    def test_single_page_small_margin_text_is_page_furniture(self):
+        blocks = [
+            DocumentBlock(
+                id="header", type=BlockType.PARAGRAPH, content="Journal of Document Science",
+                page=1, bbox=(0.1, 0.02, 0.6, 0.04), extractor="test",
+                metadata={"route": "digital", "font_size": 8, "body_font_size": 11},
+            ),
+            DocumentBlock(
+                id="title", type=BlockType.HEADING, content="A Study of Documents",
+                page=1, bbox=(0.1, 0.12, 0.8, 0.18), extractor="test",
+                metadata={"route": "digital", "font_size": 18, "body_font_size": 11},
+            ),
+        ]
+        ordered = assign_reading_order(blocks)
+        assert ordered[0].type == BlockType.HEADER
+        assert ordered[1].type == BlockType.HEADING
+
+    def test_page_furniture_is_omitted_from_markdown(self):
+        blocks = [
+            DocumentBlock(id="h", type=BlockType.HEADER, content="Journal Header", page=1, extractor="test"),
+            DocumentBlock(id="p", type=BlockType.PARAGRAPH, content="Body content", page=1, extractor="test"),
+            DocumentBlock(id="f", type=BlockType.FOOTER, content="Page 4", page=1, extractor="test"),
+        ]
+        markdown = blocks_to_markdown(blocks)
+        assert markdown.strip() == "Body content"
+        assert [block.content for block in blocks] == ["Journal Header", "Body content", "Page 4"]
+
     def test_no_header_footer_for_non_page_content(self):
         """Slides / standalone images have no running headers, whatever their position."""
         blocks = [

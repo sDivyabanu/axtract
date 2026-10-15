@@ -101,10 +101,12 @@ def _block_to_markdown(block: DocumentBlock) -> str:
             return f"$$\n{latex}\n$${suffix}"
 
         case BlockType.HEADER:
-            return f"*{content}*"
+            # Keep page furniture in the structured response, but omit it from
+            # body Markdown so running headers do not contaminate extracted text.
+            return ""
 
         case BlockType.FOOTER:
-            return f"*{content}*"
+            return ""
 
         case BlockType.UNKNOWN:
             if content:
