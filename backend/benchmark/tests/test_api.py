@@ -163,3 +163,88 @@ async def test_resume_and_cancel_through_api(app_env):
     wait_done(mgr, run_id)
     assert mgr.runner.status(run_id)["status"] == "completed"
     assert (await call(app, "POST", f"/api/benchmark/runs/{run_id}/cancel")).status_code == 409  # not running
+
+
+# ---- Phase 2 endpoints ---------------------------------------------------------------------------------
+async def finish_run(app, mgr, **body):
+    r = await call(app, "POST", "/api/benchmark/runs", json=body)
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+    wait_done(mgr, run_id)
+    return run_id
+
+
+@pytest.mark.anyio
+async def test_cases_endpoints_page_and_detail(app_env):
+    app, mgr, _ = app_env
+    run_id = await finish_run(app, mgr, per_category=3, categories=["beta"])
+    page = (await call(app, "GET", f"/api/benchmark/runs/{run_id}/cases", params={"outcome": "all", "limit": 4})).json()
+    assert page["total"] == 6 and len(page["items"]) == 4
+    failed = (await call(app, "GET", f"/api/benchmark/runs/{run_id}/cases")).json()
+    cid = failed["items"][0]["id"]
+    d = (await call(app, "GET", f"/api/benchmark/runs/{run_id}/case", params={"case_id": cid})).json()
+    assert d["id"] == cid and d["failure_reason"] == "content_mismatch" and d["actual_output"]["available"] is True
+    assert (await call(app, "GET", f"/api/benchmark/runs/{run_id}/case", params={"case_id": "nope"})).status_code == 404
+    for bad in ({"outcome": "weird"}, {"limit": 101}, {"offset": -1}):
+        assert (await call(app, "GET", f"/api/benchmark/runs/{run_id}/cases", params=bad)).status_code == 422
+    assert (await call(app, "GET", "/api/benchmark/runs/bad-id/cases")).status_code == 400
+
+
+@pytest.mark.anyio
+async def test_compare_trends_and_partial_flag_endpoints(app_env):
+    app, mgr, _ = app_env
+    a = await finish_run(app, mgr, per_category=2, categories=["beta"], seed=1)
+    b = await finish_run(app, mgr, per_category=2, categories=["beta"], seed=1)
+    c = await finish_run(app, mgr, per_category=2, categories=["beta"], seed=2)
+    ok = (await call(app, "GET", "/api/benchmark/compare", params={"a": a, "b": b})).json()
+    assert ok["comparable"] is True and ok["cases"]["compared"] == 4 and ok["overall_delta_pct"] == 0.0
+    blocked = (await call(app, "GET", "/api/benchmark/compare", params={"a": a, "b": c})).json()
+    assert blocked["comparable"] is False and blocked["cases"] is None
+    partial = (await call(app, "GET", "/api/benchmark/compare", params={"a": a, "b": c, "allow_partial": "true"})).json()
+    assert partial["partial"] is True and partial["cases"] is not None
+    assert (await call(app, "GET", "/api/benchmark/compare", params={"a": a, "b": a})).status_code == 400
+    sample = ok["a"]["sample_id"]
+    t = (await call(app, "GET", "/api/benchmark/trends", params={"sample_id": sample})).json()
+    assert [p["run_id"] for p in t["points"]] == [a, b]
+    assert (await call(app, "GET", "/api/benchmark/trends", params={"sample_id": "../etc"})).status_code == 422
+
+
+@pytest.mark.anyio
+async def test_changes_endpoint_validates_and_reports_git_errors(app_env):
+    app, _, _ = app_env
+    for bad in ("--output=x", "a;b", "x" * 101):
+        assert (await call(app, "GET", "/api/benchmark/changes", params={"base": bad})).status_code in (400, 422)
+    r = await call(app, "GET", "/api/benchmark/changes", params={"base": "main"})
+    assert r.status_code in (400, 404, 503)  # the test repo is not a git checkout: a clean error, never a 500
+    assert str(app_env[1].runner.settings.repo_root) not in r.text
+
+
+@pytest.mark.anyio
+async def test_import_endpoints_and_traversal(app_env, settings):
+    from benchmark.tests.test_phase2 import make_artifact
+
+    app, mgr, _ = app_env
+    make_artifact(settings.resolved_import_root())
+    listing = (await call(app, "GET", "/api/benchmark/imports")).json()["sources"]
+    assert [s["source"] for s in listing] == ["current_x/official_x_001"]
+    r = await call(app, "POST", "/api/benchmark/imports", json={"source": "current_x/official_x_001"})
+    assert r.status_code == 201 and r.json()["already_imported"] is False
+    st = (await call(app, "GET", f"/api/benchmark/runs/{r.json()['run_id']}")).json()
+    assert st["status"] == "imported" and st["is_official"] is False and st["resumable"] is False
+    assert (await call(app, "POST", f"/api/benchmark/runs/{r.json()['run_id']}/resume")).status_code == 409
+    again = await call(app, "POST", "/api/benchmark/imports", json={"source": "current_x/official_x_001"})
+    assert again.json()["already_imported"] is True
+    for bad in ("../x", "/etc/passwd", "C:\Windows", "a/b/c/d"):
+        assert (await call(app, "POST", "/api/benchmark/imports", json={"source": bad})).status_code in (400, 404)
+    assert (await call(app, "POST", "/api/benchmark/imports", json={"source": "x", "extra": 1})).status_code == 422
+    assert (await call(app, "GET", f"/api/benchmark/runs/{r.json()['run_id']}/report")).status_code == 404  # no huge report served
+
+
+@pytest.mark.anyio
+async def test_full_mode_is_never_started_without_confirmation(app_env):
+    app, mgr, _ = app_env
+    assert (await call(app, "POST", "/api/benchmark/runs", json={"mode": "full", "per_category": None})).status_code == 400
+    assert mgr.runner.history() == []
+    run_id = await finish_run(app, mgr, mode="full", per_category=None, confirm_full=True)
+    st = (await call(app, "GET", f"/api/benchmark/runs/{run_id}")).json()
+    assert st["status"] == "completed" and st["totals"]["documents"] == 17 and st["config"]["html_report"] is False

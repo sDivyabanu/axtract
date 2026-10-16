@@ -58,7 +58,7 @@ class RunError(Exception):
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 def git_info(repo_root: Path) -> dict:

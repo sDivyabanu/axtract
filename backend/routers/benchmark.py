@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from auth.supabase import get_current_user
-from benchmark import config, procutil
+from benchmark import changes, compare, config, importer, procutil
+from benchmark.cases import CaseBrowser
 from benchmark.manager import RunManager
 from benchmark.runner import BenchmarkRunner, RunError
 from benchmark.store import RUN_ID_RE
@@ -104,6 +105,51 @@ def list_runs(limit: int = Query(50, ge=1, le=200), _: dict = Depends(require_be
     return {"runs": mgr.runner.history(limit)}
 
 
+@router.get("/changes")
+def recommended_categories(base: str | None = Query(None, max_length=100), _: dict = Depends(require_benchmark_user),
+                           mgr: RunManager = Depends(get_manager)):
+    """Which categories do the changes since `base` (default: the last benchmarked revision) put at risk?"""
+    runner = mgr.runner
+    try:
+        available = list(runner.categories())
+    except (FileNotFoundError, ValueError):
+        raise AppError("DATASET_UNAVAILABLE", "The benchmark dataset is not available on this server.", 503)
+    last_sha = next((h["git"]["sha"] for h in runner.history(50)
+                     if h["status"] == "completed" and (h.get("git") or {}).get("sha")), None)
+    try:
+        return changes.recommend(runner.settings.repo_root, available, base, last_sha)
+    except changes.ChangeError as exc:
+        raise AppError(exc.code, exc.message, exc.status)
+
+
+@router.get("/compare")
+def compare_runs(a: RunId, b: RunId, allow_partial: bool = False, _: dict = Depends(require_benchmark_user),
+                 mgr: RunManager = Depends(get_manager)):
+    return call(compare.compare_runs, mgr.runner, a, b, allow_partial)
+
+
+@router.get("/trends")
+def trends(sample_id: str | None = Query(None, pattern="^[0-9a-f]{16}$"), limit: int = Query(50, ge=1, le=200),
+           _: dict = Depends(require_benchmark_user), mgr: RunManager = Depends(get_manager)):
+    return compare.trends(mgr.runner, sample_id, limit)
+
+
+@router.get("/imports")
+def importable(_: dict = Depends(require_benchmark_user), mgr: RunManager = Depends(get_manager)):
+    return {"sources": call(importer.list_importable, mgr.runner)}
+
+
+class ImportBody(BaseModel):
+    model_config = {"extra": "forbid"}
+    source: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/imports", status_code=201)
+def import_results(body: ImportBody, _: dict = Depends(require_benchmark_user), mgr: RunManager = Depends(get_manager)):
+    """Import a finished official run's artifacts (read-only; nothing is re-run)."""
+    return call(importer.import_official, mgr.runner, body.source)
+
+
 @router.get("/runs/active")
 def active_run(_: dict = Depends(require_benchmark_user), mgr: RunManager = Depends(get_manager)):
     """The run currently executing (or None), so a refreshed dashboard can re-attach to it."""
@@ -119,6 +165,22 @@ def get_run(run_id: str, _: dict = Depends(require_benchmark_user), mgr: RunMana
 @router.get("/runs/{run_id}/results")
 def get_results(run_id: str, _: dict = Depends(require_benchmark_user), mgr: RunManager = Depends(get_manager)):
     return call(mgr.runner.results, run_id)
+
+
+@router.get("/runs/{run_id}/cases")
+def list_cases(run_id: str, outcome: str = Query("failed", pattern="^(failed|passed|all)$"),
+               category: str | None = Query(None, max_length=64), type: str | None = Query(None, max_length=32),
+               q: str | None = Query(None, max_length=200), offset: int = Query(0, ge=0, le=1_000_000),
+               limit: int = Query(50, ge=1, le=100), _: dict = Depends(require_benchmark_user),
+               mgr: RunManager = Depends(get_manager)):
+    return call(CaseBrowser(mgr.runner).list, run_id, outcome=outcome, category=category, ctype=type, q=q,
+                offset=offset, limit=limit)
+
+
+@router.get("/runs/{run_id}/case")
+def case_detail(run_id: str, case_id: str = Query(..., min_length=1, max_length=300),
+                _: dict = Depends(require_benchmark_user), mgr: RunManager = Depends(get_manager)):
+    return call(CaseBrowser(mgr.runner).detail, run_id, case_id)
 
 
 @router.get("/runs/{run_id}/manifest")
