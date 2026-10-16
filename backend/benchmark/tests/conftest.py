@@ -28,7 +28,7 @@ def anyio_backend():
 
 @pytest.fixture
 def dataset(tmp_path: Path) -> Path:
-    data = tmp_path / "official" / "bench_data"
+    data = tmp_path / "official" / "benchmarks" / "olmOCR-bench" / "bench_data"
     for cat, (jsonl, n) in LAYOUT.items():
         (data / "pdfs" / cat).mkdir(parents=True)
         rows = []
@@ -47,32 +47,34 @@ def dataset(tmp_path: Path) -> Path:
 @pytest.fixture
 def settings(tmp_path: Path, dataset: Path) -> config.BenchmarkSettings:
     return config.BenchmarkSettings(
-        data_dir=dataset, workspace=tmp_path / "workspace", scorer_python=Path("unused"), repo_root=tmp_path / "repo",
+        data_dir=dataset, workspace=tmp_path / "workspace", scorer_python=Path("unused"),
+        extract_python=Path(sys.executable), repo_root=tmp_path / "repo",
     )
 
 
 class FakeExtract:
     """Writes one markdown file per page like the real adapter; documents named *doc03* fail."""
 
-    def __init__(self, fail_substr: str | None = "doc03", gate: threading.Event | None = None):
-        self.fail_substr, self.gate, self.calls = fail_substr, gate, []
+    def __init__(self, fail_substr: str | None = "doc03", gate: threading.Event | None = None, empty_substr: str | None = None):
+        self.fail_substr, self.gate, self.empty_substr, self.calls = fail_substr, gate, empty_substr, []
         self._lock = threading.Lock()
 
     def __call__(self, pdf: Path, rel: Path, candidate_dir: Path) -> dict:
         with self._lock:
             self.calls.append(str(rel).replace("\\", "/"))
         if self.gate:
-            self.gate.wait(5)
+            self.gate.wait(30)
         if self.fail_substr and self.fail_substr in rel.name:
             return {"success": False, "pages": 0, "error": "RuntimeError: boom", "total_elapsed_ms": 5.0}
         out = candidate_dir / rel.parent
         out.mkdir(parents=True, exist_ok=True)
         for pg in (1, 2):
-            (out / f"{rel.stem}_pg{pg}_repeat1.md").write_text("md", encoding="utf-8")
+            text = "" if self.empty_substr and self.empty_substr in rel.name else "md"
+            (out / f"{rel.stem}_pg{pg}_repeat1.md").write_text(text, encoding="utf-8")
         return {"success": True, "pages": 2, "total_elapsed_ms": 200.0}
 
 
-SCORER_STDOUT = """
+VALID_STDOUT = """
 Candidate: axtract
   Average Score: 62.5% (95% CI: [50.0%, 70.0%]) over 40 tests.
 
@@ -83,21 +85,53 @@ axtract              : Average Score: 62.5% ± 4.5% (average of per-JSONL scores
 
     Results by JSONL file:
         alpha.jsonl                   : 50.0% (5/10 tests)
-        baseline                      : 100.0% (3/3 tests)
         beta.jsonl                    : 75.0% (3/4 tests)
         table_tests.jsonl             : 60.0% (3/5 tests)
 """
 
+INVALID_STDOUT = """
+Candidate: axtract
+  [ERROR] Candidate 'axtract' is missing MD repeats for alpha/doc03.pdf page 1 (expected files matching alpha/doc03_pg{page}_repeat*.md).
+  [ERROR] Candidate 'axtract' is missing MD repeats for alpha/doc03.pdf page 1 (expected files matching alpha/doc03_pg{page}_repeat*.md).
+
+============================================================
+Final Summary with 95% Confidence Intervals:
+axtract : Average Score: FAILED (errors)  (average of per-JSONL scores)
+    present : 50.0% average pass rate over 4 tests
+
+    Results by JSONL file:
+        alpha.jsonl                   : 0.0% (0/4 tests)
+"""
+
 
 class FakeScore:
-    def __init__(self, returncode: int = 0):
-        self.returncode, self.calls = returncode, 0
+    """Mimics the scorer wrapper: writes outcomes.jsonl (one fail per document set) and prints official-style output.
 
-    def __call__(self, scoring_dir: Path, report_html: Path, failed_jsonl: Path) -> dict:
+    With failed documents present the real scorer prints FAILED (errors); `valid=None` picks that automatically."""
+
+    def __init__(self, returncode: int = 0, valid: bool | None = None):
+        self.returncode, self.valid, self.calls = returncode, valid, 0
+
+    def __call__(self, scoring_dir: Path, outcomes: Path, html, skip_baseline: bool, cancel: threading.Event) -> dict:
         self.calls += 1
-        report_html.write_text("<html>report</html>", encoding="utf-8")
-        failed_jsonl.write_text(json.dumps({"id": "alpha_doc00_t0", "pdf": "alpha/doc00.pdf", "page": 1, "type": "present"}) + "\n", encoding="utf-8")
-        return {"returncode": self.returncode, "stdout": SCORER_STDOUT, "stderr": ""}
+        assert skip_baseline is True  # matches the official full-run command
+        rows = []
+        missing = False
+        for jsonl in sorted(scoring_dir.glob("*.jsonl")):
+            for line in jsonl.read_text().splitlines():
+                t = json.loads(line)
+                md = scoring_dir / "axtract" / (t["pdf"][:-4] + "_pg1_repeat1.md")
+                if not md.exists():
+                    missing = True
+                passed = md.exists() and t["id"].endswith("t0")
+                rows.append({"id": t["id"], "pdf": t["pdf"], "page": t["page"], "type": t["type"], "source": jsonl.name,
+                             "passed": passed, "explanation": "All repeats passed" if passed else ("Missing MD files" if not md.exists() else "No match found for x"),
+                             "test": {"text": t.get("text")}})
+        outcomes.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        if html:
+            html.write_text("<html>report</html>", encoding="utf-8")
+        valid = (not missing) if self.valid is None else self.valid
+        return {"returncode": self.returncode, "stdout": VALID_STDOUT if valid else INVALID_STDOUT, "stderr": "", "cancelled": False}
 
 
 def fake_git(_: Path) -> dict:
@@ -106,7 +140,7 @@ def fake_git(_: Path) -> dict:
 
 @pytest.fixture
 def make_runner(settings):
-    def factory(extract=None, score=None, git=fake_git):
-        return BenchmarkRunner(settings, extract_fn=extract or FakeExtract(), score_fn=score or FakeScore(), git_fn=git)
+    def factory(extract=None, score=None, git=fake_git, memory=lambda: 100_000):
+        return BenchmarkRunner(settings, extract_fn=extract or FakeExtract(), score_fn=score or FakeScore(), git_fn=git, memory_fn=memory)
 
     return factory

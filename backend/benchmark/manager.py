@@ -2,32 +2,19 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import threading
 from typing import Callable
 
+from .procutil import official_benchmark_active
 from .runner import BenchmarkRunner, RunError
-
-OFFICIAL_MARKERS = ("benchmark_axtract_olmocr.py", "olmocr.bench.benchmark")
-
-
-def official_benchmark_active() -> bool:
-    """True when another process is running the official adapter or scorer (read-only process listing)."""
-    try:
-        if sys.platform == "win32":
-            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                   "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine }"]
-        else:
-            cmd = ["ps", "-eo", "args"]
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=20).stdout
-    except (OSError, subprocess.SubprocessError):
-        return False  # cannot tell: the single-run lock still applies
-    return any(m in line for line in out.splitlines() for m in OFFICIAL_MARKERS)
 
 
 class RunManager:
-    """Starts, resumes and cancels runs on a background thread. One run at a time."""
+    """Starts, resumes and cancels runs on a background thread. One run at a time.
+
+    Extraction happens in child processes and scoring in another, so the API process only runs this
+    thread's bookkeeping: ordinary AXTRACT requests are not blocked.
+    """
 
     def __init__(self, runner: BenchmarkRunner, official_check: Callable[[], bool] = official_benchmark_active):
         self.runner = runner
@@ -40,10 +27,12 @@ class RunManager:
             return True
         return self.runner.lock.holder() is not None
 
-    def _launch(self, run_id: str) -> None:
+    def _refuse_if_official_active(self) -> None:
         if self.official_check():
             raise RunError("OFFICIAL_BENCHMARK_ACTIVE",
-                           "The official benchmark is running. Start a quick run after it finishes.", 409)
+                           "The official benchmark is running. Start a benchmark after it finishes.", 409)
+
+    def _launch(self, run_id: str) -> None:
         cancel = threading.Event()
 
         def target() -> None:
@@ -60,9 +49,7 @@ class RunManager:
         with self._guard:
             if self._busy():
                 raise RunError("RUN_CONFLICT", "Another benchmark run is already active.", 409)
-            if self.official_check():
-                raise RunError("OFFICIAL_BENCHMARK_ACTIVE",
-                               "The official benchmark is running. Start a quick run after it finishes.", 409)
+            self._refuse_if_official_active()
             run_id = self.runner.create_run(**config)
             self._launch(run_id)
             return run_id
@@ -74,11 +61,18 @@ class RunManager:
                 raise RunError("NOT_RESUMABLE", f"A run that is {st['status']} cannot be resumed.", 409)
             if self._busy():
                 raise RunError("RUN_CONFLICT", "Another benchmark run is already active.", 409)
+            self._refuse_if_official_active()
             self._launch(run_id)
 
     def cancel(self, run_id: str) -> None:
-        """Cooperative: in-flight documents finish, queued ones are skipped, the run becomes resumable."""
+        """Kills extraction workers (or the scorer) now; finished documents are kept and the run is resumable."""
         with self._guard:
             if not self._active or self._active[0] != run_id or not self._active[1].is_alive():
-                raise RunError("NOT_RUNNING", "This run is not running in this server.", 409)
+                raise RunError("NOT_RUNNING", "This run is not running on this server.", 409)
+            self.runner.request_cancel(run_id)
             self._active[2].set()
+
+    def active_run_id(self) -> str | None:
+        if self._active and self._active[1].is_alive():
+            return self._active[0]
+        return self.runner.active_run_id()

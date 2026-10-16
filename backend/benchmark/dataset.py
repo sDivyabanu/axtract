@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,3 +66,22 @@ def resolve_categories(requested: list[str] | str | None, available: dict[str, C
     if unknown:
         raise ValueError(f"Unknown categories: {', '.join(sorted(map(str, unknown)))}")
     return [c for c in available if c in set(requested)]  # canonical order, de-duplicated
+
+
+_fingerprints: dict[tuple, str] = {}
+
+
+def dataset_fingerprint(data_dir: Path) -> str:
+    """Stable identity of the official test files (names + contents), cached per file state."""
+    h = hashlib.sha256()
+    for jsonl in sorted(Path(data_dir).glob("*.jsonl")):
+        st = jsonl.stat()
+        key = (str(jsonl), st.st_size, st.st_mtime_ns)
+        if key not in _fingerprints:
+            d = hashlib.sha256()
+            with jsonl.open("rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    d.update(chunk)
+            _fingerprints[key] = d.hexdigest()
+        h.update(jsonl.name.encode() + b"|" + _fingerprints[key].encode())
+    return h.hexdigest()[:16]

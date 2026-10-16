@@ -14,13 +14,14 @@ from typing import Any
 
 from .config import LOCK_STALE_SECONDS
 
-RUN_ID_RE = re.compile(r"^qk-\d{8}T\d{6}Z-[0-9a-f]{8}$")
+RUN_PREFIXES = {"quick": "qk", "full": "fl", "import": "im"}
+RUN_ID_RE = re.compile(r"^(qk|fl|im)-\d{8}T\d{6}Z-[0-9a-f]{8}$")
 _write_lock = threading.Lock()
 
 
-def new_run_id() -> str:
+def new_run_id(kind: str = "quick") -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"qk-{stamp}-{secrets.token_hex(4)}"
+    return f"{RUN_PREFIXES[kind]}-{stamp}-{secrets.token_hex(4)}"
 
 
 def atomic_write_json(path: Path, data: Any) -> None:
@@ -43,6 +44,33 @@ def read_json(path: Path, default: Any = None) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):
         return default
+
+
+def append_jsonl(path: Path, record: dict) -> None:
+    """Append one record durably. A torn final line (crash mid-write) is skipped by `read_jsonl_last`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(record) + "\n"
+    with _write_lock, path.open("a", encoding="utf-8") as fh:
+        fh.write(line)
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def read_jsonl_last(path: Path, key: str) -> dict:
+    """Latest record per `key` from an append-only log, tolerating a torn last line."""
+    latest: dict = {}
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(rec, dict) and key in rec:
+                    latest[rec[key]] = rec
+    except FileNotFoundError:
+        pass
+    return latest
 
 
 def run_dir(workspace: Path, run_id: str) -> Path:
