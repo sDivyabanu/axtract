@@ -7,6 +7,7 @@ Uses the blocks' reading_order (from layout_service) when available.
 from __future__ import annotations
 
 import re
+from html import escape
 
 from models.document import BlockType, DocumentBlock
 
@@ -51,8 +52,11 @@ def blocks_to_markdown(blocks: list[DocumentBlock]) -> str:
 
 def _block_to_markdown(block: DocumentBlock) -> str:
     """Convert a single block to its Markdown representation."""
+    if ((block.extractor == "rapidocr" or block.metadata.get("invisible_ocr_source")) and block.type == BlockType.PARAGRAPH
+            and block.metadata.get("math_replaced_in_markdown")):
+        return ""  # exact OCR content is retained in the structured source block
     content = block.content.strip()
-    if not content:
+    if not content and block.type != BlockType.TABLE:
         return ""
     # A PDF can contain isolated dollar signs as glyphs or OCR noise. Emitting
     # those as Markdown math delimiters can make downstream renderers treat a
@@ -131,57 +135,61 @@ def _table_to_markdown(block: DocumentBlock) -> str:
         # Fallback: use pipe-delimited content
         return f"```\n{block.content}\n```"
 
-    # Check for merged cells info
-    merged_info = block.metadata.get("merged_cells", {})
-    has_merged = merged_info.get("has_merged_cells", False)
-    
-    # Build Markdown table
-    lines: list[str] = []
-    
-    # Track merged cell spans
-    merged_spans = {}  # (row, col) -> (rowspan, colspan)
-    for region in merged_info.get("merged_regions", []):
-        row, col, rowspan, colspan = region
-        merged_spans[(row, col)] = (rowspan, colspan)
+    # Each cell must occupy one physical line; keep missing column positions.
+    rows = [row for row in rows if isinstance(row, list)]
+    width = max((len(row) for row in rows), default=0)
+    if not width:
+        return block.content
+    rows = [[" ".join(str(cell).split()) if cell is not None else ""
+             for cell in row] + [""] * (width - len(row)) for row in rows]
 
-    for i, row in enumerate(rows):
-        if not isinstance(row, list):
-            continue
-        cells = [str(c) if c is not None else "" for c in row]
-        
-        # Skip cells that are covered by merged cells from previous rows
-        display_cells = []
-        for j, cell in enumerate(cells):
-            # Check if this cell is covered by a rowspan from above
-            is_covered = False
-            for (mr, mc), (rowspan, colspan) in merged_spans.items():
-                if mr < i <= mr + rowspan - 1 and mc <= j < mc + colspan:
-                    is_covered = True
-                    break
-            
-            if is_covered:
-                display_cells.append("")
-            else:
-                # Escape pipe characters in cell content
-                display_cells.append(cell.replace("|", "\\|"))
-        
-        # Add colspan indicator in content for merged cells
-        for j, cell in enumerate(display_cells):
-            if (i, j) in merged_spans:
-                rowspan, colspan = merged_spans[(i, j)]
-                if colspan > 1:
-                    display_cells[j] = f"{cell} <colspan:{colspan}>"
-                if rowspan > 1:
-                    display_cells[j] = f"{cell} <rowspan:{rowspan}>"
-        
-        lines.append("| " + " | ".join(display_cells) + " |")
+    # Only explicit extractor spans are structural evidence. Missing cells can
+    # also be genuine blanks and must not change their neighbours' coordinates.
+    info = block.metadata.get("merged_cells") or {}
+    if not isinstance(info, dict):
+        info = {}
+    spans: dict[tuple[int, int], tuple[int, int]] = {}
+    covered: set[tuple[int, int]] = set()
+    if info.get("source") == "extractor":
+        for region in info.get("merged_regions", []):
+            if not isinstance(region, (list, tuple)) or len(region) != 4:
+                continue
+            r, c, rs, cs = region
+            if (not all(isinstance(v, int) for v in region) or min(r, c) < 0
+                    or min(rs, cs) < 1 or r+rs > len(rows) or c+cs > width):
+                continue
+            cells = {(rr, cc) for rr in range(r, r+rs) for cc in range(c, c+cs)}
+            if cells & covered or cells & spans.keys():
+                continue
+            rest = cells - {(r, c)}
+            if any(rows[rr][cc] for rr, cc in rest):
+                continue  # Preserve content even if span metadata is inconsistent.
+            spans[(r, c)] = (rs, cs)
+            covered.update(rest)
 
-        # Add separator after header row
-        if i == 0:
-            sep = "| " + " | ".join("---" for _ in display_cells) + " |"
-            lines.append(sep)
+    # HTML is standard Markdown content and expresses real spans and literal
+    # pipes without inventing suffixes such as <colspan:2> in the cell value.
+    if spans or any("|" in cell for row in rows for cell in row):
+        lines = ["<table>"]
+        for r, row in enumerate(rows):
+            cells = []
+            for c, cell in enumerate(row):
+                if (r, c) in covered:
+                    continue
+                tag = "th" if r == 0 or c == 0 else "td"
+                rs, cs = spans.get((r, c), (1, 1))
+                attrs = (f' rowspan="{rs}"' if rs > 1 else "") + (f' colspan="{cs}"' if cs > 1 else "")
+                cells.append(f"<{tag}{attrs}>{escape(cell)}</{tag}>")
+            lines.append("<tr>" + "".join(cells) + "</tr>")
+        return "\n".join(lines + ["</table>"])
 
+    lines = []
+    for r, row in enumerate(rows):
+        lines.append("| " + " | ".join(row) + " |")
+        if r == 0:
+            lines.append("| " + " | ".join("---" for _ in row) + " |")
     return "\n".join(lines)
+
 
 
 def _fmt(v) -> str:

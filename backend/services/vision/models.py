@@ -66,6 +66,30 @@ def detect_layout(img: Image.Image, min_score: float = 0.35) -> list[Region]:
     return out
 
 
+def _formula_runtime_site() -> Path:
+    """rapid-latex-ocr declares Python<3.13 although it is pure Python, so it is unpacked into an
+    isolated folder next to the weights instead of the backend venv (see scripts/fetch_models.py)."""
+    return Path(os.environ.get("AXTRACT_FORMULA_SITE", WEIGHTS_DIR / "latex_ocr" / "site"))
+
+
+def formula_runtime_status() -> dict:
+    """What the formula recognizer needs and whether each piece is present (no model load)."""
+    import importlib.util
+    import sys
+
+    site = _formula_runtime_site()
+    if site.is_dir() and str(site) not in sys.path:
+        sys.path.append(str(site))  # appended: never shadows packages already in the venv
+    missing = [f for f in _LATEX_FILES if not (WEIGHTS_DIR / "latex_ocr" / f).exists()]
+    package = importlib.util.find_spec("rapid_latex_ocr") is not None
+    return {"weights_missing": missing, "package_available": package,
+            "available": not missing and package}
+
+
+def latex_runtime_available() -> bool:
+    return formula_runtime_status()["available"]
+
+
 def _get_latex():
     global _latex
     with _lock:
@@ -73,6 +97,10 @@ def _get_latex():
             if not latex_model_available():
                 raise ModelUnavailable(
                     "Formula model weights not found. Run: backend/.venv/bin/python scripts/fetch_models.py"
+                )
+            if not formula_runtime_status()["package_available"]:
+                raise ModelUnavailable(
+                    "rapid-latex-ocr is not installed. Run: backend/.venv/bin/python scripts/fetch_models.py"
                 )
             from rapid_latex_ocr import LaTeXOCR
 
@@ -98,13 +126,59 @@ def _get_latex():
                     return final_img
 
             d = WEIGHTS_DIR / "latex_ocr"
-            _latex = _NumpyTwoLaTeXOCR(
+            model = _NumpyTwoLaTeXOCR(
                 image_resizer_path=d / "image_resizer.onnx",
                 encoder_path=d / "encoder.onnx",
                 decoder_path=d / "decoder.onnx",
                 tokenizer_json=d / "tokenizer.json",
             )
+            _use_greedy_decoder(model)
+            _latex = model
         return _latex
+
+
+FORMULA_MAX_TOKENS = int(os.environ.get("AXTRACT_FORMULA_MAX_TOKENS", "160"))
+
+
+def _use_greedy_decoder(model) -> None:
+    """The stock decoder samples at temperature 0.25 (non-deterministic), reruns the whole
+    sequence for every token and only stops at the end token or 256 steps. Greedy decoding is
+    deterministic and typically at least as accurate; it also stops on degenerate repetition
+    (a loop of one short pattern), which is the runaway case that costs most of the latency."""
+    from rapid_latex_ocr.models import Decoder
+
+    class _GreedyDecoder(Decoder):
+        def __call__(self, start_tokens, seq_len=256, eos_token=None, temperature=1.0,
+                     filter_thres=0.9, context=None):
+            out = start_tokens
+            mask = np.full_like(start_tokens, True, dtype=bool)
+            t0 = start_tokens.shape[1]
+            for _ in range(min(seq_len, FORMULA_MAX_TOKENS)):
+                x = out[:, -self.max_seq_len:]
+                mask = mask[:, -self.max_seq_len:]
+                logits = self.session([x.astype(np.int64), mask, context])[0][:, -1, :]
+                nxt = np.argmax(logits, axis=-1)[:, None]
+                out = np.concatenate([out, nxt], axis=-1)
+                mask = np.pad(mask, [(0, 0), (0, 1)], "constant", constant_values=True)
+                if eos_token is not None and int(nxt[0, 0]) == eos_token:
+                    break
+                if _is_looping(out[0, t0:]):
+                    break
+            return out[:, t0:]
+
+    model.encoder_decoder.decoder.__class__ = _GreedyDecoder
+
+
+def _is_looping(tokens) -> bool:
+    """True when the tail repeats one short pattern many times (period 1-8, >= 12 tokens)."""
+    n = len(tokens)
+    if n < 24:
+        return False
+    tail = [int(t) for t in tokens[-24:]]
+    for period in range(1, 9):
+        if all(tail[i] == tail[i - period] for i in range(period, 24)):
+            return True
+    return False
 
 
 def image_to_latex(img: Image.Image) -> str:

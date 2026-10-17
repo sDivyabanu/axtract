@@ -11,7 +11,10 @@ from typing import ClassVar
 
 import pymupdf
 
+from extractors.table_geometry import split_stacked_rows, native_line_numeric_candidates, shadows_complete_grid
+from extractors.text_math import page_has_math_fonts, rebuild_page
 from extractors.base import BaseExtractor, ExtractionResult
+from extractors.table_geometry import has_ruled_grid, numeric_table_candidates, ruled_text_candidates, is_detached_margin_header, ruled_grid_regions, has_plot_strokes
 from models.document import BBox, BlockType, DocumentBlock
 from models.errors import AppError, DocumentError
 
@@ -24,7 +27,7 @@ _MATH_FONT = re.compile(
     r"cmmi|cmsy|cmex|msbm|msam|symbol|mathematicalpi|cambria\s*math|stix", re.I
 )
 _MATH_CHARS = frozenset(
-    "ΓêæΓêÅΓê½Γê¼Γê¡Γê«ΓêÜΓê¢Γê₧ΓêéΓêç┬▒Γêô├ù├╖ΓëêΓëáΓëíΓëñΓëÑΓë¬Γë½ΓêêΓêëΓèéΓèåΓèâΓèçΓê¬Γê⌐ΓêºΓê¿┬¼ΓåÆΓçÆΓçöΓåöΓêÇΓêâΓê┤Γê╡Γê¥Γä¥ΓäòΓäñΓäÜΓäé"
+    "\u2211\u220f\u222b\u222c\u222d\u222e\u221a\u221b\u221c\u221e\u2202\u2207\u00b1\u2213\u00d7\u00f7\u2248\u2260\u2261\u2264\u2265\u226a\u226b\u2208\u2209\u2282\u2286\u2283\u2287\u222a\u2229\u2227\u2228\u00ac\u2192\u21d2\u21d4\u2194\u2200\u2203\u2234\u2235\u221d\u210f\u2115\u2124\u211a\u211d\u2102"
 )
 
 
@@ -57,17 +60,27 @@ def _recover_invalid_text_bbox(content: str, page_dict: dict) -> tuple[float, fl
     return None
 
 
+def _align_word_block_numbers(words: list[tuple], page_dict: dict) -> list[tuple]:
+    """Words count text blocks; dict/rawdict indices also include image blocks.
+
+    Preserve source order and geometry while translating the text-only ordinal
+    into the shared dict/rawdict index used for font and math provenance.
+    """
+    indices = [i for i,b in enumerate(page_dict.get("blocks", [])) if b.get("type") == _TEXT_BLOCK]
+    return [(*w[:5], indices[w[5]] if 0 <= w[5] < len(indices) else w[5], *w[6:]) for w in words]
+
+
 def _word_lines(words: list[tuple]) -> dict[int, list[tuple[float, float, str]]]:
     """Return each text block's geometrically ordered lines from PyMuPDF words."""
-    grouped: dict[tuple[int, int], list[tuple[float, float, int, str]]] = defaultdict(list)
+    grouped: dict[tuple[int, int], list[tuple[float, float, float, int, str]]] = defaultdict(list)
     for word in words:
         x0, y0, _x1, y1, text, block_no, line_no, word_no = word[:8]
-        grouped[(block_no, line_no)].append((x0, y0, word_no, text))
+        grouped[(block_no, line_no)].append((x0, y0, y1, word_no, text))
     result: dict[int, list[tuple[float, float, str]]] = defaultdict(list)
     for (block_no, _line_no), words in grouped.items():
-        words.sort(key=lambda item: (item[0], item[2]))
-        result[block_no].append((min(w[1] for w in words), max(w[1] for w in words),
-                                 " ".join(w[3] for w in words)))
+        words.sort(key=lambda item: (item[0], item[3]))
+        result[block_no].append((min(w[1] for w in words), max(w[2] for w in words),
+                                 " ".join(w[4] for w in words)))
     for block_no in result:
         result[block_no].sort(key=lambda line: line[0])
     return result
@@ -151,6 +164,9 @@ def table_plausibility(rows: list[list[object]], col_count: int) -> tuple[bool, 
 def _has_local_chart_signal(words: list[tuple], drawings: list[dict],
                             bbox: tuple[float, float, float, float]) -> bool:
     """Find chart-like marks without mistaking a ruled table for vector art."""
+    plot_strokes = has_plot_strokes(drawings, bbox)
+    if has_ruled_grid(drawings, bbox) and not plot_strokes:
+        return False
     region = pymupdf.Rect(bbox)
     local_drawings = 0
     horizontal_rules = 0
@@ -173,7 +189,7 @@ def _has_local_chart_signal(words: list[tuple], drawings: list[dict],
                     chart_marks += 1
     # Repeated horizontal and vertical rules are direct table structure. They
     # outweigh numeric density, which is common in financial tables and charts.
-    if horizontal_rules >= 2 and vertical_rules >= 2:
+    if horizontal_rules >= 2 and vertical_rules >= 2 and not plot_strokes:
         return False
     numeric_labels = sum(
         bool(_NUMERIC.search(str(word[4]))) and len(str(word[4])) <= 16
@@ -181,7 +197,7 @@ def _has_local_chart_signal(words: list[tuple], drawings: list[dict],
         and word[1] >= bbox[1] and word[3] <= bbox[3]
         for word in words
     )
-    return local_drawings >= 8 and chart_marks >= 6 and numeric_labels >= 6
+    return ((local_drawings >= 8 and chart_marks >= 6) or plot_strokes) and numeric_labels >= 6
 
 
 def _is_formula_candidate(text: str, math_font: bool) -> bool:
@@ -272,7 +288,8 @@ class PyMuPDFExtractor(BaseExtractor):
         page_dict = page.get_text(
             "dict", flags=pymupdf.TEXTFLAGS_DICT | pymupdf.TEXT_PRESERVE_WHITESPACE
         )
-        raw_words = page.get_text("words")
+        raw_words = _align_word_block_numbers(page.get_text("words"), page_dict)
+        source_vocabulary = {str(w[4]).strip(".,;:!?()[]\"\'").casefold() for w in raw_words}
         word_lines = _word_lines(raw_words)
         spans_by_block: dict[int, list[dict]] = defaultdict(list)
         for index, item in enumerate(page_dict["blocks"]):
@@ -304,7 +321,7 @@ class PyMuPDFExtractor(BaseExtractor):
         # Chart-like pages still need table candidates examined so implausible
         # numeric grids can be retained as reviewable figures. The tighter
         # aligned-column guard is only the fallback for borderless text tables.
-        has_table_evidence = chart_signal or numeric_columns or aligned_columns
+        has_table_evidence = chart_signal or numeric_columns or aligned_columns or bool(ruled_grid_regions(drawings))
         found_tables = None
         if has_table_evidence:
             table_detection_count = 1
@@ -341,7 +358,6 @@ class PyMuPDFExtractor(BaseExtractor):
                 rows = table.extract()
                 is_plausible, reasons = table_plausibility(rows, table.col_count)
                 bbox = tuple(table.bbox)
-                table_rects.append(pymupdf.Rect(table.bbox))
                 # Page-level vector density is only a hint. A detected grid with
                 # repeated rows/columns remains a table; sparse/giant candidates
                 # on a chart-like page are more likely chart artifacts.
@@ -349,12 +365,24 @@ class PyMuPDFExtractor(BaseExtractor):
                 if region_chart_signal:
                     is_plausible = False
                     reasons.append("chart_signal")
+                # Rejected text grids must not suppress their original words.
+                # Genuine chart regions retain the existing chart routing behavior.
+                if is_plausible or region_chart_signal:
+                    table_rects.append(pymupdf.Rect(table.bbox))
                 if is_plausible:
-                    block = self._table_block(table, page_number, counter, pw, ph)
+                    block = self._table_block(
+                        table, page_number, counter, pw, ph,
+                        [span for spans in spans_by_block.values() for span in spans],
+                        source_words=raw_words,
+                    )
                     if reasons:
                         block.requires_review = True
                         block.metadata["reason_flags"] = sorted(set(reasons))
                 else:
+                    if not region_chart_signal:
+                        # Original text is emitted below. A duplicate figure can
+                        # win layout deduplication and hide that text in Markdown.
+                        continue
                     labels = self._raw_region_text(raw_words, bbox)
                     block = DocumentBlock(
                         id=f"p{page_number}-b{counter}", type=BlockType.FIGURE,
@@ -367,6 +395,63 @@ class PyMuPDFExtractor(BaseExtractor):
                     )
                 blocks.append(block)
                 counter += 1
+
+        # Recover borderless numeric grids from remaining native words. This
+        # bypasses neither accepted ruled tables nor genuine chart regions.
+        remaining = self._words_outside_tables(raw_words, table_rects)
+        candidates = [candidate for candidate in ruled_text_candidates(remaining, drawings)
+                      if not any((pymupdf.Rect(candidate["bbox"]) & rect).get_area() > 1 for rect in table_rects)
+                      and not _has_local_chart_signal(raw_words, drawings, candidate["bbox"])]
+        for candidate in candidates:
+            table_rects.append(pymupdf.Rect(candidate["bbox"]))
+        # Native cell lines disambiguate tightly spaced numeric rows next to
+        # unrelated prose, before the broader word-alignment fallback is used.
+        word_candidates = numeric_table_candidates(self._words_outside_tables(raw_words, table_rects), drawings)
+        for candidate in native_line_numeric_candidates(self._words_outside_tables(raw_words, table_rects)):
+            if shadows_complete_grid(candidate, word_candidates):
+                continue
+            if (not any((pymupdf.Rect(candidate["bbox"]) & rect).get_area() > 1 for rect in table_rects)
+                    and not _has_local_chart_signal(raw_words, drawings, candidate["bbox"])):
+                candidates.append(candidate)
+                table_rects.append(pymupdf.Rect(candidate["bbox"]))
+        numeric_candidates = [candidate for candidate in numeric_table_candidates(self._words_outside_tables(raw_words, table_rects), drawings)
+                              if not any((pymupdf.Rect(candidate["bbox"]) & rect).get_area() > 1 for rect in table_rects)]
+        for candidate in candidates + numeric_candidates:
+            bbox = candidate["bbox"]
+            if _has_local_chart_signal(raw_words, drawings, bbox):
+                continue
+            rows = candidate["rows"]
+            blocks.append(DocumentBlock(
+                id=f"p{page_number}-b{counter}", type=BlockType.TABLE,
+                content="\n".join(" | ".join(row) for row in rows), page=page_number,
+                bbox=_normalize_bbox(*bbox, pw, ph), confidence=None, extractor=self.name,
+                requires_review=True,
+                metadata={"rows": rows, "row_count": len(rows), "col_count": len(rows[0]),
+                          "header": rows[0], "source": candidate.get("source", "native_numeric_geometry"),
+                          "cell_bboxes": [[_normalize_bbox(*cell, pw, ph) if cell else None
+                                           for cell in row] for row in candidate["cell_bboxes"]],
+                          "row_pages": [page_number] * len(rows)},
+            ))
+            table_rects.append(pymupdf.Rect(bbox))
+            counter += 1
+
+        # A text block can straddle a table and surrounding prose. Remove only
+        # words fully contained in accepted table/chart regions, not whole blocks.
+        lines_by_block = _word_lines(self._words_outside_tables(raw_words, table_rects))
+        # Rebuild only native-owned glyphs; accepted table/chart text has another owner.
+        page_math = None
+        if page_has_math_fonts(page_dict):
+            try:
+                raw = page.get_text(
+                    "rawdict", flags=pymupdf.TEXTFLAGS_DICT | pymupdf.TEXT_PRESERVE_WHITESPACE
+                )
+                if len(raw.get("blocks", [])) == len(page_dict["blocks"]):
+                    retained = set(self._words_outside_tables(raw_words, table_rects))
+                    owned = [word[:4] for word in raw_words if word not in retained]
+                    page_math = rebuild_page(raw, drawings, pw, excluded_rects=owned,
+                                             excluded_rule_rects=table_rects)
+            except Exception:  # noqa: BLE001 - preserve the plain-text fallback
+                page_math = None
 
         font_sizes: list[float] = []
         raw_blocks: list[dict] = []
@@ -383,7 +468,18 @@ class PyMuPDFExtractor(BaseExtractor):
             if item.get("type", -1) != _TEXT_BLOCK:
                 continue
             bbox = tuple(item["bbox"])
-            if self._overlaps_tables(bbox, table_rects):
+            if page_math is not None and block_index in page_math.blocks:
+                content = page_math.blocks[block_index]
+                if not content.strip():
+                    continue  # consumed once into a neighbouring reconstructed block
+                spans = spans_by_block.get(block_index, [])
+                max_size = max((span.get("size", 0) for span in spans), default=0.0)
+                font_sizes.append(max_size)
+                raw_blocks.append({"content": content.strip(), "bbox": bbox, "font_size": max_size,
+                                   "is_bold": any(span.get("flags", 0) & (1 << 4) for span in spans),
+                                   "math_font": True, "text_layer_math": True,
+                                   "source_block_indices": page_math.source_blocks.get(block_index, [block_index]),
+                                   "footnote_refs": [], "superscript_spans": []})
                 continue
             lines = lines_by_block.get(block_index, [])
             if not lines:
@@ -392,8 +488,17 @@ class PyMuPDFExtractor(BaseExtractor):
             median_line_height = sorted(heights)[len(heights) // 2]
             parts: list[str] = []
             block_refs: list[str] = []
+            wrap_repairs: list[str] = []
+            native_math = any(_MATH_FONT.search(span.get("font", "")) for span in spans_by_block.get(block_index, []))
             for i, (y0, _y1, text) in enumerate(lines):
-                if parts and y0 - lines[i - 1][1] > 0.5 * median_line_height:
+                prior_word = re.search(r"([A-Za-z]+)-$", parts[-1]) if parts else None
+                next_word = re.match(r"([a-z]+)", text)
+                joined = prior_word.group(1)+next_word.group(1) if prior_word and next_word else ""
+                if (joined and not native_math and joined.casefold() in source_vocabulary
+                        and y0-lines[i-1][1]<=.5*median_line_height):
+                    parts[-1] = parts[-1][:-1]
+                    wrap_repairs.append(joined)
+                elif parts and y0 - lines[i - 1][1] > 0.5 * median_line_height:
                     parts.append("\n")
                 elif parts:
                     parts.append(" ")
@@ -416,7 +521,7 @@ class PyMuPDFExtractor(BaseExtractor):
             raw_blocks.append({"content": content.strip(), "bbox": bbox, "font_size": max_size,
                                "is_bold": is_bold, "math_font": math_font,
                                "footnote_refs": block_refs,
-                               "superscript_spans": superscript_refs})
+                               "superscript_spans": superscript_refs, "line_wrap_repairs": wrap_repairs})
 
         if chart_signal:
             # PyMuPDF sometimes leaves numeric chart labels outside its guessed
@@ -474,17 +579,25 @@ class PyMuPDFExtractor(BaseExtractor):
                 "font_size": round(raw["font_size"], 2),
                 "is_bold": raw["is_bold"],
                 "body_font_size": round(page_median, 2),
+                "line_wrap_repairs": raw.get("line_wrap_repairs", []),
             }
-            if not heading and _is_formula_candidate(content, raw.get("math_font", False)):
+            if raw.get("text_layer_math"):
+                metadata["text_layer_math"] = True
+                metadata["source_block_indices"] = raw["source_block_indices"]
+                heading = heading and "$" not in content
+            elif not heading and _is_formula_candidate(content, raw.get("math_font", False)):
                 metadata["formula_candidate"] = True
             refs = list(raw["footnote_refs"])
             refs.extend(raw["superscript_spans"])
             if refs:
                 metadata["footnote_refs"] = list(dict.fromkeys(refs))
+            margin_header = not heading and not metadata.get("formula_candidate") and is_detached_margin_header(raw, raw_blocks, pw, ph, page_median)
+            if margin_header:
+                metadata["margin_header_evidence"] = "detached_small_full_width_above_multicolumn_body"
             blocks.append(DocumentBlock(id=f"p{page_number}-b{counter}",
-                type=BlockType.HEADING if heading else BlockType.PARAGRAPH,
+                type=BlockType.HEADER if margin_header else (BlockType.HEADING if heading else BlockType.PARAGRAPH),
                 content=content, page=page_number, bbox=_normalize_bbox(*bbox, pw, ph),
-                confidence=None, extractor=self.name, metadata=metadata))
+                confidence=None, extractor=self.name, requires_review=margin_header, metadata=metadata))
             counter += 1
         for block in blocks:
             block.metadata["page_size_pt"] = [round(pw, 2), round(ph, 2)]
@@ -506,10 +619,15 @@ class PyMuPDFExtractor(BaseExtractor):
     # ------------------------------------------------------------------
 
     def _table_block(
-        self, table, page_number: int, block_counter: int, pw: float, ph: float
+        self, table, page_number: int, block_counter: int, pw: float, ph: float,
+        source_spans: list[dict] | None = None,
+        source_words: list[tuple] | None = None,
     ) -> DocumentBlock:
         """Convert a PyMuPDF table to a DocumentBlock with structured content."""
         rows = table.extract()
+        rows, symbol_recoveries = self._recover_table_symbols(table, rows, source_spans or [])
+        source_boxes = [[cell for cell in row.cells] for row in getattr(table, "rows", [])]
+        rows, source_boxes, row_repairs = split_stacked_rows(rows, source_boxes, source_words or [])
         text_lines: list[str] = []
         for row in rows:
             cells = [str(c) if c is not None else "" for c in row]
@@ -518,10 +636,10 @@ class PyMuPDFExtractor(BaseExtractor):
 
         cell_bboxes: list[list] = []
         try:
-            for row in table.rows:
+            for row in source_boxes:
                 cell_bboxes.append([
                     list(_normalize_bbox(*cell, pw, ph)) if cell is not None else None
-                    for cell in row.cells
+                    for cell in row
                 ])
         except Exception:  # noqa: BLE001 - cell geometry is a nicety, never fatal
             cell_bboxes = []
@@ -539,6 +657,8 @@ class PyMuPDFExtractor(BaseExtractor):
                 "row_count": len(rows),
                 "col_count": table.col_count,
                 "header": rows[0] if rows else [],
+                "symbol_recoveries": symbol_recoveries,
+                "structural_repairs": row_repairs,
                 "cell_bboxes": cell_bboxes if len(cell_bboxes) == len(rows) else [],
                 "row_pages": [page_number] * len(rows),
             },
@@ -561,11 +681,50 @@ class PyMuPDFExtractor(BaseExtractor):
         return refs
 
     @staticmethod
+    def _recover_table_symbols(table, rows: list[list], spans: list[dict]) -> tuple[list[list], list[dict]]:
+        """Decode a verified Wingdings arrow only inside its original table cell.
+
+        Do not globally replace private-use characters: the same codepoint in a
+        different font can mean something else. Missing geometry is left alone.
+        """
+        recovered = [list(row) for row in rows]
+        changes: list[dict] = []
+        geometry = getattr(table, "rows", [])
+        for r, row in enumerate(rows):
+            boxes = getattr(geometry[r], "cells", []) if r < len(geometry) else []
+            for c, text in enumerate(row):
+                if not isinstance(text, str) or "\uf0e0" not in text or c >= len(boxes) or not boxes[c]:
+                    continue
+                rect = pymupdf.Rect(boxes[c])
+                relevant = []
+                for span in spans:
+                    bbox = span.get("bbox")
+                    if bbox and "\uf0e0" in span.get("text", ""):
+                        center = pymupdf.Point((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+                        if center in rect:
+                            relevant.append(span)
+                if (relevant and all(span.get("font", "").split("+")[-1].casefold() == "wingdings" for span in relevant)
+                        and sum(span["text"].count("\uf0e0") for span in relevant) == text.count("\uf0e0")):
+                    recovered[r][c] = text.replace("\uf0e0", "\u2192")
+                    changes.append({"row": r, "column": c, "font": "Wingdings",
+                                    "source": "\uf0e0", "unicode": "\u2192"})
+        return recovered, changes
+
+    @staticmethod
     def _raw_region_text(words: list[tuple], bbox: tuple[float, float, float, float]) -> str:
         x0, y0, x1, y1 = bbox
         selected = [str(w[4]) for w in words if w[0] >= x0 - 1 and w[2] <= x1 + 1
                     and w[1] >= y0 - 1 and w[3] <= y1 + 1]
         return " ".join(selected)
+
+    @staticmethod
+    def _words_outside_tables(words: list[tuple], table_rects: list[pymupdf.Rect]) -> list[tuple]:
+        """Keep source words unless a replacement region fully contains them."""
+        return [word for word in words if not any(
+            word[0] >= rect.x0 - 1 and word[2] <= rect.x1 + 1
+            and word[1] >= rect.y0 - 1 and word[3] <= rect.y1 + 1
+            for rect in table_rects
+        )]
 
     @staticmethod
     def _overlaps_tables(bbox: tuple[float, float, float, float], table_rects: list[pymupdf.Rect]) -> bool:

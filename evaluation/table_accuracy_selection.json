@@ -1,0 +1,28 @@
+{
+  "scope": "native PyMuPDF + table enhancement + layout + Markdown; OCR/vision/Verify excluded",
+  "selection": "3 named historical failures, lexicographic first 3 historical passing and 3 failing table PDFs, first 2 PDFs in each of 3 non-math control categories; all original cases for each PDF",
+  "baseline_commit": "7a2e20586cb4950560972751fb9f7ea50eeb1188",
+  "pdfs": {
+    "tables/1529b213d5db3acb5254d34f81d18e060f28_pg1.pdf": "14467d241201fa6a5db2b323543ee63faab6b385da374a88c318102187f3cc63",
+    "tables/d46c578922389c13e1766994f3fb393a17da_pg15.pdf": "47f505cedad656c8347f58496cdeac1d498ae195c530c67ecbb14fccdd4aba3b",
+    "tables/b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4.pdf": "7a509c59f5fabf77b4e1f45b87619dfb76773836b0e0d521d9e495cca1cd4084",
+    "tables/0ee4f7788272e811ae7717b7133770892fe6_pg8.pdf": "68df6f74de14e6c1a094ed604a00978c57da3a556576c06d562fa88cee58f8da",
+    "tables/1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_pg1.pdf": "a11e5b451c29949bee58666bd294ff525cd2cb1327a2b6f5ca50094555073239",
+    "tables/1c42d782fce429d7796cbac6fc7956e06ec7_pg41_pg1.pdf": "3c54f25c8af6543c5d812b444d0e8b8fe3d22a4c5a79cc3275c9c21cf14c7f1e",
+    "tables/008d1dbe3c5a5fd2bac6e4f29acc45e711aa_pg8_pg1.pdf": "7aa7de33e726a7f61053f376a90088537fd9b238aa99b07fc5ebf82f961da51e",
+    "tables/0091c5b23fe54b3a7cbe5b0b8c26057b7d70_pg3_pg1.pdf": "f070e65ff79f621f8b844623b60ac22154bed0f3f0029105952be517a8eada39",
+    "tables/00e980a0c4645fc83f27c467d10bbdeb8661_pg64.pdf": "0e625d073329133b0f8a412ad9f4c270cf10c3f6e64bd56eba826ca4cc9a22d2",
+    "headers_footers/0058e04004009cc0df75aab998d3e107dc646b46_page_1_processed.pdf": "7964dba3ca3d42eae2c5e48b5d4bcc9e344e8a4b4999b9caaab6f4a4218deaa7",
+    "headers_footers/006c33b9244de3ff296633d1cb446a8fb8a5eca1_page_10_processed.pdf": "7ace6a1ed1e239a540f0813d7e0cb5e6e69b15951633af1fc0078aaa47c172fc",
+    "multi_column/0005784d0d255f6652180433936fa2998188_page_1_pg1.pdf": "3ab9f78fb3cd0b0f869a919b1157d44ce1073c51852bff4d11068ce1769cd491",
+    "multi_column/0005784d0d255f6652180433936fa2998188_page_4_pg1.pdf": "9e03c993f563d99952715637a15af5d1b14f6610af48aa0c855b2bcf064b35f2",
+    "long_tiny_text/10a_pg1.pdf": "51ce319150dce95866fca4852c8d966bf46530b933a9eed24b6359492adb7b0f",
+    "long_tiny_text/10b_pg1.pdf": "bc8b8473e6aa4b6b06d727c533ce54c4fa5f10b4cd9319c61a474a7de954b7cb"
+  },
+  "case_source_hashes": {
+    "table_tests.jsonl": "b7ec45bbce0f1b90037f2be1b40ec5901aea2feabdedee2641e66882b10d640d",
+    "headers_footers.jsonl": "1ffac38f6a428fbb21c6c0e48b5dd5678c8a411813d0eacc175aab730c498f3e",
+    "multi_column.jsonl": "d390c5b1f7ca4edefa6012d496e21c5ff956cf961104a40f26a7cb56036dc1f8",
+    "long_tiny_text.jsonl": "71ce2b10bdee0737d8aa064242684c790718b4d182ce7a72d11d5c6b022d511b"
+  }
+}

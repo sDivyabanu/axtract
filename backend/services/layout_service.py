@@ -117,13 +117,35 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
                     and len(block.content) <= 300
                 )
 
+                # Detached compact bottom furniture needs spatial evidence,
+                # including when its font is slightly larger than dense body text.
+                prior_bottoms = [b.bbox[3] for b in page_blocks if b is not block and b.bbox
+                                 and b.type not in (BlockType.FIGURE, BlockType.HEADER, BlockType.FOOTER)
+                                 and b.bbox[3] <= y1
+                                 and min(b.bbox[2],block.bbox[2])>max(b.bbox[0],block.bbox[0])]
+                detached = bool(prior_bottoms) and y1-max(prior_bottoms)>=.035
+                safe_prose = not any(block.metadata.get(k) for k in
+                                     ("text_layer_math","formula_candidate","footnote_refs"))
+                extended_small_footer = safe_prose and y1>=.89 and detached and small_margin_line
+                extreme_folio = (safe_prose and y1>=.96 and detached and y2-y1<=.025
+                                 and block.bbox[2]-block.bbox[0]<=.65
+                                 and 3<=len(block.content.split())<=20
+                                 and isinstance(font_size,(int,float))
+                                 and isinstance(body_font_size,(int,float))
+                                 and 0<font_size<=1.25*body_font_size
+                                 and re.search(r"^\d|\d[.)]?$",block.content.strip()))
+
                 if (mid_y < _HEADER_THRESHOLD and (position_key in repeated_regions or small_margin_line)
                         and block.type == BlockType.PARAGRAPH):
                     block.type = BlockType.HEADER
                     header_blocks.append(block)
-                elif (mid_y > _FOOTER_THRESHOLD and block.type == BlockType.PARAGRAPH
-                      and (position_key in repeated_regions or is_page_number or small_margin_line)):
+                elif (block.type == BlockType.PARAGRAPH and
+                      ((mid_y > _FOOTER_THRESHOLD and (position_key in repeated_regions or is_page_number or small_margin_line))
+                       or extended_small_footer or extreme_folio)):
                     block.type = BlockType.FOOTER
+                    if extended_small_footer or extreme_folio:
+                        block.metadata["margin_footer_evidence"] = "compact_detached_bottom_region"
+                        block.requires_review = True
                     footer_blocks.append(block)
                 else:
                     body_blocks.append(block)
@@ -174,6 +196,11 @@ def _detect_columns(blocks: list[DocumentBlock]) -> list[tuple[float, float]]:
     column_blocks = [b for b in blocks_with_bbox if b.bbox[2] - b.bbox[0] < 0.70]
     if len(column_blocks) < 4:
         return [(0.0, 1.0)]
+    paragraphs = [b for b in column_blocks if b.type == BlockType.PARAGRAPH
+                  and len(b.content.split())>=40 and not b.metadata.get("text_layer_math")]
+    if len(paragraphs)>=4:
+        column_blocks = paragraphs  # author/address grids cannot fill a body-text gutter
+
 
     # Examine possible gutters throughout the middle 70% of the page. A
     # small normalized threshold admits narrow gutters while the requirement

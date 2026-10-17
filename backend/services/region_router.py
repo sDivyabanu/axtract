@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -71,6 +72,13 @@ def _crop(img: Image.Image, bbox: BBox, pad: float = 0.004) -> Image.Image:
     x0, y0 = max(0, int((bbox[0] - pad) * w)), max(0, int((bbox[1] - pad) * h))
     x1, y1 = min(w, int((bbox[2] + pad) * w) + 1), min(h, int((bbox[3] + pad) * h) + 1)
     return img.crop((x0, y0, max(x0 + 1, x1), max(y0 + 1, y1)))
+
+
+# pixel re-reads of text-layer formula candidates per page (each costs ~1-2 s with the local model)
+_MAX_REREAD_PER_PAGE = int(os.environ.get("AXTRACT_FORMULA_REREAD_PER_PAGE", "6"))
+# The current local recognizer scores 0 assertions on scanned pages (measured on the fixed sample) and costs
+# ~10-20 s per page there, so scanned PDF pages skip it unless explicitly enabled.
+_FORMULA_ON_SCANNED = os.environ.get("AXTRACT_FORMULA_SCANNED", "0") == "1"
 
 
 def _budget_ok() -> bool:
@@ -156,6 +164,8 @@ def route_regions(result: ExtractionResult, file_path: Path, file_type: str) -> 
     try:
         if file_type == "pdf":
             _route_pdf(result, file_path)
+            from services.scanned_math import route_scanned_math
+            route_scanned_math(result, file_path)
         elif file_type in ("docx", "pptx"):
             _route_office_pictures(result)
         elif file_type in ("jpg", "jpeg", "png"):
@@ -526,12 +536,15 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
             blocks[idx] = _to_chart(blk, payload) if kind == "chart" else _to_equation(blk, payload)
 
         # 2b. formula candidates in the text layer: re-read the rendered crop
+        n_reread = 0
         for blk in page_candidates:
             if blk not in blocks:
                 continue
-            if not _budget_ok() or not models.latex_model_available():
+            if (not _budget_ok() or not models.latex_model_available()
+                    or n_reread >= _MAX_REREAD_PER_PAGE or len(blk.content.strip()) < 4):
                 blk.metadata.setdefault("flags", []).append("formula_not_checked")
                 continue
+            n_reread += 1
             fr = recognize_formula(_crop(img, blk.bbox, pad=0.003))
             if fr.latex and fr.valid and fr.mathy and not fr.looks_like_prose and crosscheck(fr.latex, blk.content) >= 0.5:
                 idx = blocks.index(blk)
@@ -541,6 +554,8 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
         n_eq = 0
         for r in regions:
             if r.cls != "equation" or r.score < 0.5 or not _budget_ok() or not models.latex_model_available():
+                continue
+            if pno in scanned_pages and not _FORMULA_ON_SCANNED:
                 continue
             if any(b.page == pno and b.bbox and b.type in (BlockType.EQUATION, BlockType.FIGURE, BlockType.CHART)
                    and _iou(r.bbox, b.bbox) > 0.25 for b in blocks):
@@ -595,7 +610,7 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
         # one formula (same guards as the standalone-image path, so scanned text
         # pages can never be misread as math).
         if (
-            pno in scanned_pages and n_eq == 0 and _budget_ok()
+            pno in scanned_pages and _FORMULA_ON_SCANNED and n_eq == 0 and _budget_ok()
             and models.latex_model_available()
             and not any(b.page == pno and b.type in (BlockType.EQUATION, BlockType.CHART, BlockType.TABLE)
                         for b in blocks)

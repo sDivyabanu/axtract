@@ -1,0 +1,31 @@
+{
+  "scope": "native PyMuPDF + table enhancement + layout + Markdown; OCR/vision/Verify excluded",
+  "selection": "Frozen heldout: SHA256 AXTRACT-table-2026-10-17-v2 rank, alternating split; 12 tables + 2/category controls; original 15 excluded; no outcome filtering",
+  "baseline_commit": "ef499d5",
+  "pdfs": {
+    "tables/2d0e0586cd437f8741b3e8280d2f5e43fcbc_pg373.pdf": "46262df5df0f0f472700b2d43ea9b7e83123476926eabb641fb305ceefbd18b9",
+    "tables/5317983636d35e54753b65c5e5f8dc0364cf_pg15.pdf": "1e44b351db4a27d211d88796c3fdb20b62ebbf6dcd37c16eaeab0aafa84aa82c",
+    "tables/9a61fe7883401ae6a1e4fa506030c59e99ea_pg2.pdf": "4589e826c331d15b04a32d493007abe21063932e434e2ea5f92eda7dce7011cb",
+    "tables/2d54e996d1247bd36695d872863eefebd8f8_pg4.pdf": "479064807b36879814b43acad013fbc72acc8a16c8bdefcc47fab2a5b59af16f",
+    "tables/c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_pg1.pdf": "7af90452b693cfc2293d91923a49bcb6645c183d385705a77a7f571d9ed10ae7",
+    "tables/0b100ba02aedbdb366a79ac387b4d6bf1774_pg4.pdf": "1947b4499d6c92b901ae67fd3655dcb3186c790d0e47006ab674f0c4987e3d37",
+    "tables/807aabb12d3361030e61eb4480d1158dde36_pg1.pdf": "ea3b6c39f3223d142f2c13b5bf718473d5ebcb1880b69efc9a8b3c90fcf457bd",
+    "tables/5bdc8382ea3a448f126aa671d327bd9e078b_pg4.pdf": "31c2969191f9a4872e2d7b5b2b390510b072f2b39791ad1266622b2ab60a3073",
+    "tables/1651cbb49c05c51fb5a2687130144f94865e_pg2.pdf": "6b87ae2adf76b12a615f455c32fe3a486c301d4db18cb49eec6906c97e086b8e",
+    "tables/5f20b8b654a2a30ed308fb87d69a636fec2a_pg4_pg1.pdf": "022af9d446d694d770917db9a3bd902f98e955b4fb903fb6347016d337c4982a",
+    "tables/b10f6b5133974c56c2bc89aba97a38bc1072_pg1_pg1.pdf": "4f2064c75866a61c5c7ed80d26daeaef4c67c6579c054178d5c7703ab7476b51",
+    "tables/8926022d05e57a6e44113fd0eaa54d0aca11_pg1_pg1.pdf": "796e32e7ce7736112d3e2343c1183eb2f01f661df0061bef13cb3c175ddbd302",
+    "headers_footers/7f1e2bb730f139f2f56c09f6e2fbdbafba2ac454_page_1.pdf": "e2d8d6221697ef4ee3d6eb0a9a56f2f4414dabbf21a2df461e74e950dd4c7247",
+    "headers_footers/88c0a6de46af0801a76f854c55c7a8df2beb6ed3_page_1.pdf": "6922908e9db9ebcd5740ec906db026684b1a8cde5a45fca5d1b38a2d21611e1c",
+    "multi_column/02943986dff2d4a84b7c2dd81abfc51fceea_page_5_pg1.pdf": "affed0a28f8d3b097fd7fb47ddd8f9348c9b0287a0b8eec9689a12f108dbe497",
+    "multi_column/069577d83be73a2373200ada5599eb824c95_page_2_pg1.pdf": "196a9e472d01d53811ea8e2a2ddc1a1df6c707cdc4e5d9a3f944d551a07e5591",
+    "long_tiny_text/13_pg811_pg1.pdf": "fa7fea4b908ffbb741bb3c5eaa180a5e7fc3d4592f899a6617c6e11fe9282433",
+    "long_tiny_text/13_pg639_pg1.pdf": "f71b9cabd1094510a82f42ed1bde64a21b71ea44e8ddc9b58d54a1fa153f4a07"
+  },
+  "case_source_hashes": {
+    "table_tests.jsonl": "b7ec45bbce0f1b90037f2be1b40ec5901aea2feabdedee2641e66882b10d640d",
+    "headers_footers.jsonl": "1ffac38f6a428fbb21c6c0e48b5dd5678c8a411813d0eacc175aab730c498f3e",
+    "multi_column.jsonl": "d390c5b1f7ca4edefa6012d496e21c5ff956cf961104a40f26a7cb56036dc1f8",
+    "long_tiny_text.jsonl": "71ce2b10bdee0737d8aa064242684c790718b4d182ce7a72d11d5c6b022d511b"
+  }
+}

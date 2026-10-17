@@ -470,7 +470,11 @@ def enhance_table_block(block: DocumentBlock) -> DocumentBlock:
     # Merged cells: trust the extractor when it supplied them (xlsx/docx/pptx know the
     # real spans); otherwise infer them from None-continuation cells.
     provided = block.metadata.get("merged_cells")
-    merged_info = provided if isinstance(provided, dict) else detect_merged_cells(rows)
+    if isinstance(provided, dict):
+        merged_info = {**provided, "source": provided.get("source", "extractor")}
+    else:
+        # A missing value alone does not prove a physical row/column span.
+        merged_info = {**detect_merged_cells(rows), "source": "inferred_missing_cells"}
     
     # Detect multi-row headers
     header_info = detect_multi_row_headers(rows)
