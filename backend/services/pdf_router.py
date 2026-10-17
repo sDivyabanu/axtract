@@ -32,6 +32,41 @@ _MAX_OCR_SIDE = 2500
 _MIN_OCR_DPI_SINGLE = 72
 
 
+def fit_dpi(w_pt: float, h_pt: float, base_dpi: float = _BASE_OCR_DPI,
+            max_pixels: int = _MAX_OCR_PIXELS, max_side: int = _MAX_OCR_SIDE) -> int:
+    """Largest integer DPI <= base_dpi at which a w_pt x h_pt region stays within BOTH the pixel-area
+    and the longest-side caps (floor of 1 DPI)."""
+    raw_w, raw_h = w_pt * base_dpi / 72.0, h_pt * base_dpi / 72.0
+    scale = 1.0
+    if raw_w * raw_h > max_pixels:
+        scale = min(scale, (max_pixels / (raw_w * raw_h)) ** 0.5)
+    if max(raw_w, raw_h) * scale > max_side:
+        scale = min(scale, max_side / max(raw_w, raw_h))
+    dpi = max(1, int(round(base_dpi * scale)))
+    while dpi > 1 and ((w_pt * dpi / 72.0) * (h_pt * dpi / 72.0) > max_pixels
+                       or max(w_pt, h_pt) * dpi / 72.0 > max_side):
+        dpi -= 1
+    return dpi
+
+
+def ensure_unique_block_ids(blocks: list[DocumentBlock]) -> int:
+    """Safety net: rename later duplicates (`id~2`, `id~3`...). Returns how many were renamed."""
+    seen: dict[str, int] = {}
+    renamed = 0
+    for b in blocks:
+        n = seen.get(b.id, 0) + 1
+        seen[b.id] = n
+        if n > 1:
+            new = f"{b.id}~{n}"
+            while new in seen:
+                n += 1
+                new = f"{b.id}~{n}"
+            seen[new] = 1
+            b.id = new
+            renamed += 1
+    return renamed
+
+
 class PDFRouter:
     """Analyzes PDF pages and routes to appropriate extractors."""
 
@@ -135,6 +170,9 @@ class PDFRouter:
                 if not b.metadata.get("_internal_meta")
             ]
 
+            renamed = ensure_unique_block_ids(result.blocks)
+            if renamed:
+                logger.warning("renamed %d duplicate block id(s)", renamed)
             self._assign_heading_levels(result.blocks)
             return result
 
@@ -174,20 +212,7 @@ class PDFRouter:
         errors: list[DocumentError] = []
         try:
             w_pt, h_pt = page.rect.width, page.rect.height
-            raw_w = w_pt * (_BASE_OCR_DPI / 72.0)
-            raw_h = h_pt * (_BASE_OCR_DPI / 72.0)
-            tot_pixels = raw_w * raw_h
-
-            scale = 1.0
-            if tot_pixels > _MAX_OCR_PIXELS:
-                scale = min(scale, (_MAX_OCR_PIXELS / tot_pixels) ** 0.5)
-            if max(raw_w, raw_h) * scale > _MAX_OCR_SIDE:
-                scale = min(scale, _MAX_OCR_SIDE / max(raw_w, raw_h))
-
-            effective_dpi = _BASE_OCR_DPI * scale
-            target_dpi = max(1, int(round(effective_dpi)))
-            while target_dpi > 1 and (w_pt * target_dpi / 72.0) * (h_pt * target_dpi / 72.0) > _MAX_OCR_PIXELS:
-                target_dpi -= 1
+            target_dpi = fit_dpi(w_pt, h_pt)
 
             # Bounded tiling fallback for enormous pages where single-pass DPI drops below 72
             if target_dpi < _MIN_OCR_DPI_SINGLE and (w_pt > 2000 or h_pt > 2000):
@@ -200,27 +225,41 @@ class PDFRouter:
                 pad_y = tile_h_pt * 0.05
                 max_tile_pixels = 3_500_000
 
+                total_tiles = rows * cols
+                done_tiles = 0
+                stopped: str | None = None
                 for r in range(rows):
                     for c in range(cols):
-                        deadline.check()
+                        if stopped:
+                            break
+                        try:
+                            deadline.check()
+                        except AppError as exc:
+                            if exc.code != "TIMEOUT":
+                                raise
+                            stopped = "the time budget was reached"
+                            break
                         x0 = max(0.0, c * tile_w_pt - pad_x)
                         y0 = max(0.0, r * tile_h_pt - pad_y)
                         x1 = min(w_pt, (c + 1) * tile_w_pt + pad_x)
                         y1 = min(h_pt, (r + 1) * tile_h_pt + pad_y)
                         clip = pymupdf.Rect(x0, y0, x1, y1)
-
                         tw_pt = clip.width
                         th_pt = clip.height
-                        raw_tw = tw_pt * (_BASE_OCR_DPI / 72.0)
-                        raw_th = th_pt * (_BASE_OCR_DPI / 72.0)
-                        tile_scale = min(1.0, (max_tile_pixels / max(1.0, raw_tw * raw_th)) ** 0.5)
-                        tile_dpi = max(1, int(round(_BASE_OCR_DPI * tile_scale)))
-                        while tile_dpi > 1 and (tw_pt * tile_dpi / 72.0) * (th_pt * tile_dpi / 72.0) > max_tile_pixels:
-                            tile_dpi -= 1
+                        # both the area and the longest-side cap apply to every tile
+                        tile_dpi = fit_dpi(tw_pt, th_pt, max_pixels=max_tile_pixels)
 
-                        pix = page.get_pixmap(clip=clip, dpi=tile_dpi, alpha=False)
-                        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                        sub_blocks, sub_errors = self._ocr.ocr_pil_image(img, page_number)
+                        try:
+                            pix = page.get_pixmap(clip=clip, dpi=tile_dpi, alpha=False)
+                            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                            sub_blocks, sub_errors = self._ocr.ocr_pil_image(img, page_number)
+                        except Exception as exc:  # noqa: BLE001 - keep the tiles that already succeeded
+                            errors.append(DocumentError(
+                                code="OCR_TILE_FAILED",
+                                message=f"Page {page_number} tile {r * cols + c + 1}/{total_tiles}: {exc}",
+                                page=page_number))
+                            continue
+                        done_tiles += 1
                         errors.extend(sub_errors)
 
                         # Remap coordinates from tile relative to whole page relative
@@ -230,6 +269,9 @@ class PDFRouter:
                         clip_rel_h = th_pt / h_pt
 
                         for b in sub_blocks:
+                            # OCR numbers its blocks per image: make ids unique across tiles
+                            b.id = f"p{page_number}-r{r}c{c}-{b.id.split('-', 1)[-1]}"
+                            b.metadata["ocr_tile"] = {"row": r, "col": c, "tile_dpi": tile_dpi}
                             if b.bbox:
                                 bx0, by0, bx1, by1 = b.bbox
                                 remapped_bbox = (
@@ -250,6 +292,13 @@ class PDFRouter:
                                     tile_blocks.append(b)
                             else:
                                 tile_blocks.append(b)
+
+                if stopped or done_tiles < total_tiles:
+                    errors.append(DocumentError(
+                        code="OCR_TILES_PARTIAL",
+                        message=(f"Page {page_number}: OCR completed {done_tiles} of {total_tiles} tiles"
+                                 + (f" ({stopped})" if stopped else "") + "; text from the finished tiles is kept."),
+                        page=page_number))
 
                 # Cache a preview-sized overview for downstream region routing
                 overview_dpi = max(1, target_dpi)
