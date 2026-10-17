@@ -64,10 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient();
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    // createClient() is null only when Supabase is not configured, and then `loading` already starts false.
+    if (!supabase) return;
 
     // `loading` disables the sign-in/sign-up button, so it must always clear.
     // getSession() can reject or hang (it waits on a cross-tab lock), which
