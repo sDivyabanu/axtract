@@ -1,0 +1,27 @@
+{
+ "description": "Antigravity 22 historical timeout PDFs",
+ "pdfs": [
+  "arxiv_math/2503.09528_pg16.pdf",
+  "headers_footers/11253d83d886378909f8b24d24d8a90412099087_page_4.pdf",
+  "long_tiny_text/10a_pg1.pdf",
+  "old_scans/10.pdf",
+  "old_scans/1.pdf",
+  "tables/11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_pg1.pdf",
+  "headers_footers/275579590090bf114f27e3f7ce3939cece9a7b25_page_1.pdf",
+  "long_tiny_text/10b_pg1.pdf",
+  "long_tiny_text/10c_pg1.pdf",
+  "long_tiny_text/17_pg17_pg1.pdf",
+  "long_tiny_text/20_pg39_pg1.pdf",
+  "multi_column/02a3e23da54b82c414d272051b0b5d8f44d8_page_12_pg1.pdf",
+  "old_scans/11.pdf",
+  "old_scans/12.pdf",
+  "old_scans/13.pdf",
+  "old_scans/14.pdf",
+  "old_scans/15.pdf",
+  "old_scans/20.pdf",
+  "old_scans/30.pdf",
+  "old_scans/40.pdf",
+  "old_scans/50.pdf",
+  "old_scans/60.pdf"
+ ]
+}

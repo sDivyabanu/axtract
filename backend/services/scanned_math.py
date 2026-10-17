@@ -11,6 +11,7 @@ from services.vision import pix2text_mfr
 from services.vision.line_math import segment_lines,looks_like_prose,tidy_latex
 from services.vision.latex import validate_latex,looks_mathy
 from utils import deadline
+from utils.request_cache import get_cached_image
 
 logger=logging.getLogger(__name__)
 
@@ -27,6 +28,44 @@ def available_memory_bytes():
         return os.sysconf("SC_AVPHYS_PAGES")*os.sysconf("SC_PAGE_SIZE")
     except (OSError,ValueError,AttributeError):
         return None
+
+
+def page_size_points(path, page):
+    """(width, height) of a PDF page in points, or None when it cannot be read."""
+    try:
+        import pymupdf
+        with pymupdf.open(path) as document:
+            rect = document[page - 1].rect
+            return float(rect.width), float(rect.height)
+    except Exception:  # noqa: BLE001 - sizing is best effort; the caller falls back to a small DPI
+        return None
+
+
+def render_dpi_for(width_pt, height_pt, base=200):
+    """Render DPI under the same pixel and side caps the OCR path uses (see pdf_router), so enabling
+    scanned math can never reintroduce the unbounded allocations that caused the 60 s timeouts."""
+    from services.pdf_router import _MAX_OCR_PIXELS, _MAX_OCR_SIDE
+    dpi = base
+    pixels = (width_pt * dpi / 72.0) * (height_pt * dpi / 72.0)
+    if pixels > _MAX_OCR_PIXELS:
+        dpi = dpi * (_MAX_OCR_PIXELS / pixels) ** 0.5
+    if max(width_pt, height_pt) * dpi / 72.0 > _MAX_OCR_SIDE:
+        dpi = min(dpi, _MAX_OCR_SIDE * 72.0 / max(width_pt, height_pt))
+    dpi = max(1, int(dpi))
+    while dpi > 1 and (width_pt * dpi / 72.0) * (height_pt * dpi / 72.0) > _MAX_OCR_PIXELS:
+        dpi -= 1
+    return dpi
+
+
+def page_image(path, page):
+    """The page image already rendered for OCR in this request when available, else a capped render."""
+    cached = get_cached_image(path, page)
+    if cached is not None:
+        return cached
+    from services.preview_service import render_page_pil
+    size = page_size_points(path, page)
+    dpi = render_dpi_for(*size) if size else 100
+    return render_page_pil(path, page, dpi)
 
 
 def _overlap(a,b):
@@ -89,7 +128,6 @@ def route_scanned_math(result,path: Path):
     if not pages:
         return
     status=pix2text_mfr.mfr_status()
-    from services.preview_service import render_page_pil
     for page in pages:
         originals=[b for b in result.blocks if b.page==page]
         stats={"enabled":True,"attempted":0,"accepted":0,"rejected":[],"model_available":status["available"]}
@@ -106,7 +144,7 @@ def route_scanned_math(result,path: Path):
             stats["stop_reason"]="budget";continue
         started=time.monotonic()
         try:
-            image=render_page_pil(path,page,200)
+            image=page_image(path,page)
             for box,ocr,covered in candidates(image,originals,page,native_words=native.get(page)):
                 ram=available_memory_bytes()
                 if ram is not None and ram<300*1024**2:

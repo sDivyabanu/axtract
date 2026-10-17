@@ -24,7 +24,7 @@ from services import progress
 from security.output_safety import sanitise_block_text, sanitise_markdown
 from extractors.registry import get_extractor
 from models.document import DocumentResponse
-from models.errors import AppError
+from models.errors import AppError, DocumentError
 from services.region_router import route_regions
 from services.layout_service import assign_reading_order
 from services import preview_service
