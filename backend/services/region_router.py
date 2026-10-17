@@ -570,6 +570,21 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
             best = max(regions, key=lambda r: _iou(r.bbox, bbox), default=None)
             return best.cls if best is not None and _iou(best.bbox, bbox) >= 0.3 else None
 
+        # Rulings + existing OCR boxes can describe tables even when the page's
+        # native text is empty, or the table is embedded in a larger figure.
+        # Do this before chart/formula classification; never re-read native text.
+        try:
+            from services.raster_table_service import recover_page_tables
+
+            native_page = fitz_doc[pno - 1]
+            sx, sy = img.width / native_page.rect.width, img.height / native_page.rect.height
+            native_words = [(w[0]*sx, w[1]*sy, w[2]*sx, w[3]*sy, *w[4:])
+                            for w in native_page.get_text("words")]
+            recover_page_tables(img, pno, blocks, regions,
+                                [b.bbox for b in raster_figures], native_words)
+        except Exception:  # A rejected/failed recovery keeps the original OCR.
+            logger.exception("Raster table recovery failed on page %s", pno)
+
         # 2a. figures
         for blk in page_figures:
             if blk not in blocks:

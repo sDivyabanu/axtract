@@ -11,7 +11,8 @@ from typing import ClassVar
 
 import pymupdf
 
-from extractors.table_geometry import split_stacked_rows, native_line_numeric_candidates, shadows_complete_grid
+from extractors.table_geometry import (split_stacked_rows, native_line_numeric_candidates,
+                                       shadows_complete_grid, has_cell_rectangles, indexed_numeric_candidates)
 from extractors.text_math import page_has_math_fonts, rebuild_page
 from extractors.base import BaseExtractor, ExtractionResult
 from extractors.table_geometry import has_ruled_grid, numeric_table_candidates, ruled_text_candidates, is_detached_margin_header, ruled_grid_regions, has_plot_strokes
@@ -321,7 +322,8 @@ class PyMuPDFExtractor(BaseExtractor):
         # Chart-like pages still need table candidates examined so implausible
         # numeric grids can be retained as reviewable figures. The tighter
         # aligned-column guard is only the fallback for borderless text tables.
-        has_table_evidence = chart_signal or numeric_columns or aligned_columns or bool(ruled_grid_regions(drawings))
+        has_table_evidence = (chart_signal or numeric_columns or aligned_columns
+                              or bool(ruled_grid_regions(drawings)) or has_cell_rectangles(drawings))
         found_tables = None
         if has_table_evidence:
             table_detection_count = 1
@@ -407,7 +409,9 @@ class PyMuPDFExtractor(BaseExtractor):
         # Native cell lines disambiguate tightly spaced numeric rows next to
         # unrelated prose, before the broader word-alignment fallback is used.
         word_candidates = numeric_table_candidates(self._words_outside_tables(raw_words, table_rects), drawings)
-        for candidate in native_line_numeric_candidates(self._words_outside_tables(raw_words, table_rects)):
+        remaining_words = self._words_outside_tables(raw_words, table_rects)
+        for candidate in (native_line_numeric_candidates(remaining_words)
+                          + indexed_numeric_candidates(remaining_words, drawings)):
             if shadows_complete_grid(candidate, word_candidates):
                 continue
             if (not any((pymupdf.Rect(candidate["bbox"]) & rect).get_area() > 1 for rect in table_rects)

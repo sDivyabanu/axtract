@@ -509,3 +509,115 @@ def shadows_complete_grid(candidate: dict, existing: list[dict]) -> bool:
         if abs(a[0]-b[0])<=row_height and len(prior["rows"])>len(candidate["rows"]):
             return True
     return False
+
+
+def has_cell_rectangles(drawings: list[dict]) -> bool:
+    """Repeated adjacent closed cells can establish a grid without digits.
+
+    PDF producers sometimes paint complete cell rectangles instead of separate
+    ruling paths. Ignore small text backgrounds and require three aligned bands.
+    This is discovery evidence only; native candidates still undergo validation.
+    """
+    columns: dict[tuple[int, int], set[tuple[int, int]]] = {}
+    for drawing in drawings:
+        for item in drawing.get("items", []):
+            if item[0] != "re":
+                continue
+            x0,y0,x1,y1 = item[1]
+            if x1-x0 >= 40 and y1-y0 >= 20:
+                columns.setdefault((round(x0),round(x1)),set()).add((round(y0),round(y1)))
+    for (left,right),bands in columns.items():
+        if len(bands) < 3:
+            continue
+        for (other_left,_),other_bands in columns.items():
+            if abs(right-other_left) <= 3 and len(bands & other_bands) >= 3:
+                return True
+    return False
+
+
+def indexed_numeric_candidates(words: list[tuple], drawings: list[dict]) -> list[dict]:
+    """Recover numbered numeric grids with a physical header rule.
+
+    Five consecutive integer row labels, >=3 separated numeric columns, a
+    shared ruling above them, and source-complete headers are all required.
+    Equations and free-standing lists of numbers do not supply that evidence.
+    """
+    import re
+    from statistics import median
+
+    number = re.compile(r"^[+\-\u2212]?(?:\d[\d,.]*)(?:%)?$")
+    if not words:
+        return []
+    height = median(max(1.,w[3]-w[1]) for w in words)
+    horizontal_numbers = [w for w in words if number.fullmatch(str(w[4]))
+                          and height*.65 <= w[3]-w[1] <= height*1.4]
+    rows = [row for row in physical_rows(horizontal_numbers)
+            if 3 <= len(row) <= 16 and all(number.fullmatch(str(w[4])) for w in row)
+            and str(row[0][4]).isdigit()]
+    runs: list[list[list[tuple]]] = []
+    for row in rows:
+        previous = runs[-1][-1] if runs else None
+        if (previous and len(row)==len(previous)
+                and int(row[0][4])==int(previous[0][4])+1
+                and 0 < row[0][1]-previous[0][1] < height*2.5
+                and all(abs(a[2]-b[2]) < height for a,b in zip(row,previous))):
+            runs[-1].append(row)
+        else:
+            runs.append([row])
+    result=[]
+    for run in runs:
+        if len(run)<5:
+            continue
+        columns=list(zip(*run))
+        lefts=[min(w[0] for w in col) for col in columns]
+        rights=[max(w[2] for w in col) for col in columns]
+        if any(lefts[c+1]-rights[c] < height for c in range(len(columns)-1)):
+            continue
+        first=min(w[1] for w in run[0])
+        pieces: dict[int,list[tuple[float,float]]] = {}
+        for drawing in drawings:
+            rect=drawing.get("rect")
+            if rect is not None:
+                a,b,c,d=rect
+                if 0 <= d-b <= 3.2 and 0 <= first-d <= height*2:
+                    pieces.setdefault(round((b+d)/2),[]).append((a,c))
+        rules=[(min(a for a,_ in parts),y,max(b for _,b in parts),y)
+               for y,parts in pieces.items()
+               if min(a for a,_ in parts)<=lefts[0] and max(b for _,b in parts)>=rights[-1]
+               and _covered(parts)>=max(b for _,b in parts)-min(a for a,_ in parts)-3]
+        if not rules:
+            continue
+        rule=max(rules,key=lambda b:b[1]);edges=[(rights[c]+lefts[c+1])/2 for c in range(len(columns)-1)]
+        header=[w for w in words if w[0]>=rule[0]-1 and w[2]<=rule[2]+1
+                and rule[1]-height*4 <= w[1] and w[3] <= first]
+        # A caption above the header is not a cell. Walk upwards only through
+        # contiguous wrapped header baselines, stopping at the first real gap.
+        contiguous=[]
+        top=rule[1]
+        for line in reversed(physical_rows(header)):
+            if top-max(w[3] for w in line)>height*.6:
+                break
+            contiguous.extend(line)
+            top=min(w[1] for w in line)
+        header=contiguous
+        if not header or not any(re.search(r"[A-Za-z]",str(w[4])) for w in header):
+            continue
+        cells=[[] for _ in columns]
+        for w in header:
+            cells[sum((w[0]+w[2])/2>e for e in edges)].append(w)
+        if any(not cell for cell in cells):
+            continue
+        groups=[cells]+[[[w] for w in row] for row in run]
+        selected=[w for group in groups for cell in group for w in cell]
+        region=(min(w[0] for w in selected),min(w[1] for w in selected),
+                max(w[2] for w in selected),max(w[3] for w in selected))
+        identities={id(w) for w in selected}
+        if any(id(w) not in identities and w[0]>=region[0]-1 and w[2]<=region[2]+1
+               and w[1]>=region[1]-1 and w[3]<=region[3]+1 for w in words):
+            continue
+        result.append({"bbox":region,"rows":[[" ".join(str(w[4]) for line in physical_rows(cell) for w in line)
+                       for cell in row] for row in groups],
+                       "cell_bboxes":[[(min(w[0] for w in cell),min(w[1] for w in cell),
+                                        max(w[2] for w in cell),max(w[3] for w in cell)) for cell in row] for row in groups],
+                       "source":"indexed_numeric_grid_with_header_rule"})
+    return result
