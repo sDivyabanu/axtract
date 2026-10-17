@@ -106,6 +106,44 @@ def _group_regions(words: list[dict]) -> list[dict]:
     return regions
 
 
+def _pdfium_words(tp, page_h: float) -> list[dict]:
+    """Words (text + position, pdfplumber's top/bottom convention) from pypdfium2 character boxes.
+
+    Used only for vector-overloaded pages where pdfplumber's layout pass is unaffordable. A word ends at white
+    space, a generated/empty character, a baseline change or a gap over 3 pt (pdfplumber's default x_tolerance)."""
+    words: list[dict] = []
+    cur: dict | None = None
+
+    def flush():
+        nonlocal cur
+        if cur:
+            cur["text"] = "".join(cur.pop("chars"))
+            words.append(cur)
+        cur = None
+
+    for i in range(tp.count_chars()):
+        ch = tp.get_text_range(i, 1)
+        left, bottom_y, right, top_y = tp.get_charbox(i)
+        if not ch or ch.isspace() or (right - left) <= 0 or (top_y - bottom_y) <= 0:
+            flush()
+            continue
+        top, bottom = page_h - top_y, page_h - bottom_y
+        if cur is not None:
+            height = max(cur["bottom"] - cur["top"], 1.0)
+            same_line = abs((top + bottom) / 2 - (cur["top"] + cur["bottom"]) / 2) <= 0.5 * height
+            if not same_line or left - cur["x1"] > 3.0:
+                flush()
+        if cur is None:
+            cur = {"chars": [ch], "x0": left, "x1": right, "top": top, "bottom": bottom}
+        else:
+            cur["chars"].append(ch)
+            cur["x1"] = max(cur["x1"], right)
+            cur["x0"] = min(cur["x0"], left)
+            cur["top"], cur["bottom"] = min(cur["top"], top), max(cur["bottom"], bottom)
+    flush()
+    return words
+
+
 def _seg(ws: list[dict]) -> dict:
     return {"text": " ".join(w["text"] for w in ws), "x0": min(w["x0"] for w in ws), "x1": max(w["x1"] for w in ws),
             "top": min(w["top"] for w in ws), "bottom": max(w["bottom"] for w in ws),
@@ -130,9 +168,23 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
                     page = pdf[i]
                     w, h = page.get_size()
                     rot = page.get_rotation()
+                    # Top-level count is cheap but misses objects nested inside form
+                    # XObjects (grouped paths).  One-level recursion captures them
+                    # in < 1 ms even at 80 k objects — pdfplumber flattens them all,
+                    # so this is the count that predicts its cost.
+                    _top = int(pdfium_c.FPDFPage_CountObjects(page))
+                    page_objects = _top
+                    for _ti in range(_top):
+                        _obj = pdfium_c.FPDFPage_GetObject(page, _ti)
+                        if pdfium_c.FPDFPageObj_GetType(_obj) == pdfium_c.FPDF_PAGEOBJ_FORM:
+                            page_objects += int(pdfium_c.FPDFFormObj_CountObjects(_obj))
+                    overload = page_objects > opts.pdf_vector_object_limit
+                    pdfium_words: list[dict] = []
                     tp = page.get_textpage()
                     try:
                         text = tp.get_text_range() or ""
+                        if overload and rot == 0:
+                            pdfium_words = _pdfium_words(tp, h)
                     finally:
                         tp.close()
                     imgs, area = [], 0.0
@@ -145,7 +197,8 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
                             frac = (box[2] - box[0]) * (box[3] - box[1])
                             area += frac
                             imgs.append((box, frac))
-                    pages.append(dict(w=w, h=h, rot=rot, text=text, imgs=imgs, coverage=min(area, 1.0)))
+                    pages.append(dict(w=w, h=h, rot=rot, text=text, imgs=imgs, coverage=min(area, 1.0),
+                                      objects=page_objects, overload=overload, pdfium_words=pdfium_words))
             finally:
                 pdf.close()
         inv.properties["page_count"] = len(pages)
@@ -157,6 +210,7 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
             plumber = acquire_pdf(path)
         except Exception:  # noqa: BLE001
             inv.limitations.append("pdfplumber could not open this file: no word regions or table candidates.")
+        overloaded_pages: list[int] = []
         try:
             for i, pg in enumerate(pages, start=1):
                 unit = UnitRef(type=UnitType.PAGE, index=i)
@@ -192,7 +246,23 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
                 if plumber is not None and not detailed:
                     inv.truncated = True
                     su.properties["detail"] = "native text only (page limit or time budget reached)"
-                if detailed and pg["rot"] == 0:
+                if detailed and pg["rot"] == 0 and pg["overload"]:
+                    su.properties["vector_overload"] = dict(
+                        page_objects=pg["objects"], limit=opts.pdf_vector_object_limit,
+                        text_regions_engine="pypdfium2", table_candidates="not computed",
+                        reason="pdfplumber layout parsing of this many vector objects exceeds the time budget")
+                    su.properties["detail"] = ("vector-overloaded page: text regions from pypdfium2 character boxes; "
+                                               "ruled-line table candidates not computed")
+                    overloaded_pages.append(i)
+                    for n, r in enumerate(_group_regions(pg["pdfium_words"]), start=1):
+                        txt = "\n".join(r["lines"])
+                        box = _norm_box(r["x0"], r["top"], r["x1"], r["bottom"], pg["w"], pg["h"])
+                        su.objects.append(SourceObject(
+                            id=f"pdf:page{i}:region{n}", type=SourceObjectType.TEXT, unit=unit, text=txt,
+                            locator=SourceLocator(page=i, bbox=box, position=n), kind=HEUR, engine="pypdfium2",
+                            metadata={"scope": "region", "text_kind": "deterministic", "grouping_kind": "heuristic",
+                                      "chars": len(txt), "fallback": "vector_overload"}))
+                elif detailed and pg["rot"] == 0:
                     try:
                         pp = plumber.pages[i - 1]
                         for n, r in enumerate(_group_regions(pp.extract_words(use_text_flow=False)), start=1):
@@ -223,5 +293,11 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
                 release_pdf(plumber)
     except Exception as exc:  # noqa: BLE001 - an inventory failure never affects the extraction
         inv.error = f"{type(exc).__name__}: {exc}"
+    if overloaded_pages:
+        inv.properties["vector_overload_pages"] = overloaded_pages
+        inv.limitations.append(
+            f"Vector-overloaded page(s) {overloaded_pages}: text regions were built from pypdfium2 character boxes "
+            "instead of pdfplumber, and ruled-line table candidates were not computed, so no missing-table evidence exists "
+            "for them.")
     inv.timing_ms = round((time.perf_counter() - t0) * 1000, 3)
     return inv
