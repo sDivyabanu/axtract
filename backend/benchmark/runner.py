@@ -484,6 +484,8 @@ class BenchmarkRunner:
         state = run["status"]
         if state == "running" and not active:
             state = "interrupted"  # process died mid-run; resumable
+        elif state == "created" and not active and self._age_s(run.get("created_at")) > 30:
+            state = "interrupted"  # created but never picked up (e.g. refused for low memory): resumable, not "starting" forever
         keys = ("run_id", "mode", "score_kind", "is_official", "score_label", "created_at", "config", "git", "totals",
                 "error", "sample_id", "dataset_id", "scoring_config", "git_changed_since_creation", "imported",
                 "cancel_requested")
@@ -492,6 +494,13 @@ class BenchmarkRunner:
                 "elapsed_s": progress.get("elapsed_s", 0), "updated_at": progress.get("updated_at"),
                 "resumable": state in ("interrupted", "cancelled", "failed", "created") and run["status"] != "imported",
                 "failures": progress.get("failures", []), "failure_count": progress.get("failure_count", 0)}
+
+    @staticmethod
+    def _age_s(iso: str | None) -> float:
+        try:
+            return (datetime.now(timezone.utc) - datetime.fromisoformat(iso)).total_seconds()  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0.0
 
     def results(self, run_id: str) -> dict:
         res = store.read_json(self._dir(run_id) / "results.json")

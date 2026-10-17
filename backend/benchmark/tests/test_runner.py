@@ -335,3 +335,16 @@ def test_a_failure_caused_by_cancel_stays_pending_instead_of_failed(make_runner)
     assert r.execute(run_id, cancel)["status"] == "cancelled"
     counts = r.status(run_id)["counts"]
     assert counts["failed"] == 0 and counts["pending"] == 2 and r.status(run_id)["resumable"]
+
+
+def test_a_run_that_was_created_but_never_started_is_resumable_not_stuck_starting(make_runner):
+    r = make_runner()
+    run_id = r.create_run(per_category=1, categories=["beta"])
+    assert r.status(run_id)["status"] == "created"  # fresh: the launcher is about to pick it up
+    rdir = store.run_dir(r.settings.workspace, run_id)
+    run = store.read_json(rdir / "run.json")
+    run["created_at"] = "2020-01-01T00:00:00.000+00:00"
+    store.atomic_write_json(rdir / "run.json", run)
+    st = r.status(run_id)
+    assert st["status"] == "interrupted" and st["resumable"] is True
+    assert r.execute(run_id)["status"] == "completed"
