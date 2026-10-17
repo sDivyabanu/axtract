@@ -10,6 +10,7 @@ Pipeline:
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 
 import pymupdf
@@ -32,10 +33,16 @@ _MAX_OCR_SIDE = 2500
 _MIN_OCR_DPI_SINGLE = 72
 
 
+def _dims_ok(w_pt: float, h_pt: float, zoom: float, max_pixels: int, max_side: int) -> bool:
+    """Rendered size (rounded UP, as rasters are) obeys both the side and the area cap."""
+    px_w, px_h = math.ceil(w_pt * zoom - 1e-9) + 1, math.ceil(h_pt * zoom - 1e-9) + 1  # +1: pixel straddling
+    return max(px_w, px_h) <= max_side and px_w * px_h <= max_pixels
+
+
 def fit_dpi(w_pt: float, h_pt: float, base_dpi: float = _BASE_OCR_DPI,
             max_pixels: int = _MAX_OCR_PIXELS, max_side: int = _MAX_OCR_SIDE) -> int:
-    """Largest integer DPI <= base_dpi at which a w_pt x h_pt region stays within BOTH the pixel-area
-    and the longest-side caps (floor of 1 DPI)."""
+    """Largest integer DPI <= base_dpi whose raster (rounded up) obeys BOTH caps; 1 when none does
+    (`fit_zoom` then goes fractional)."""
     raw_w, raw_h = w_pt * base_dpi / 72.0, h_pt * base_dpi / 72.0
     scale = 1.0
     if raw_w * raw_h > max_pixels:
@@ -43,10 +50,37 @@ def fit_dpi(w_pt: float, h_pt: float, base_dpi: float = _BASE_OCR_DPI,
     if max(raw_w, raw_h) * scale > max_side:
         scale = min(scale, max_side / max(raw_w, raw_h))
     dpi = max(1, int(round(base_dpi * scale)))
-    while dpi > 1 and ((w_pt * dpi / 72.0) * (h_pt * dpi / 72.0) > max_pixels
-                       or max(w_pt, h_pt) * dpi / 72.0 > max_side):
+    while dpi > 1 and not _dims_ok(w_pt, h_pt, dpi / 72.0, max_pixels, max_side):
         dpi -= 1
     return dpi
+
+
+def fit_zoom(w_pt: float, h_pt: float, base_dpi: float = _BASE_OCR_DPI,
+             max_pixels: int = _MAX_OCR_PIXELS, max_side: int = _MAX_OCR_SIDE) -> float:
+    """Pixels per point obeying both caps. Integer-DPI when one exists (unchanged results), otherwise a fractional
+    zoom, so even an extreme page never needs an exception to the caps."""
+    dpi = fit_dpi(w_pt, h_pt, base_dpi, max_pixels, max_side)
+    if _dims_ok(w_pt, h_pt, dpi / 72.0, max_pixels, max_side):
+        return dpi / 72.0
+    zoom = 0.995 * min((max_pixels / max(1.0, w_pt * h_pt)) ** 0.5, max_side / max(w_pt, h_pt, 1.0))
+    for _ in range(400):
+        if _dims_ok(w_pt, h_pt, zoom, max_pixels, max_side):
+            return zoom
+        zoom *= 0.97
+    raise ValueError(f"a {w_pt:.0f} x {h_pt:.0f} pt region cannot be rendered within the pixel caps")
+
+
+def render_capped(page: pymupdf.Page, clip: pymupdf.Rect | None, w_pt: float, h_pt: float,
+                  base_dpi: float = _BASE_OCR_DPI, max_pixels: int = _MAX_OCR_PIXELS,
+                  max_side: int = _MAX_OCR_SIDE) -> tuple[pymupdf.Pixmap, float]:
+    """Render and VERIFY the raster: returns (pixmap, zoom) with width/height within both caps, else raises."""
+    zoom = fit_zoom(w_pt, h_pt, base_dpi, max_pixels, max_side)
+    for _ in range(8):
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=clip, alpha=False)
+        if max(pix.width, pix.height) <= max_side and pix.width * pix.height <= max_pixels:
+            return pix, zoom
+        zoom *= 0.97
+    raise ValueError("rendered raster exceeds the pixel caps")
 
 
 def ensure_unique_block_ids(blocks: list[DocumentBlock]) -> int:
@@ -100,7 +134,17 @@ class PDFRouter:
             result = ExtractionResult(page_count=doc.page_count)
 
             for page_number, page in enumerate(doc, start=1):
-                deadline.check()
+                try:
+                    deadline.check()
+                except AppError as exc:
+                    if exc.code != "TIMEOUT":
+                        raise
+                    result.errors.append(DocumentError(
+                        code="PAGES_PARTIAL",
+                        message=(f"Time budget reached after {page_number - 1} of {doc.page_count} page(s); "
+                                 "text from the finished pages is kept."),
+                        page=page_number))
+                    break
                 try:
                     analysis = PyMuPDFExtractor.analyze_page(page)
                     route = self._decide_route(analysis)
@@ -246,11 +290,10 @@ class PDFRouter:
                         clip = pymupdf.Rect(x0, y0, x1, y1)
                         tw_pt = clip.width
                         th_pt = clip.height
-                        # both the area and the longest-side cap apply to every tile
-                        tile_dpi = fit_dpi(tw_pt, th_pt, max_pixels=max_tile_pixels)
-
+                        # both the area and the longest-side cap apply to every tile (verified after rendering)
                         try:
-                            pix = page.get_pixmap(clip=clip, dpi=tile_dpi, alpha=False)
+                            pix, tile_zoom = render_capped(page, clip, tw_pt, th_pt, max_pixels=max_tile_pixels)
+                            tile_dpi = round(tile_zoom * 72.0, 2)
                             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                             sub_blocks, sub_errors = self._ocr.ocr_pil_image(img, page_number)
                         except Exception as exc:  # noqa: BLE001 - keep the tiles that already succeeded
@@ -301,11 +344,16 @@ class PDFRouter:
                         page=page_number))
 
                 # Cache a preview-sized overview for downstream region routing
-                overview_dpi = max(1, target_dpi)
-                overview_pix = page.get_pixmap(dpi=overview_dpi, alpha=False)
-                overview_img = Image.frombytes("RGB", (overview_pix.width, overview_pix.height), overview_pix.samples)
-                if file_path:
-                    set_cached_image(file_path, page_number, overview_img)
+                try:
+                    overview_pix, _ = render_capped(page, None, w_pt, h_pt)
+                    overview_img = Image.frombytes("RGB", (overview_pix.width, overview_pix.height), overview_pix.samples)
+                    if file_path:
+                        set_cached_image(file_path, page_number, overview_img)
+                except Exception as exc:  # noqa: BLE001 - the OCR text of the finished tiles must survive
+                    errors.append(DocumentError(
+                        code="OCR_OVERVIEW_FAILED",
+                        message=f"Page {page_number}: overview image unavailable ({exc}); OCR text from the tiles is kept.",
+                        page=page_number))
 
                 if not tile_blocks and analysis and (analysis.get("has_images") or analysis.get("is_likely_scanned")):
                     errors.append(
@@ -318,7 +366,7 @@ class PDFRouter:
                 return tile_blocks, errors
 
             # Standard single-pass render (guaranteed <= _MAX_OCR_PIXELS)
-            pix = page.get_pixmap(dpi=target_dpi, alpha=False)
+            pix, _ = render_capped(page, None, w_pt, h_pt)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
             # Store in request cache so region_router can reuse it directly without re-rendering

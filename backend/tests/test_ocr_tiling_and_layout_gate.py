@@ -26,6 +26,15 @@ MAX_SIDE = pdf_router._MAX_OCR_SIDE
 MAX_PIXELS = pdf_router._MAX_OCR_PIXELS
 
 
+@pytest.fixture(autouse=True)
+def no_leftover_parse_deadline():
+    """Earlier tests start a 55 s parse deadline in this thread; without it the budget guards see time left."""
+    from utils import deadline
+    token = deadline._deadline.set(None)
+    yield
+    deadline._deadline.reset(token)
+
+
 class RecordingOCR:
     """Stands in for RapidOCR: numbers its blocks per image (exactly like the real extractor) and records sizes."""
 
