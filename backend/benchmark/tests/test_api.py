@@ -234,7 +234,7 @@ async def test_import_endpoints_and_traversal(app_env, settings):
     assert (await call(app, "POST", f"/api/benchmark/runs/{r.json()['run_id']}/resume")).status_code == 409
     again = await call(app, "POST", "/api/benchmark/imports", json={"source": "current_x/official_x_001"})
     assert again.json()["already_imported"] is True
-    for bad in ("../x", "/etc/passwd", "C:\Windows", "a/b/c/d"):
+    for bad in ("../x", "/etc/passwd", "C:\\Windows", "a/b/c/d"):
         assert (await call(app, "POST", "/api/benchmark/imports", json={"source": bad})).status_code in (400, 404)
     assert (await call(app, "POST", "/api/benchmark/imports", json={"source": "x", "extra": 1})).status_code == 422
     assert (await call(app, "GET", f"/api/benchmark/runs/{r.json()['run_id']}/report")).status_code == 404  # no huge report served
@@ -248,3 +248,12 @@ async def test_full_mode_is_never_started_without_confirmation(app_env):
     run_id = await finish_run(app, mgr, mode="full", per_category=None, confirm_full=True)
     st = (await call(app, "GET", f"/api/benchmark/runs/{run_id}")).json()
     assert st["status"] == "completed" and st["totals"]["documents"] == 17 and st["config"]["html_report"] is False
+
+
+def test_every_benchmark_endpoint_runs_in_the_thread_pool_not_the_event_loop():
+    """Plain `def` handlers: disk and git work here can never stall ordinary AXTRACT requests."""
+    import inspect
+
+    handlers = [r.endpoint for r in api.router.routes]
+    assert len(handlers) >= 15
+    assert not [h.__name__ for h in handlers if inspect.iscoroutinefunction(h)]
