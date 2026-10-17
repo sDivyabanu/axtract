@@ -46,3 +46,35 @@ def test_a_genuine_compact_scanned_table_is_still_reconstructed():
 
 def test_a_table_with_a_few_interior_notes_is_still_kept():
     assert reconstruct_table_from_ocr(compact_table(extra_inside=2), 1) is not None
+
+
+# --- plain short typed lines are never offered to the formula recognizer ----------------------------------------
+
+import pytest
+from PIL import Image
+
+from services import scanned_math
+
+
+@pytest.mark.parametrize("text", ["Dear Sir:-", "Iam,", "Yours truly,", "Indiana County", "the", "Hon. Theodore Roosevelt"])
+def test_plain_word_lines_are_text(text):
+    assert scanned_math.plain_text_line(text)
+
+
+@pytest.mark.parametrize("text", [
+    "", "   ",                                   # no OCR evidence: the recognizer decides
+    "x = 3", "y2", "dx", "f(x)", "x + y",        # relations, digits and operators are math signal
+    "sin x", "log y", "lim n",                   # function names stay candidates
+    "\u03b1 \u03b2", "\u222b", "x \u2264 y",     # Greek and symbols
+    "Let x = 2", "Hence x2",                     # words mixed with real signal
+])
+def test_lines_with_mathematical_signal_are_still_candidates(text):
+    assert not scanned_math.plain_text_line(text)
+
+
+def test_candidate_lines_exclude_short_typed_text_but_keep_formula_lines(monkeypatch):
+    monkeypatch.setattr(scanned_math, "segment_lines", lambda image: [(100, 50, 900, 100), (100, 450, 900, 500)])
+    blocks = [ocr("greeting", "Dear Sir:-", 0.10, 0.05, 0.90, h=0.1), ocr("formula", "x2 + y2 = 9", 0.10, 0.45, 0.90, h=0.1)]
+    image = Image.new("RGB", (1000, 1000), "white")
+    kept = [text for _, text, _ in scanned_math.candidates(image, blocks, 1)]
+    assert kept == ["x2 + y2 = 9"]

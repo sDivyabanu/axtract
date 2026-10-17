@@ -59,6 +59,21 @@ def page_image(path, page):
     return render_page_pil(path, page, dpi)
 
 
+# A line of plain words with no mathematical signal at all is text, however short ("Dear Sir:-", "I am,"): the recognizer
+# would only turn it into a garbage equation. Digits, relations, operators, brackets and Greek letters count as signal, and
+# so do function names, so "sin x" is still offered to the recognizer.
+_MATH_SIGNAL=re.compile(r"[=+*/^_<>\\{}\[\]|\u2264\u2265\u2260\u2248\u00b1\u00d7\u00f7\u222b\u2211\u221a\u221e\u2202\u2206\u2192\u2190]|\d|[\u0370-\u03ff]")
+_FUNCTION_WORDS=frozenset("sin cos tan cot sec csc sinh cosh tanh log ln exp lim max min det dim sup inf arg mod gcd lcm".split())
+
+
+def plain_text_line(text):
+    t=(text or "").strip()
+    if not t or _MATH_SIGNAL.search(t):
+        return False
+    words=[w.lower() for w in re.findall(r"[A-Za-z]{3,}",t)]
+    return bool(words) and not any(w in _FUNCTION_WORDS for w in words)
+
+
 def _overlap(a,b):
     area=max(0,min(a[2],b[2])-max(a[0],b[0]))*max(0,min(a[3],b[3])-max(a[1],b[1]))
     small=min(max(0,a[2]-a[0])*max(0,a[3]-a[1]),max(0,b[2]-b[0])*max(0,b[3]-b[1]))
@@ -76,7 +91,7 @@ def candidates(image,blocks,page,*,native_words=None):
         text=" ".join(b.content for b in covered)
         if native_words is not None:
             text=" ".join(w[4] for w in native_words if box[0]<=(w[0]+w[2])/2<=box[2] and box[1]<=(w[1]+w[3])/2<=box[3])
-        if looks_like_prose(text):
+        if looks_like_prose(text) or plain_text_line(text):
             continue
         if any(b.page==page and b.bbox and b.type in (BlockType.TABLE,BlockType.CHART,BlockType.EQUATION)
                and not (b.type==BlockType.EQUATION and b.metadata.get("inline"))
