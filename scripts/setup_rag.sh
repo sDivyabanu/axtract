@@ -41,5 +41,5 @@ echo ">> pulling $MODEL"
 
 echo ">> embedding + reranker weights"
 "$PY" "$ROOT/scripts/fetch_rag_models.py"
-echo ">> done. Start the backend:  cd backend && .venv/bin/python -m uvicorn main:app --port 8000"
+echo ">> done. Start the backend:  AXTRACT_LOCAL_NO_AUTH=true backend/.venv/bin/python backend/serve_local.py"
 echo "   If Ollama is not running the app falls back to extractive mode (no generation)."

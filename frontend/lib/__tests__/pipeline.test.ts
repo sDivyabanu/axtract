@@ -12,7 +12,7 @@ import {
   type StageEvent,
 } from "../pipeline";
 import { SseParser } from "../sse";
-import { consumeParseStream } from "../stream";
+import { consumeParseStream, StreamWatchdog } from "../stream";
 import type { PipelineState } from "../pipeline";
 
 const ev = (id: string, state: StageEvent["state"], seq: number, detail?: StageEvent["detail"]): StageEvent => ({
@@ -201,4 +201,64 @@ test("two files keep independent pipeline state", () => {
   assert.equal(a.progress.security.state, "running");
   assert.equal(a.progress.extraction.state, "pending");
   assert.equal(b.progress.extraction.state, "failed");
+});
+
+// ------------------------------------------------------------------ backend that never answers
+
+/** A stream that sends `chunks`, then stays open and silent until `signal` aborts it (as fetch does). */
+function stalledResponse(signal: AbortSignal, chunks: string[] = []): Response {
+  const enc = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      for (const ch of chunks) c.enqueue(enc.encode(ch));
+      signal.addEventListener("abort", () => c.error(new DOMException("aborted", "AbortError")), { once: true });
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
+test("no start event in time is reported as an unavailable backend, not left at Starting", async () => {
+  const c = collector();
+  const dog = new StreamWatchdog(undefined, 30, 1000);
+  await assert.rejects(
+    consumeParseStream(stalledResponse(dog.signal), c.handlers, dog),
+    (e: unknown) => e instanceof ApiError && e.code === "BACKEND_UNAVAILABLE",
+  );
+  assert.equal(c.get().phase, "error");
+});
+
+test("a stream that goes silent after starting is reported as lost", async () => {
+  const c = collector();
+  const dog = new StreamWatchdog(undefined, 1000, 30);
+  await assert.rejects(
+    consumeParseStream(
+      stalledResponse(dog.signal, [msg("start", { stages: initialPipeline().stages, verify: true }), msg("stage", ev("security", "running", 1))]),
+      c.handlers,
+      dog,
+    ),
+    (e: unknown) => e instanceof ApiError && e.code === "STREAM_LOST",
+  );
+  assert.equal(c.get().progress.security.state, "failed");
+});
+
+test("cancelling still reads as a cancellation while the watchdog is armed", async () => {
+  const c = collector();
+  const user = new AbortController();
+  const dog = new StreamWatchdog(user.signal, 1000, 1000);
+  const pending = consumeParseStream(stalledResponse(dog.signal), { ...c.handlers, signal: user.signal }, dog);
+  user.abort();
+  await assert.rejects(pending, (e: unknown) => e instanceof ApiError && e.code === "STREAM_ABORTED");
+});
+
+test("a normal stream finishes and leaves no timer behind", async () => {
+  const c = collector();
+  const dog = new StreamWatchdog(undefined, 50, 50);
+  const res = await consumeParseStream<{ id: string }>(
+    sseResponse([msg("start", { stages: initialPipeline().stages, verify: true }), msg("result", { id: "doc" })]),
+    c.handlers,
+    dog,
+  );
+  assert.deepEqual(res, { id: "doc" });
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(dog.signal.aborted, false);
 });

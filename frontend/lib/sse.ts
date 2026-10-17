@@ -29,10 +29,14 @@ export class SseParser {
   }
 }
 
-/** Read a whole SSE body, calling `onMessage` for each message. Resolves when the stream closes. */
+/**
+ * Read a whole SSE body, calling `onMessage` for each message. Resolves when the stream closes.
+ * `onChunk` sees every arrival of bytes, pings included, so a caller can tell a live stream from a dead one.
+ */
 export async function readSse(
   body: ReadableStream<Uint8Array>,
   onMessage: (m: SseMessage) => void,
+  onChunk?: () => void,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -40,6 +44,7 @@ export async function readSse(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    onChunk?.();
     for (const m of parser.push(decoder.decode(value, { stream: true }))) onMessage(m);
   }
 }

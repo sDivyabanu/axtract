@@ -14,6 +14,11 @@ $env:AXTRACT_LOCAL_NO_AUTH = "true"
 backend\.venv\Scripts\python.exe backend\serve_local.py
 ```
 
+`serve_local.py` does not auto-reload: stop it (Ctrl+C) and start it again after backend code changes.
+Do not use `uvicorn main:app --reload` instead. The app refuses to start that way, but the reloader keeps
+port 8000 open, so uploads hang at "Starting…". Without `watchfiles` installed it also polls every `.py`
+file under `backend/`, including `.venv`, and keeps a CPU core busy.
+
 Frontend:
 
 ```powershell

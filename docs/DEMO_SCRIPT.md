@@ -3,7 +3,7 @@
 *"It doesn't just read the data room. It audits it — and every answer comes with a receipt."*
 
 **Before you start (once):** `scripts/setup_rag.sh` (Ollama + weights), `backend/.venv/bin/python scripts/make_demo_dataroom.py`,
-then start the servers (backend: `cd backend && .venv/bin/python -m uvicorn main:app --port 8000`; frontend: `cd frontend && npm run dev`)
+then start the servers (backend: `AXTRACT_LOCAL_NO_AUTH=true backend/.venv/bin/python backend/serve_local.py`; frontend: `cd frontend && AXTRACT_LOCAL_NO_AUTH=true npm run dev:local`, see docs/LOCAL_DEVELOPMENT.md)
 and open **http://localhost:3000** (use `localhost`, not `127.0.0.1`). Optional warm-up: ask one question so the model is loaded.
 
 | Time | Click / say | What the audience sees |

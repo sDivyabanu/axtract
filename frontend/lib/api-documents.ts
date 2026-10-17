@@ -1,5 +1,5 @@
 import { API_BASE_URL, ApiError } from "./api";
-import { consumeParseStream } from "./stream";
+import { consumeParseStream, StreamWatchdog } from "./stream";
 import type { StreamHandlers } from "./stream";
 import type { DocumentResponse, ValidationReport } from "./types";
 import { assertLocalApi } from "./local-mode";
@@ -81,14 +81,17 @@ export async function uploadDocument(file: File): Promise<UploadResult> {
 export async function uploadDocumentStream(file: File, handlers: StreamHandlers): Promise<UploadResult> {
   const body = new FormData();
   body.append("file", file);
+  const watchdog = new StreamWatchdog(handlers.signal);
   let response: Response;
   try {
-    response = await localFetch("/api/documents/stream", { method: "POST", body, signal: handlers.signal });
+    response = await localFetch("/api/documents/stream", { method: "POST", body, signal: watchdog.signal });
   } catch (err) {
+    watchdog.dispose();
+    if (watchdog.timeoutError) throw watchdog.timeoutError;
     if (handlers.signal?.aborted) throw new ApiError("STREAM_ABORTED", "Cancelled.");
     throw err;
   }
-  return consumeParseStream<UploadResult>(response, handlers);
+  return consumeParseStream<UploadResult>(response, handlers, watchdog);
 }
 
 export async function listDocuments(

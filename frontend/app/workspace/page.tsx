@@ -33,13 +33,15 @@ interface DocTab {
   pipeline: PipelineState | null;
   // The uploaded file, kept so a failed document can be retried.
   file: File | null;
+  // Waiting for an earlier file in the same batch to finish.
+  queued?: boolean;
 }
 
 let nextTabId = 1;
 
-// How many files to parse at once. The backend runs each parse in its own
-// thread, so a small parallel batch keeps CPU usage sane for heavy files.
-const PARSE_CONCURRENCY = 3;
+// How many files to parse at once. The backend processes one document at a time
+// (backend/utils/jobs.py) and turns away a second one with SERVER_BUSY, so files go one after another.
+const PARSE_CONCURRENCY = 1;
 
 // Saving is an add-on: if it is unavailable the document is still parsed the normal way.
 const SAVE_UNAVAILABLE = new Set([
@@ -60,6 +62,7 @@ export default function WorkspacePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const controllers = useRef(new Map<string, AbortController>());
+  const closedTabs = useRef(new Set<string>());
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
@@ -135,7 +138,8 @@ export default function WorkspacePage() {
       result: null,
       error: null,
       savedId: null,
-      pipeline: initialPipeline(),
+      pipeline: null, // set when this file's turn comes, so a waiting file never shows "Starting…"
+      queued: true,
     }));
     setTabs((prev) => [...prev, ...newTabs]);
     setActiveTabId((current) => current ?? newTabs[0].id);
@@ -170,6 +174,7 @@ export default function WorkspacePage() {
     async function parseOne(tabId: string, file: File) {
       const controller = new AbortController();
       controllers.current.set(tabId, controller);
+      await updateTab(tabId, { queued: false, pipeline: initialPipeline() });
       const handlers: StreamHandlers = {
         signal: controller.signal,
         onPipeline: (update) =>
@@ -211,6 +216,7 @@ export default function WorkspacePage() {
         for (;;) {
           const item = queue.shift();
           if (!item) return;
+          if (closedTabs.current.has(item.tabId)) continue; // closed while it was waiting
           await parseOne(item.tabId, item.file);
         }
       },
@@ -221,6 +227,7 @@ export default function WorkspacePage() {
   }, [pendingFiles, isParsing]);
 
   function closeTab(id: string) {
+    closedTabs.current.add(id); // a waiting file is skipped instead of processed for a tab nobody can see
     controllers.current.get(id)?.abort(); // stops the server-side work for this file
     setTabs((prev) => {
       const index = prev.findIndex((t) => t.id === id);
@@ -397,7 +404,9 @@ export default function WorkspacePage() {
           {activeTab.status === "parsing" && !activeTab.pipeline && (
             <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
               <Loader2 size={18} className="animate-spin text-blue-600" aria-hidden />
-              Processing “{activeTab.name}”…
+              {activeTab.queued
+                ? `“${activeTab.name}” is waiting for the previous file to finish…`
+                : `Processing “${activeTab.name}”…`}
             </div>
           )}
           {activeTab.status === "error" && (
