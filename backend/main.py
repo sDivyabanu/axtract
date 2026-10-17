@@ -29,6 +29,9 @@ async def lifespan(app: FastAPI):
     from rag import warmup
 
     warmup.start()  # background: LLM weights + prompt, embedder, reranker, retrieval indexes (never blocks or fails startup)
+    from services import prewarm
+
+    prewarm.start()  # background: pipeline imports + OCR/layout sessions, so the first upload is not the slow one
     yield
 
 

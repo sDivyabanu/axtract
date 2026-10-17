@@ -82,6 +82,36 @@ def ocr_words(img: Image.Image) -> list[Word]:
     return words
 
 
+class LazyWords:
+    """The OCR words of an image, read on first use. Behaves like the list `ocr_words` returns.
+
+    Chart readers reject most figures (photos, logos, decorative graphics) on pixel evidence alone, before
+    they look at any text; deferring the OCR skips that work without changing any result.
+    """
+
+    def __init__(self, img: Image.Image):
+        self._img = img
+        self._words: list[Word] | None = None
+
+    def _get(self) -> list[Word]:
+        if self._words is None:
+            self._words = ocr_words(self._img)
+            self._img = None
+        return self._words
+
+    def __iter__(self):
+        return iter(self._get())
+
+    def __len__(self) -> int:
+        return len(self._get())
+
+    def __getitem__(self, index):
+        return self._get()[index]
+
+    def __bool__(self) -> bool:
+        return bool(self._get())
+
+
 # ---------------------------------------------------------------------------
 # Calibration
 # ---------------------------------------------------------------------------
@@ -290,7 +320,7 @@ def read_chart(image: Image.Image, hint_title: str = "") -> ChartReading | None:
     if min(img.size) < 120:
         return None
     rgb = np.array(img)
-    words = ocr_words(img)
+    words = LazyWords(img)  # OCR only runs if a reader actually needs the words (most figures are not charts)
 
     rect = find_plot_rect(rgb)
     if rect is not None:
@@ -314,31 +344,6 @@ def _read_axis_chart(rgb: np.ndarray, words: list[Word], rect, hint_title: str) 
     gray = rgb.min(axis=2)
     dark = gray < 150
     flags: list[str] = []
-
-    # --- axes ------------------------------------------------------------
-    left_words = [w for w in words if w.x1 <= left + 2 and top - 20 <= w.cy <= bottom + 20 and w.x0 > left - 0.25 * W]
-    below = [w for w in words if w.y0 >= bottom + 1 and w.cy <= bottom + 0.14 * H and left - 0.1 * W <= w.cx <= right + 0.1 * W]
-    if below:
-        row_y = min(w.cy for w in below)
-        below = [w for w in below if abs(w.cy - row_y) <= max(6, 0.7 * np.median([w.h for w in below]))]
-
-    y_ticks = _tick_positions(dark, rect, "left")
-    x_ticks = _tick_positions(dark, rect, "bottom")
-
-    y_pairs = []
-    for w in left_words:
-        v = parse_number(w.text)
-        if v is not None:
-            y_pairs.append((_snap(w.cy, y_ticks)[0], v))
-    x_nums = [(w, parse_number(w.text)) for w in below]
-    x_numeric = len(below) >= 2 and all(v is not None for _, v in x_nums)
-    x_pairs = [(_snap(w.cx, x_ticks)[0], v) for w, v in x_nums if v is not None] if x_numeric else []
-
-    y_axis = fit_axis(y_pairs)
-    x_axis = fit_axis(x_pairs) if x_numeric else None
-    cat_labels = [] if x_numeric else sorted(below, key=lambda w: w.cx)
-    # categorical y labels (horizontal bars)
-    y_cats = sorted([w for w in left_words if parse_number(w.text) is None], key=lambda w: w.cy)
 
     # --- series ----------------------------------------------------------
     inner = np.zeros((H, W), bool)
@@ -366,14 +371,45 @@ def _read_axis_chart(rgb: np.ndarray, words: list[Word], rect, hint_title: str) 
                    and c["h"] < 0.06 * (bottom - top)]
     big_span = [c for c in all_comps if c["w"] >= 0.35 * (right - left) and c["fill"] < 0.6]
 
-    if n_bars >= 2 and n_bars >= 0.6 * len(all_comps):
+    # Words-free rejection first: figures that cannot be a bar/line/scatter chart never need their text read.
+    multi_bar = n_bars >= 2 and n_bars >= 0.6 * len(all_comps)
+    scatter = len(small_round) >= 3 and len(small_round) >= 0.7 * len(all_comps)
+    if not (multi_bar or big_span or scatter or n_bars == 1):
+        return None
+
+    # --- axes ------------------------------------------------------------
+    left_words = [w for w in words if w.x1 <= left + 2 and top - 20 <= w.cy <= bottom + 20 and w.x0 > left - 0.25 * W]
+    below = [w for w in words if w.y0 >= bottom + 1 and w.cy <= bottom + 0.14 * H and left - 0.1 * W <= w.cx <= right + 0.1 * W]
+    if below:
+        row_y = min(w.cy for w in below)
+        below = [w for w in below if abs(w.cy - row_y) <= max(6, 0.7 * np.median([w.h for w in below]))]
+
+    y_ticks = _tick_positions(dark, rect, "left")
+    x_ticks = _tick_positions(dark, rect, "bottom")
+
+    y_pairs = []
+    for w in left_words:
+        v = parse_number(w.text)
+        if v is not None:
+            y_pairs.append((_snap(w.cy, y_ticks)[0], v))
+    x_nums = [(w, parse_number(w.text)) for w in below]
+    x_numeric = len(below) >= 2 and all(v is not None for _, v in x_nums)
+    x_pairs = [(_snap(w.cx, x_ticks)[0], v) for w, v in x_nums if v is not None] if x_numeric else []
+
+    y_axis = fit_axis(y_pairs)
+    x_axis = fit_axis(x_pairs) if x_numeric else None
+    cat_labels = [] if x_numeric else sorted(below, key=lambda w: w.cx)
+    # categorical y labels (horizontal bars)
+    y_cats = sorted([w for w in left_words if parse_number(w.text) is None], key=lambda w: w.cy)
+
+    if multi_bar:
         horizontal = np.median([c["w"] for c in all_comps if bar_like(c)]) > np.median([c["h"] for c in all_comps if bar_like(c)]) \
             and y_axis is None and bool(y_cats) and not cat_labels
         chart_type = "bar"
         orientation = "horizontal" if horizontal else "vertical"
     elif big_span:
         chart_type, orientation = "line", "vertical"
-    elif len(small_round) >= 3 and len(small_round) >= 0.7 * len(all_comps):
+    elif scatter:
         chart_type, orientation = "scatter", "vertical"
     elif n_bars == 1:
         chart_type, orientation = "bar", "vertical"
