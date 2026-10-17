@@ -238,10 +238,14 @@ def _sort_by_columns(
         return sorted(blocks, key=lambda b: (b.bbox[1] if b.bbox else 0.0))
 
     split = columns[0][1]
+    # A page-sized background image is not a heading that divides the column flow: treating it as one made every block
+    # inside its vertical band vanish. It leads the page instead and the text keeps its own column order.
+    backgrounds = [b for b in blocks if _is_page_background(b)]
+    background_ids = {id(b) for b in backgrounds}
     spanning = [
         b for b in blocks
         if b.bbox is not None and b.bbox[0] < split < b.bbox[2]
-        and b.bbox[2] - b.bbox[0] >= 0.65
+        and b.bbox[2] - b.bbox[0] >= 0.65 and id(b) not in background_ids
     ]
     spanning.sort(key=lambda b: (b.bbox[1], b.bbox[0]))
     spanning_ids = {id(b) for b in spanning}
@@ -250,7 +254,7 @@ def _sort_by_columns(
     # section, read the left column before the right, then continue below the
     # spanning block.
     result: list[DocumentBlock] = []
-    section_blocks = [b for b in blocks if id(b) not in spanning_ids]
+    section_blocks = [b for b in blocks if id(b) not in spanning_ids and id(b) not in background_ids]
     previous_bottom = 0.0
     for span in spanning:
         section = [
@@ -267,7 +271,20 @@ def _sort_by_columns(
         if (b.bbox[1] if b.bbox else 0.0) >= previous_bottom
     ]
     result.extend(_sort_column_section(section, split))
-    return result
+    # Safety net: a block that fell between sections (e.g. text inside a wide spanning block's vertical band) must never
+    # be lost. Keep it, once, after the sectioned flow, in normal column order.
+    placed = {id(b) for b in result}
+    orphans = [b for b in section_blocks if id(b) not in placed]
+    result.extend(_sort_column_section(orphans, split))
+    return sorted(backgrounds, key=lambda b: b.bbox[1] if b.bbox else 0.0) + result
+
+
+def _is_page_background(block: DocumentBlock) -> bool:
+    """A figure covering (nearly) the whole page: a scan or a page-sized background picture, not a figure in the text."""
+    if block.type != BlockType.FIGURE or block.bbox is None:
+        return False
+    x0, y0, x1, y1 = block.bbox
+    return (x1 - x0) * (y1 - y0) >= 0.85
 
 
 def _sort_column_section(blocks: list[DocumentBlock], split: float) -> list[DocumentBlock]:
