@@ -31,7 +31,9 @@ def _get_ocr():
     if _ocr_engine is None:
         with _ocr_init_lock:
             if _ocr_engine is None:
+                from extractors import ocr_runtime
                 from rapidocr_onnxruntime import RapidOCR
+                ocr_runtime.install()
                 _ocr_engine = RapidOCR()
     return _ocr_engine
 
