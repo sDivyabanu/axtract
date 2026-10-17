@@ -85,6 +85,32 @@ def _budget_ok() -> bool:
     return deadline.remaining() > _MIN_BUDGET
 
 
+# A scanned-page figure may replace its OCR text with a numeric chart only on strong positive evidence. The layout
+# model calling a region "figure" is not evidence (a handwritten letter was turned into a fabricated pie chart).
+_MIN_SCANNED_CHART_CONFIDENCE = 0.7
+_MAX_OCR_CHARS_IN_CHART = 600  # paragraphs of text are not a chart; real charts carry only labels
+_UNRELIABLE_CHART_FLAGS = frozenset({
+    "some_slice_labels_unreadable", "some_category_labels_unreadable", "some_values_unreadable",
+    "data_labels_disagree_with_measurement", "printed_percentages_do_not_sum_to_100",
+    "y_axis_not_calibrated", "x_axis_not_calibrated", "y_axis_calibration_poor", "no_x_labels",
+})
+_GENERIC_LABEL = re.compile(r"^(slice|series|category)\s*\d+$", re.I)
+
+
+def scanned_chart_evidence_is_strong(reading, ocr_chars_in_region: int) -> bool:
+    """True only for a reading that measured and labelled real data; anything doubtful keeps the original OCR."""
+    if reading is None or reading.confidence < _MIN_SCANNED_CHART_CONFIDENCE:
+        return False
+    if _UNRELIABLE_CHART_FLAGS & set(reading.flags or []):
+        return False
+    if ocr_chars_in_region > _MAX_OCR_CHARS_IN_CHART:
+        return False
+    cats = reading.data.get("categories") or []
+    if any(not str(c).strip() or _GENERIC_LABEL.match(str(c).strip()) for c in cats):
+        return False
+    return has_numeric_values(reading.data)
+
+
 def _is_monochrome(img: Image.Image) -> bool:
     arr = np.asarray(img.convert("RGB").resize((min(img.width, 200), min(img.height, 200))), dtype=np.int16)
     sat = arr.max(axis=2) - arr.min(axis=2)
@@ -598,9 +624,11 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
                         reading = read_chart(_crop(img, r.bbox))
                     except Exception:  # noqa: BLE001
                         reading = None
-                    if reading is not None and has_numeric_values(reading.data):
-                        blocks[:] = [b for b in blocks if not (b.page == pno and b.extractor == "rapidocr"
-                                                              and b.bbox and _center_in(r.bbox, b.bbox))]
+                    inside_ocr = [b for b in blocks if b.page == pno and b.extractor == "rapidocr"
+                                  and b.bbox and _center_in(r.bbox, b.bbox)]
+                    ocr_chars = sum(len("".join(b.content.split())) for b in inside_ocr)
+                    if scanned_chart_evidence_is_strong(reading, ocr_chars):
+                        blocks[:] = [b for b in blocks if b not in inside_ocr]
                         blocks.append(make_chart_block(
                             f"p{pno}-chart{analyzed}", pno, r.bbox, reading.data, reading.confidence,
                             reading.flags, {"route": "scanned", "layout_class": "figure"}))
