@@ -103,6 +103,22 @@ def _detach_footnote_markers(text: str) -> tuple[str, list[str]]:
     return " ".join(words), refs
 
 
+def strip_superscript_refs(content: str, refs: list[str]) -> str:
+    """Remove detected superscript footnote markers without touching the surrounding punctuation.
+
+    A marker LIST such as ``work1,2`` is removed as one run (its inner comma goes with it), but a comma that follows the
+    last marker belongs to the sentence (``work2, showed`` -> ``work, showed``). Deterministic: markers are matched
+    longest-first from a sorted list, never in set-iteration order."""
+    digits = sorted({r for r in refs if r.isdigit()}, key=lambda r: (-len(r), r))
+    if not digits:
+        return content
+    alt = "|".join(re.escape(r) for r in digits)
+    content = re.sub(rf"(?<=[A-Za-z])(?:{alt})(?:,(?:{alt}))*(?!\w)", "", content)
+    for ref in digits:
+        content = re.sub(rf"(?<!\w){re.escape(ref)}(?!\w)", "", content)
+    return content
+
+
 def _cell_token_count(cell: object) -> int:
     return len(str(cell).split()) if cell is not None else 0
 
@@ -517,10 +533,7 @@ class PyMuPDFExtractor(BaseExtractor):
             is_bold = any(span.get("flags", 0) & (1 << 4) for span in spans)
             math_font = any(_MATH_FONT.search(span.get("font", "")) for span in spans)
             superscript_refs = self._superscript_refs(spans, median_size)
-            for ref in sorted(set(superscript_refs), key=len, reverse=True):
-                if ref.isdigit():
-                    content = re.sub(rf"(?<=[A-Za-z]){re.escape(ref)},?(?=\b|\s|$)", "", content)
-                    content = re.sub(rf"(?<!\w){re.escape(ref)}(?!\w)", "", content)
+            content = strip_superscript_refs(content, superscript_refs)
             font_sizes.append(max_size)
             raw_blocks.append({"content": content.strip(), "bbox": bbox, "font_size": max_size,
                                "is_bold": is_bold, "math_font": math_font,
