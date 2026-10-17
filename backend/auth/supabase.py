@@ -85,8 +85,8 @@ def _verify_token(token: str) -> dict[str, Any]:
             options={"verify_aud": False},
         )
         return payload
-    except (pyjwt.exceptions.PyJWKClientError, pyjwt.exceptions.DecodeError):
-        pass
+    except (pyjwt.exceptions.PyJWKClientError, pyjwt.exceptions.PyJWKSetError, pyjwt.exceptions.InvalidTokenError):
+        pass  # includes expired tokens and wrong issuers: all end in the 401 below, never a 500
 
     # Fall back to symmetric HS256 if JWKS fails and a secret is configured
     secret = _get_jwt_secret()
@@ -100,7 +100,7 @@ def _verify_token(token: str) -> dict[str, Any]:
                 options={"verify_aud": False},
             )
             return payload
-        except pyjwt.exceptions.DecodeError:
+        except pyjwt.exceptions.InvalidTokenError:
             pass
 
     raise HTTPException(
