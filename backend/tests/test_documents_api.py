@@ -1,14 +1,12 @@
 """Persistence layer on top of main's parser: runs against an in-memory fake DB/storage.
 
 Real pieces: the FastAPI app, `parse_upload`, AES-256-GCM encryption, the preview cache.
-Fakes: Postgres and Supabase Storage (no network, no real data touched).
+Fakes: local repository and file storage (no real user data touched).
 """
 
 from __future__ import annotations
 
-import base64
 import json
-import os
 import shutil
 import sys
 import uuid
@@ -62,7 +60,7 @@ class FakeDb:
         self.documents[document_id]["status"] = status
 
     async def save_document_output(self, run_id, response_json, markdown):
-        # asyncpg hands jsonb back as text, so store text like the real driver returns it.
+        # Exercise older serialized responses as well as the current local JSON objects.
         self.outputs[run_id] = {"response_json": response_json, "markdown": markdown,
                                 "schema_version": "1.0", "created_at": "now"}
         return self.outputs[run_id]
@@ -89,15 +87,15 @@ class FakeDb:
 
 
 @pytest.fixture
-def env(monkeypatch):
-    monkeypatch.setenv("AXTRACT_MASTER_KEY_BASE64", base64.b64encode(os.urandom(32)).decode())
+def env(monkeypatch, tmp_path):
+    monkeypatch.setenv("AXTRACT_LOCAL_NO_AUTH", "true")
+    monkeypatch.setenv("AXTRACT_LOCAL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AXTRACT_KEY_VERSION", "v1")  # the form used in the real .env
     import crypto.encryption as enc
 
-    enc._master_key = None
 
     import main
-    from auth.supabase import get_user_id
+    from auth.local_dev import get_user_id
     from routers import documents
 
     fake, storage, who = FakeDb(), {}, {"user": "user-a"}
@@ -118,10 +116,17 @@ def env(monkeypatch):
     monkeypatch.setattr(documents, "download_encrypted", down)
     monkeypatch.setattr(documents, "delete_from_storage", rm)
     main.app.dependency_overrides[get_user_id] = lambda: who["user"]
-    with TestClient(main.app) as client:
-        yield client, fake, storage, who
+    from auth.local_dev import bind_loopback
+    from rag import warmup
+    monkeypatch.setattr(warmup, "start", lambda: None)
+    sock = bind_loopback("127.0.0.1", 0)
+    monkeypatch.setattr(main.app.state, "local_no_auth_socket", sock, raising=False)
+    try:
+        with TestClient(main.app, base_url="http://127.0.0.1", client=("127.0.0.1", 1234)) as client:
+            yield client, fake, storage, who
+    finally:
+        sock.close()
     main.app.dependency_overrides.clear()
-    enc._master_key = None
 
 
 def _upload(client, path=SAMPLE_PDF, name=None):

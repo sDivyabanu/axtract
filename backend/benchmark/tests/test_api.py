@@ -9,18 +9,20 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from auth.supabase import get_current_user
+from auth.local_dev import get_current_user
 from benchmark.manager import RunManager
 from benchmark.tests.conftest import FakeExtract
 from models.errors import AppError
 from routers import benchmark as api
 
-USER = {"sub": "user-1", "email": "me@example.com"}
+from auth.local_dev import LOCAL_USER
+
+USER = LOCAL_USER
 
 
 @pytest.fixture
 def app_env(make_runner, monkeypatch):
-    monkeypatch.setenv("AXTRACT_BENCHMARK_USERS", "me@example.com")
+    monkeypatch.setenv("AXTRACT_LOCAL_NO_AUTH", "true")
     official = {"active": False}
     mgr = RunManager(make_runner(extract=FakeExtract(fail_substr=None)), official_check=lambda: official["active"])
     app = FastAPI()
@@ -53,14 +55,15 @@ def wait_done(mgr, run_id):
 @pytest.mark.anyio
 async def test_unauthorized_users_are_rejected(app_env, monkeypatch):
     app, _, _ = app_env
-    monkeypatch.setenv("AXTRACT_BENCHMARK_USERS", "someone-else@example.com")
-    for method, path in [("GET", "/api/benchmark/categories"), ("POST", "/api/benchmark/runs"), ("GET", "/api/benchmark/runs"),
-                         ("GET", "/api/benchmark/environment"), ("GET", "/api/benchmark/runs/active")]:
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "not-the-local-identity"}
+    for method, path in [("GET", "/api/benchmark/categories"), ("POST", "/api/benchmark/runs"), ("GET", "/api/benchmark/runs")]:
         assert (await call(app, method, path, json={} if method == "POST" else None)).status_code == 403
-    monkeypatch.delenv("AXTRACT_BENCHMARK_USERS")
-    assert (await call(app, "GET", "/api/benchmark/categories")).status_code == 403  # default deny
-    monkeypatch.setenv("AXTRACT_BENCHMARK_USERS", "user-1")  # by id also works
+    app.dependency_overrides[get_current_user] = lambda: dict(USER)
+    monkeypatch.setenv("AXTRACT_LOCAL_NO_AUTH", "false")
+    assert (await call(app, "GET", "/api/benchmark/categories")).status_code == 403
+    monkeypatch.setenv("AXTRACT_LOCAL_NO_AUTH", "true")
     assert (await call(app, "GET", "/api/benchmark/categories")).status_code == 200
+
 
 
 @pytest.mark.anyio

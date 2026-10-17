@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,9 +11,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from models.errors import AppError, ErrorInfo, ErrorResponse
-from routers import auth, benchmark, documents, health, parse, preview, rag
+from auth import local_dev
+from routers import benchmark, documents, health, parse, preview, rag
 
-# Optional backend settings (Supabase, database, encryption key). Real environment wins.
+# Optional local backend settings. Real environment wins.
 load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 logger = logging.getLogger("parseanything")
@@ -22,27 +22,15 @@ logger = logging.getLogger("parseanything")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Decide the DB path up front (PostgreSQL vs Supabase REST) so the first
-    # request doesn't pay for the probe; an unreachable or unconfigured
-    # database never prevents parsing from working.
-    if os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL"):
-        from db.prisma_client import _use_rest
-        try:
-            rest_mode = await _use_rest()
-            logger.info(
-                "Database ready (%s).",
-                "Supabase REST over HTTPS" if rest_mode else "PostgreSQL",
-            )
-        except Exception:
-            logger.warning("Database unavailable; DB-backed features degraded.")
+    if not local_dev.enabled():
+        raise RuntimeError("AXTRACT is local-only. Set AXTRACT_LOCAL_NO_AUTH=true and use serve_local.py.")
+    local_dev.verify_binding(app)
+    local_dev.master_key()
     from rag import warmup
 
     warmup.start()  # background: LLM weights + prompt, embedder, reranker, retrieval indexes (never blocks or fails startup)
     yield
-    if os.environ.get("DATABASE_URL"):
-        from db.prisma_client import close_pool
 
-        await close_pool()
 
 
 app = FastAPI(title="ParseAnything API", version="0.1.0", lifespan=lifespan)
@@ -57,7 +45,12 @@ async def catch_unhandled(request: Request, call_next):
     reporting an opaque network error.
     """
     try:
+        if not local_dev.enabled():
+            return _error_response(503, "LOCAL_MODE_DISABLED", "Local development mode is disabled.")
+        local_dev.validate_request(request)
         return await call_next(request)
+    except StarletteHTTPException as exc:
+        return _error_response(exc.status_code, f"HTTP_{exc.status_code}", str(exc.detail))
     except Exception as exc:  # noqa: BLE001
         logger.exception("Unhandled error", exc_info=exc)
         return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.")
@@ -79,7 +72,6 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(parse.router)
 app.include_router(preview.router)
-app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(rag.router)
 app.include_router(benchmark.router)

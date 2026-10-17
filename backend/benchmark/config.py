@@ -69,9 +69,3 @@ class BenchmarkSettings:
         for p in protected:
             if ws == p or p in ws.parents or ws in p.parents:
                 raise ValueError("Benchmark workspace must be separate from the official benchmark folders.")
-
-
-def allowed_users() -> set[str]:
-    """Users (ids or emails) allowed to use the benchmark API. '*' = any signed-in user. Default: nobody."""
-    raw = os.environ.get("AXTRACT_BENCHMARK_USERS", "")
-    return {u.strip().lower() for u in raw.split(",") if u.strip()}

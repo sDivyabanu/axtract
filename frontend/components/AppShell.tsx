@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BookOpen, FileSearch, FlaskConical, History, LogIn, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
+import { BookOpen, FileSearch, FlaskConical, History, Menu, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
 
 export function Logo({ size = 32 }: { size?: number }) {
   return (
@@ -22,15 +21,14 @@ interface NavItem {
   href: string;
   label: string;
   icon: typeof Plus;
-  needsAuth?: boolean;
   match: (path: string) => boolean;
 }
 
 const NAV: NavItem[] = [
   { href: "/workspace", label: "New extraction", icon: Plus, match: (p) => p.startsWith("/workspace") },
   { href: "/rooms", label: "DealLens", icon: BookOpen, match: (p) => p.startsWith("/rooms") },
-  { href: "/history", label: "Document history", icon: History, needsAuth: true, match: (p) => p.startsWith("/history") },
-  { href: "/benchmark", label: "Benchmark", icon: FlaskConical, needsAuth: true, match: (p) => p.startsWith("/benchmark") },
+  { href: "/history", label: "Document history", icon: History, match: (p) => p.startsWith("/history") },
+  { href: "/benchmark", label: "Benchmark", icon: FlaskConical, match: (p) => p.startsWith("/benchmark") },
 ];
 
 const TITLES: [(p: string) => boolean, string, string | null][] = [
@@ -43,7 +41,6 @@ const TITLES: [(p: string) => boolean, string, string | null][] = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, signOut, loading, configured } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   // The mobile drawer belongs to the page it was opened on, so navigating closes it without an effect.
   const [drawerFor, setDrawerFor] = useState<string | null>(null);
@@ -74,10 +71,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/" || pathname.startsWith("/login")) return <>{children}</>;
 
   const [, title, crumb] = TITLES.find(([m]) => m(pathname))!;
-  // Gate auth-only items on `!loading` so the first client render matches the
-  // server (both have loading=true / user=null when Supabase is configured),
-  // then reveal them once the session resolves — same pattern as the footer.
-  const items = NAV.filter((i) => !i.needsAuth || (!loading && user));
+  const items = NAV;
 
   const sidebar = (mobile: boolean) => {
     const wide = mobile || !collapsed;
@@ -117,28 +111,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-gray-200 p-3">
-          {configured && !loading && user && (
-            <div className={`flex items-center gap-2.5 ${wide ? "" : "flex-col"}`}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-800" aria-hidden>
-                {(user.email ?? "?").charAt(0).toUpperCase()}
-              </span>
-              {wide && (
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-gray-900" title={user.email ?? undefined}>{user.email}</span>
-                  <span className="block text-xs text-gray-500">Signed in</span>
-                </span>
-              )}
-              <button type="button" onClick={() => signOut()} aria-label="Sign out" title="Sign out" className="rounded-full p-2 text-gray-600 hover:bg-gray-100">
-                <LogOut size={17} />
-              </button>
-            </div>
-          )}
-          {configured && !loading && !user && (
-            <Link href="/login" className={`flex items-center justify-center gap-2 rounded-full bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 ${wide ? "" : "px-0"}`} title="Sign in">
-              <LogIn size={16} />
-              {wide && "Sign in"}
-            </Link>
-          )}
           {!mobile && (
             <button
               type="button"

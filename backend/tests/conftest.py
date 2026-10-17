@@ -15,11 +15,19 @@ from main import app  # noqa: E402
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch, tmp_path):
     """Synchronous test client using httpx."""
     import httpx
-    transport = ASGITransport(app=app)
-    return httpx.AsyncClient(transport=transport, base_url="http://test")
+    from auth.local_dev import bind_loopback
+    monkeypatch.setenv("AXTRACT_LOCAL_NO_AUTH", "true")
+    monkeypatch.setenv("AXTRACT_LOCAL_DATA_DIR", str(tmp_path))
+    sock = bind_loopback("127.0.0.1", 0)
+    monkeypatch.setattr(app.state, "local_no_auth_socket", sock, raising=False)
+    transport = ASGITransport(app=app, client=("127.0.0.1", 1234))
+    try:
+        yield httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1")
+    finally:
+        sock.close()
 
 
 @pytest.fixture

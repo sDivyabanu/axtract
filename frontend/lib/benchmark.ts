@@ -1,5 +1,5 @@
 import { ApiError } from "./api";
-import { authFetch, handleResponse } from "./api-authenticated";
+import { localFetch, handleResponse } from "./api-documents";
 
 export interface BenchCategory {
   name: string;
@@ -231,23 +231,23 @@ export interface StartOptions {
 const json = { "Content-Type": "application/json" };
 const id = encodeURIComponent;
 
-export const getBenchCategories = (): Promise<BenchCategoriesResponse> => authFetch("/api/benchmark/categories").then(handleResponse<BenchCategoriesResponse>);
-export const getBenchEnvironment = (): Promise<BenchEnvironment> => authFetch("/api/benchmark/environment").then(handleResponse<BenchEnvironment>);
+export const getBenchCategories = (): Promise<BenchCategoriesResponse> => localFetch("/api/benchmark/categories").then(handleResponse<BenchCategoriesResponse>);
+export const getBenchEnvironment = (): Promise<BenchEnvironment> => localFetch("/api/benchmark/environment").then(handleResponse<BenchEnvironment>);
 export const startBenchmark = (o: StartOptions): Promise<{ run_id: string }> =>
-  authFetch("/api/benchmark/runs", { method: "POST", headers: json, body: JSON.stringify(o) }).then(handleResponse<{ run_id: string }>);
-export const listBenchRuns = (): Promise<{ runs: BenchHistoryItem[] }> => authFetch("/api/benchmark/runs").then(handleResponse<{ runs: BenchHistoryItem[] }>);
-export const getActiveBenchRun = (): Promise<{ run: BenchRunStatus | null }> => authFetch("/api/benchmark/runs/active").then(handleResponse<{ run: BenchRunStatus | null }>);
-export const getBenchRun = (runId: string): Promise<BenchRunStatus> => authFetch(`/api/benchmark/runs/${id(runId)}`).then(handleResponse<BenchRunStatus>);
-export const getBenchResults = (runId: string): Promise<BenchResults> => authFetch(`/api/benchmark/runs/${id(runId)}/results`).then(handleResponse<BenchResults>);
-export const getBenchLog = (runId: string): Promise<{ log: string }> => authFetch(`/api/benchmark/runs/${id(runId)}/log`).then(handleResponse<{ log: string }>);
-export const resumeBenchmark = (runId: string): Promise<unknown> => authFetch(`/api/benchmark/runs/${id(runId)}/resume`, { method: "POST" }).then(handleResponse);
-export const cancelBenchmark = (runId: string): Promise<unknown> => authFetch(`/api/benchmark/runs/${id(runId)}/cancel`, { method: "POST" }).then(handleResponse);
+  localFetch("/api/benchmark/runs", { method: "POST", headers: json, body: JSON.stringify(o) }).then(handleResponse<{ run_id: string }>);
+export const listBenchRuns = (): Promise<{ runs: BenchHistoryItem[] }> => localFetch("/api/benchmark/runs").then(handleResponse<{ runs: BenchHistoryItem[] }>);
+export const getActiveBenchRun = (): Promise<{ run: BenchRunStatus | null }> => localFetch("/api/benchmark/runs/active").then(handleResponse<{ run: BenchRunStatus | null }>);
+export const getBenchRun = (runId: string): Promise<BenchRunStatus> => localFetch(`/api/benchmark/runs/${id(runId)}`).then(handleResponse<BenchRunStatus>);
+export const getBenchResults = (runId: string): Promise<BenchResults> => localFetch(`/api/benchmark/runs/${id(runId)}/results`).then(handleResponse<BenchResults>);
+export const getBenchLog = (runId: string): Promise<{ log: string }> => localFetch(`/api/benchmark/runs/${id(runId)}/log`).then(handleResponse<{ log: string }>);
+export const resumeBenchmark = (runId: string): Promise<unknown> => localFetch(`/api/benchmark/runs/${id(runId)}/resume`, { method: "POST" }).then(handleResponse);
+export const cancelBenchmark = (runId: string): Promise<unknown> => localFetch(`/api/benchmark/runs/${id(runId)}/cancel`, { method: "POST" }).then(handleResponse);
 export const getChangeRecommendation = (base?: string): Promise<ChangeRecommendation> =>
-  authFetch(`/api/benchmark/changes${base ? `?base=${id(base)}` : ""}`).then(handleResponse<ChangeRecommendation>);
+  localFetch(`/api/benchmark/changes${base ? `?base=${id(base)}` : ""}`).then(handleResponse<ChangeRecommendation>);
 export const compareBenchRuns = (a: string, b: string, allowPartial = false): Promise<BenchComparison> =>
-  authFetch(`/api/benchmark/compare?a=${id(a)}&b=${id(b)}${allowPartial ? "&allow_partial=true" : ""}`).then(handleResponse<BenchComparison>);
+  localFetch(`/api/benchmark/compare?a=${id(a)}&b=${id(b)}${allowPartial ? "&allow_partial=true" : ""}`).then(handleResponse<BenchComparison>);
 export const getBenchTrends = (sampleId?: string): Promise<TrendResponse> =>
-  authFetch(`/api/benchmark/trends${sampleId ? `?sample_id=${id(sampleId)}` : ""}`).then(handleResponse<TrendResponse>);
+  localFetch(`/api/benchmark/trends${sampleId ? `?sample_id=${id(sampleId)}` : ""}`).then(handleResponse<TrendResponse>);
 export const listBenchCases = (
   runId: string,
   q: { outcome: "failed" | "passed" | "all"; category?: string; type?: string; q?: string; offset: number; limit: number },
@@ -256,10 +256,10 @@ export const listBenchCases = (
   if (q.category) p.set("category", q.category);
   if (q.type) p.set("type", q.type);
   if (q.q) p.set("q", q.q);
-  return authFetch(`/api/benchmark/runs/${id(runId)}/cases?${p}`).then(handleResponse<CasePage>);
+  return localFetch(`/api/benchmark/runs/${id(runId)}/cases?${p}`).then(handleResponse<CasePage>);
 };
 export const getBenchCase = (runId: string, caseId: string): Promise<CaseDetail> =>
-  authFetch(`/api/benchmark/runs/${id(runId)}/case?case_id=${id(caseId)}`).then(handleResponse<CaseDetail>);
+  localFetch(`/api/benchmark/runs/${id(runId)}/case?case_id=${id(caseId)}`).then(handleResponse<CaseDetail>);
 export interface ImportSource {
   source: string;
   official_status: string | null;
@@ -267,13 +267,13 @@ export interface ImportSource {
   cases: number | null;
 }
 export const listImportable = (): Promise<{ sources: ImportSource[] }> =>
-  authFetch("/api/benchmark/imports").then(handleResponse<{ sources: ImportSource[] }>);
+  localFetch("/api/benchmark/imports").then(handleResponse<{ sources: ImportSource[] }>);
 export const importBenchmark = (source: string): Promise<{ run_id: string; already_imported: boolean }> =>
-  authFetch("/api/benchmark/imports", { method: "POST", headers: json, body: JSON.stringify({ source }) }).then(handleResponse<{ run_id: string; already_imported: boolean }>);
+  localFetch("/api/benchmark/imports", { method: "POST", headers: json, body: JSON.stringify({ source }) }).then(handleResponse<{ run_id: string; already_imported: boolean }>);
 
-/** The HTML report needs the auth header, so fetch it and hand the page an object URL for a sandboxed iframe. */
+/** Fetch through the local API and hand the page an object URL for a sandboxed iframe. */
 export async function fetchBenchReportUrl(runId: string): Promise<string> {
-  const response = await authFetch(`/api/benchmark/runs/${id(runId)}/report`);
+  const response = await localFetch(`/api/benchmark/runs/${id(runId)}/report`);
   if (!response.ok) throw new ApiError("REPORT_UNAVAILABLE", "No report is available for this run.");
   return URL.createObjectURL(await response.blob());
 }

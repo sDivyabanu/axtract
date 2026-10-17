@@ -18,10 +18,15 @@ def anyio_backend():
 
 
 @pytest.fixture
-async def client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
+async def client(monkeypatch, tmp_path):
+    from auth.local_dev import bind_loopback
+    monkeypatch.setenv("AXTRACT_LOCAL_NO_AUTH", "true")
+    monkeypatch.setenv("AXTRACT_LOCAL_DATA_DIR", str(tmp_path))
+    with bind_loopback("127.0.0.1", 0) as sock:
+        monkeypatch.setattr(app.state, "local_no_auth_socket", sock, raising=False)
+        transport = ASGITransport(app=app, client=("127.0.0.1", 1234))
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as c:
+            yield c
 
 
 @pytest.mark.anyio

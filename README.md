@@ -96,6 +96,10 @@ evaluation/
 - Node.js 20+ and npm (tested with Node 22)
 - Git
 
+## Local-only development
+
+AXTRACT uses local SQLite metadata and encrypted original files. No account or external authentication service is needed. Both servers require explicit opt-in and verified loopback listeners. See [local setup and safety](docs/LOCAL_DEVELOPMENT.md) for PowerShell commands.
+
 ## Backend Setup
 
 ```bash
@@ -108,7 +112,7 @@ python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 
 python -m pip install -r requirements.txt
-uvicorn main:app --reload
+AXTRACT_LOCAL_NO_AUTH=true python serve_local.py
 ```
 
 Runs at **http://localhost:8000** — API docs at http://localhost:8000/docs
@@ -136,7 +140,7 @@ self-hosted, compatible with Python 3.14, and faster to start up.
 ```bash
 cd frontend
 npm install
-npm run dev
+AXTRACT_LOCAL_NO_AUTH=true npm run dev:local
 ```
 
 Runs at **http://localhost:3000**

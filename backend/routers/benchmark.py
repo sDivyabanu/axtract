@@ -1,4 +1,4 @@
-"""Smart Benchmark Runner API. Every endpoint requires a signed-in, allow-listed user.
+"""Smart Benchmark Runner API. Every endpoint requires verified local access.
 
 Handlers are plain `def` so FastAPI runs them in its thread pool: file reads and git calls here never block
 the event loop that serves ordinary AXTRACT requests.
@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from auth.supabase import get_current_user
+from auth.local_dev import get_current_user
 from benchmark import changes, compare, config, importer, procutil
 from benchmark.cases import CaseBrowser
 from benchmark.manager import RunManager
@@ -32,11 +32,10 @@ def get_manager() -> RunManager:
 
 
 def require_benchmark_user(user: dict = Depends(get_current_user)) -> dict:
-    """Deny by default: AXTRACT_BENCHMARK_USERS lists allowed user ids/emails ('*' = any signed-in user)."""
-    allowed = config.allowed_users()
-    identity = {str(user.get("sub", "")).lower(), str(user.get("email", "")).lower()} - {""}
-    if "*" not in allowed and not (allowed & identity):
-        raise HTTPException(status_code=403, detail="You are not allowed to use the benchmark runner.")
+    """Only the verified local identity can control the local runner."""
+    from auth.local_dev import LOCAL_USER_ID, enabled
+    if not enabled() or user.get("sub") != LOCAL_USER_ID or user.get("local_development") is not True:
+        raise HTTPException(status_code=403, detail="Local benchmark access is disabled.")
     return user
 
 

@@ -129,8 +129,8 @@ export function friendlyError(code: string | undefined, fallback: string): strin
     FULL_NOT_CONFIRMED: "Confirm the full benchmark before starting it.",
     NOT_RESUMABLE: "This run cannot be resumed.",
     NOT_RUNNING: "This run is not running on this server.",
-    HTTP_403: "Your account is not allowed to use the benchmark runner.",
-    AUTH_REQUIRED: "Please sign in to use the benchmark runner.",
+    HTTP_403: "Local benchmark access was rejected. Check the loopback launcher settings.",
+    AUTH_REQUIRED: "Start both local servers with their loopback launchers.",
   };
   return (code && map[code]) || fallback;
 }

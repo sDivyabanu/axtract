@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 import os
 
-UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+# Local uploads/previews must not expose caches belonging to the retired account flow.
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "local-no-auth"
 # Persistent app data (RAG database, stored data-room files and their previews). Gitignored.
 DATA_DIR = Path(os.environ.get("DEALLENS_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
 

@@ -12,10 +12,9 @@ import {
   promoteRecovery,
   uploadDocument,
   uploadDocumentStream,
-} from "@/lib/api-authenticated";
+} from "@/lib/api-documents";
 import type { ValidationActions } from "@/components/ValidationPanel";
 import { ApiError, parseDocument } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
 import { initialPipeline, type PipelineState } from "@/lib/pipeline";
 import { parseDocumentStream, type StreamHandlers } from "@/lib/stream";
 import type { DocumentResponse } from "@/lib/types";
@@ -54,7 +53,6 @@ const SAVE_UNAVAILABLE = new Set([
 ]);
 
 export default function WorkspacePage() {
-  const { user, loading: authLoading } = useAuth();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [tabs, setTabs] = useState<DocTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -72,7 +70,7 @@ export default function WorkspacePage() {
   // Opening a history item (/?doc=<id> or /workspace?doc=<id>) shows the saved result without parsing again.
   useEffect(() => {
     const savedId = new URLSearchParams(window.location.search).get("doc");
-    if (!savedId || authLoading || !user) return;
+    if (!savedId) return;
     let cancelled = false;
     (async () => {
       setIsParsing(true);
@@ -121,7 +119,7 @@ export default function WorkspacePage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user]);
+  }, []);
 
   const parseAll = useCallback(async () => {
     if (pendingFiles.length === 0 || isParsing) return;
@@ -179,38 +177,18 @@ export default function WorkspacePage() {
             prev.map((t) => (t.id === tabId ? { ...t, pipeline: update(t.pipeline ?? initialPipeline()) } : t)),
           ),
       };
-      // Signed in: upload through the authenticated endpoint so the document
-      // and its parse result are stored in the database (visible in History).
-      // Otherwise fall back to the anonymous parse endpoint.
+      // Persist locally; if storage fails, keep the existing explicit unsaved fallback.
       try {
         let result: DocumentResponse;
         let savedDocId: string | null = null;
-        if (user) {
-          try {
-            const saved = await streamOrPlain(
-              tabId,
-              () => uploadDocumentStream(file, handlers),
-              () => uploadDocument(file),
-            );
-            result = saved.result;
-            savedDocId = saved.document_id;
-          } catch (err) {
-            if (!(err instanceof ApiError) || !SAVE_UNAVAILABLE.has(err.code)) throw err;
-            setNotice(
-              "Documents could not be saved to your history, so they were parsed without saving.",
-            );
-            result = await streamOrPlain(
-              tabId,
-              () => parseDocumentStream(file, handlers),
-              () => parseDocument(file),
-            );
-          }
-        } else {
-          result = await streamOrPlain(
-            tabId,
-            () => parseDocumentStream(file, handlers),
-            () => parseDocument(file),
-          );
+        try {
+          const saved = await streamOrPlain(tabId, () => uploadDocumentStream(file, handlers), () => uploadDocument(file));
+          result = saved.result;
+          savedDocId = saved.document_id;
+        } catch (err) {
+          if (!(err instanceof ApiError) || !SAVE_UNAVAILABLE.has(err.code)) throw err;
+          setNotice("Documents could not be saved to local history, so they were parsed without saving.");
+          result = await streamOrPlain(tabId, () => parseDocumentStream(file, handlers), () => parseDocument(file));
         }
         await updateTab(tabId, { status: "done", result, error: null, savedId: savedDocId });
       } catch (err) {
@@ -240,7 +218,7 @@ export default function WorkspacePage() {
     await Promise.all(workers);
 
     setIsParsing(false);
-  }, [pendingFiles, isParsing, user]);
+  }, [pendingFiles, isParsing]);
 
   function closeTab(id: string) {
     controllers.current.get(id)?.abort(); // stops the server-side work for this file
@@ -259,7 +237,7 @@ export default function WorkspacePage() {
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
   const validationActions: ValidationActions | undefined =
-    activeTab?.savedId && user
+    activeTab?.savedId
       ? {
           busy: verifyBusy,
           error: verifyError,
@@ -350,7 +328,7 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      {tabs.length === 0 && user && <RecentDocuments />}
+      {tabs.length === 0 && <RecentDocuments />}
 
       {tabs.length > 0 && (
         <div role="tablist" aria-label="Documents" className="flex gap-1.5 overflow-x-auto pb-1">

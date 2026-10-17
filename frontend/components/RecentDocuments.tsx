@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight, History } from "lucide-react";
-import { listDocuments, type DocumentListItem } from "@/lib/api-authenticated";
+import { listDocuments, type DocumentListItem } from "@/lib/api-documents";
 import { fileKind } from "@/components/FileDropzone";
 
 export function statusChip(status: string): string {

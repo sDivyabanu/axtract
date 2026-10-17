@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import { Figtree, Inter } from "next/font/google";
 import "./globals.css";
 import "katex/dist/katex.min.css";
-import { AuthProvider } from "@/lib/auth-context";
 import AppShell from "@/components/AppShell";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -20,11 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`h-full antialiased ${inter.variable} ${figtree.variable}`}>
       <body className="min-h-full">
-        <AuthProvider>
-          <Suspense>
-            <AppShell>{children}</AppShell>
-          </Suspense>
-        </AuthProvider>
+        <Suspense>
+          <AppShell>{children}</AppShell>
+        </Suspense>
       </body>
     </html>
   );

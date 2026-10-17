@@ -7,13 +7,12 @@ Envelope encryption scheme:
   4. Store: ciphertext, document nonce, wrapped DEK, wrapping nonce.
   5. The GCM authentication tag is appended to the ciphertext by the cryptography library.
 
-The master key is loaded from AXTRACT_MASTER_KEY_BASE64 (base64-encoded 32-byte key).
-Never log or persist the master key or plaintext DEKs.
+The master key is generated in the isolated, gitignored local data directory.
+Never log the master key or plaintext DEKs.
 """
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import os
 
@@ -22,22 +21,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 _NONCE_BYTES = 12  # 96-bit nonce for AES-GCM
 _DEK_BYTES = 32    # 256-bit DEK
 
-_master_key: bytes | None = None
-
-
 def _get_master_key() -> bytes:
-    global _master_key
-    if _master_key is None:
-        raw = os.environ.get("AXTRACT_MASTER_KEY_BASE64", "")
-        if not raw:
-            raise RuntimeError(
-                "AXTRACT_MASTER_KEY_BASE64 environment variable is not set. "
-                "Generate one with: python -c \"import os,base64; print(base64.b64encode(os.urandom(32)).decode())\""
-            )
-        _master_key = base64.b64decode(raw)
-        if len(_master_key) != 32:
-            raise RuntimeError("Master key must be exactly 32 bytes (256 bits).")
-    return _master_key
+    from auth.local_dev import master_key
+    return master_key()
 
 
 def get_key_version() -> int:

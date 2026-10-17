@@ -1,35 +1,17 @@
 import { API_BASE_URL, ApiError } from "./api";
-import { createClient } from "./supabase";
 import { consumeParseStream } from "./stream";
 import type { StreamHandlers } from "./stream";
 import type { DocumentResponse, ValidationReport } from "./types";
+import { assertLocalApi } from "./local-mode";
 
-async function getAccessToken(): Promise<string> {
-  const supabase = createClient();
-  if (!supabase) {
-    throw new ApiError("AUTH_REQUIRED", "Authentication is not configured.");
-  }
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.access_token) {
-    throw new ApiError("AUTH_REQUIRED", "Please sign in to continue.");
-  }
-  return session.access_token;
-}
-
-export async function authFetch(
+export async function localFetch(
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
-  const token = await getAccessToken();
+  assertLocalApi(API_BASE_URL);
   try {
     return await fetch(`${API_BASE_URL}${path}`, {
       ...init,
-      headers: {
-        ...init?.headers,
-        Authorization: `Bearer ${token}`,
-      },
     });
   } catch {
     throw new ApiError(
@@ -88,7 +70,7 @@ export interface UploadResult {
 export async function uploadDocument(file: File): Promise<UploadResult> {
   const body = new FormData();
   body.append("file", file);
-  const response = await authFetch("/api/documents", {
+  const response = await localFetch("/api/documents", {
     method: "POST",
     body,
   });
@@ -101,7 +83,7 @@ export async function uploadDocumentStream(file: File, handlers: StreamHandlers)
   body.append("file", file);
   let response: Response;
   try {
-    response = await authFetch("/api/documents/stream", { method: "POST", body, signal: handlers.signal });
+    response = await localFetch("/api/documents/stream", { method: "POST", body, signal: handlers.signal });
   } catch (err) {
     if (handlers.signal?.aborted) throw new ApiError("STREAM_ABORTED", "Cancelled.");
     throw err;
@@ -113,7 +95,7 @@ export async function listDocuments(
   limit = 50,
   offset = 0,
 ): Promise<{ documents: DocumentListItem[] }> {
-  const response = await authFetch(
+  const response = await localFetch(
     `/api/documents?limit=${limit}&offset=${offset}`,
   );
   return handleResponse(response);
@@ -122,23 +104,19 @@ export async function listDocuments(
 export async function getDocumentResult(
   documentId: string,
 ): Promise<{ document_id: string; result: DocumentResponse; markdown: string }> {
-  const response = await authFetch(`/api/documents/${documentId}/result`);
+  const response = await localFetch(`/api/documents/${documentId}/result`);
   return handleResponse(response);
 }
 
 export async function getDocumentHistory(
   documentId: string,
 ): Promise<{ runs: unknown[] }> {
-  const response = await authFetch(`/api/documents/${documentId}/history`);
+  const response = await localFetch(`/api/documents/${documentId}/history`);
   return handleResponse(response);
 }
 
 export async function downloadDocument(documentId: string): Promise<Blob> {
-  const token = await getAccessToken();
-  const response = await fetch(
-    `${API_BASE_URL}/api/documents/${documentId}/download`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const response = await localFetch(`/api/documents/${documentId}/download`);
   if (!response.ok) {
     throw new ApiError("DOWNLOAD_FAILED", "Failed to download document.");
   }
@@ -146,7 +124,7 @@ export async function downloadDocument(documentId: string): Promise<Blob> {
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const response = await authFetch(`/api/documents/${documentId}`, {
+  const response = await localFetch(`/api/documents/${documentId}`, {
     method: "DELETE",
   });
   if (!response.ok) {
@@ -158,7 +136,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
 export async function escalateValidation(
   documentId: string,
 ): Promise<{ validation: ValidationReport; notes: string[] }> {
-  const response = await authFetch(`/api/documents/${documentId}/verify/escalate`, { method: "POST" });
+  const response = await localFetch(`/api/documents/${documentId}/verify/escalate`, { method: "POST" });
   return handleResponse(response);
 }
 
@@ -168,7 +146,7 @@ export async function promoteRecovery(
   recoveryIds: string[],
   reason: string,
 ): Promise<{ result: DocumentResponse }> {
-  const response = await authFetch(`/api/documents/${documentId}/verify/promote`, {
+  const response = await localFetch(`/api/documents/${documentId}/verify/promote`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ recovery_ids: recoveryIds, reason }),

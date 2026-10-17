@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, FolderOpen, Search, Trash2 } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
 import {
   deleteDocument,
   downloadDocument,
   listDocuments,
   type DocumentListItem,
-} from "@/lib/api-authenticated";
+} from "@/lib/api-documents";
 import { fileKind, formatSize } from "@/components/FileDropzone";
 import { statusChip } from "@/components/RecentDocuments";
 
@@ -20,7 +19,6 @@ function formatDate(iso: string): string {
 }
 
 export default function HistoryPage() {
-  const { user, loading: authLoading } = useAuth();
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,9 +27,8 @@ export default function HistoryPage() {
   const [status, setStatus] = useState<string>("all");
 
   useEffect(() => {
-    if (authLoading || !user) return;
     loadDocuments();
-  }, [authLoading, user]);
+  }, []);
 
   async function loadDocuments() {
     setLoading(true);
@@ -86,31 +83,6 @@ export default function HistoryPage() {
   }, [docs, query, sort, status]);
 
   const shell = "mx-auto w-full max-w-6xl px-4 py-6 sm:px-6";
-
-  if (authLoading) {
-    return (
-      <main className={shell} aria-busy="true">
-        <div className="ax-skeleton h-10 w-64" />
-      </main>
-    );
-  }
-
-  if (!user) {
-    return (
-      <main className={shell}>
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-card">
-          <FolderOpen size={32} className="mx-auto text-gray-400" aria-hidden />
-          <p className="mt-3 text-sm text-gray-600">
-            Please{" "}
-            <Link href="/login" className="font-medium text-blue-700 underline">
-              sign in
-            </Link>{" "}
-            to view your documents.
-          </p>
-        </div>
-      </main>
-    );
-  }
 
   return (
     <main className={shell}>

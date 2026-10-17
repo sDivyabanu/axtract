@@ -1,14 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  AlertCircle,
   ArrowRight,
   BookOpen,
   Check,
-  CheckCircle2,
   Cpu,
   Download,
   Eye,
@@ -17,9 +13,7 @@ import {
   FileSpreadsheet,
   FileText,
   Layers,
-  Loader2,
   Lock,
-  Mail,
   MessageSquare,
   ScanSearch,
   Search,
@@ -28,68 +22,9 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
 import { Logo } from "@/components/AppShell";
 
 export default function LandingPage() {
-  const { user, signIn, signUp, signOut, loading: authLoading } = useAuth();
-  const router = useRouter();
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleAuthSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setMessage(null);
-    setSubmitting(true);
-
-    try {
-      if (mode === "signup") {
-        const { error: err, confirmed } = await signUp(email, password);
-        if (err) {
-          setError(err);
-        } else if (confirmed) {
-          router.push("/workspace");
-        } else {
-          setMessage("Check your email for the confirmation link to activate your account.");
-        }
-      } else {
-        const { error: err } = await signIn(email, password);
-        if (err) {
-          setError(err);
-        } else {
-          router.push("/workspace");
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function switchMode(next: "login" | "signup") {
-    setMode(next);
-    setError(null);
-    setMessage(null);
-  }
-
-  function scrollToAuth() {
-    const el = document.getElementById("auth-section");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-      const inputEl = el.querySelector<HTMLInputElement>("input[type='email']");
-      if (inputEl) inputEl.focus();
-    }
-  }
-
-  const inputClass =
-    "w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm transition-all placeholder:text-gray-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100";
-
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 selection:bg-blue-100">
       {/* -------------------- Top Navigation -------------------- */}
@@ -139,47 +74,14 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-3">
-            {user ? (
-              <div className="flex items-center gap-3">
-                <span className="hidden text-xs text-gray-500 sm:inline-block">
-                  Signed in as <strong className="font-medium text-gray-800">{user.email}</strong>
-                </span>
-                <Link
-                  href="/workspace"
-                  className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700"
-                >
-                  Go to Workspace <ArrowRight size={15} />
-                </Link>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    switchMode("login");
-                    scrollToAuth();
-                  }}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    switchMode("signup");
-                    scrollToAuth();
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700"
-                >
-                  Get started <ArrowRight size={15} />
-                </button>
-              </div>
-            )}
+            <Link href="/workspace" className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+              Start Extracting <ArrowRight size={16} />
+            </Link>
           </div>
         </div>
       </header>
 
-      {/* -------------------- Hero & Auth Section -------------------- */}
+      {/* -------------------- Hero & Workflow Section -------------------- */}
       <section className="relative overflow-hidden pt-8 pb-16 lg:pt-14 lg:pb-24">
         {/* Ambient Gradient Glows */}
         <div
@@ -248,8 +150,8 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Right Column: Embedded Sign In / Sign Up Card */}
-            <div id="auth-section" className="ax-rise lg:col-span-5">
+            {/* Right Column: Extraction Workflow */}
+            <div id="start-extracting" className="ax-rise lg:col-span-5">
               <div className="relative rounded-3xl border border-gray-200/90 bg-white p-6 shadow-lift sm:p-8">
                 {/* Glow accent */}
                 <div
@@ -258,186 +160,20 @@ export default function LandingPage() {
                   style={{ background: "var(--ai-gradient)" }}
                 />
 
-                {user ? (
-                  <div className="flex flex-col items-center text-center py-4">
-                    <div
-                      className="flex h-16 w-16 items-center justify-center rounded-2xl text-white shadow-card"
-                      style={{ background: "var(--ai-gradient)" }}
-                    >
-                      <FileSearch size={32} />
-                    </div>
-                    <h3 className="mt-4 font-display text-2xl font-semibold text-gray-900">
-                      Welcome back!
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-600">
-                      You are signed in as <span className="font-semibold text-gray-900">{user.email}</span>
-                    </p>
-
-                    <div className="mt-6 flex w-full flex-col gap-3">
-                      <Link
-                        href="/workspace"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-blue-700"
-                      >
-                        Open Extraction Workspace <ArrowRight size={16} />
-                      </Link>
-                      <Link
-                        href="/rooms"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-900 bg-gray-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800"
-                      >
-                        <BookOpen size={16} /> Open DealLens
-                      </Link>
-                      <Link
-                        href="/history"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                      >
-                        View Saved Documents
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => signOut()}
-                        className="text-xs text-gray-500 hover:text-red-600 transition-colors mt-2"
-                      >
-                        Sign out
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="font-display text-xl font-semibold text-gray-900 sm:text-2xl">
-                          {mode === "login" ? "Sign in to AXTRACT" : "Create your account"}
-                        </h2>
-                        <p className="mt-1 text-xs sm:text-sm text-gray-500">
-                          {mode === "login"
-                            ? "Access your extraction workspace and document history."
-                            : "Extract documents with real-time verification and storage."}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Mode Toggle */}
-                    <div
-                      role="tablist"
-                      aria-label="Authentication mode"
-                      className="mt-5 grid grid-cols-2 rounded-xl bg-gray-100 p-1"
-                    >
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={mode === "login"}
-                        onClick={() => switchMode("login")}
-                        className={`rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
-                          mode === "login"
-                            ? "bg-white text-gray-900 shadow-card"
-                            : "text-gray-600 hover:text-gray-900"
-                        }`}
-                      >
-                        Sign in
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={mode === "signup"}
-                        onClick={() => switchMode("signup")}
-                        className={`rounded-lg py-2 text-xs sm:text-sm font-medium transition-all ${
-                          mode === "signup"
-                            ? "bg-white text-gray-900 shadow-card"
-                            : "text-gray-600 hover:text-gray-900"
-                        }`}
-                      >
-                        Create account
-                      </button>
-                    </div>
-
-                    <form onSubmit={handleAuthSubmit} className="mt-5 flex flex-col gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600">
-                          Email address
-                        </label>
-                        <div className="relative mt-1.5">
-                          <Mail
-                            size={16}
-                            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                          />
-                          <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            autoComplete="email"
-                            placeholder="name@company.com"
-                            required
-                            className={`${inputClass} pl-10`}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600">
-                          Password
-                        </label>
-                        <div className="relative mt-1.5">
-                          <Lock
-                            size={16}
-                            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                          />
-                          <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            autoComplete={mode === "login" ? "current-password" : "new-password"}
-                            placeholder="••••••••"
-                            required
-                            minLength={6}
-                            className={`${inputClass} pl-10`}
-                          />
-                        </div>
-                        {mode === "signup" && (
-                          <span className="mt-1 block text-xs text-gray-500">
-                            Minimum 6 characters
-                          </span>
-                        )}
-                      </div>
-
-                      {error && (
-                        <div
-                          role="alert"
-                          className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs text-red-700"
-                        >
-                          <AlertCircle size={15} className="mt-0.5 shrink-0" />
-                          <span>{error}</span>
-                        </div>
-                      )}
-
-                      {message && (
-                        <div
-                          role="status"
-                          className="flex items-start gap-2 rounded-xl bg-green-50 p-3 text-xs text-green-800"
-                        >
-                          <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
-                          <span>{message}</span>
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={submitting || authLoading}
-                        className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-card transition-all hover:bg-blue-700 disabled:opacity-60"
-                      >
-                        {submitting && <Loader2 size={16} className="animate-spin" />}
-                        {submitting
-                          ? "Please wait…"
-                          : mode === "login"
-                          ? "Sign in & Open Workspace"
-                          : "Create Free Account"}
-                      </button>
-                    </form>
-
-                    <p className="mt-4 text-center text-xs text-gray-500">
-                      Protected by end-to-end sandbox security & encrypted document storage.
-                    </p>
-                  </div>
-                )}
+                <div className="relative py-4">
+                  <FileSearch size={36} className="text-blue-600" aria-hidden />
+                  <h2 className="mt-5 font-display text-2xl font-semibold text-gray-900">Your document, ready to explore.</h2>
+                  <p className="mt-3 text-sm leading-relaxed text-gray-600">Upload a document, extract its content and inspect the independent verification results alongside the original.</p>
+                  <ol className="mt-6 space-y-4 text-sm text-gray-700">
+                    <li>1. Upload your PDF or supported document</li>
+                    <li>2. Extract &amp; Verify</li>
+                    <li>3. View, download and revisit your results</li>
+                  </ol>
+                  <Link href="/workspace" className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700">
+                    Start Extracting <ArrowRight size={16} />
+                  </Link>
+                  <Link href="/benchmark" className="mt-4 block text-center text-sm font-medium text-blue-700 hover:underline">Open Smart Benchmark</Link>
+                </div>
               </div>
             </div>
           </div>
@@ -509,7 +245,7 @@ export default function LandingPage() {
                   <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
                     <span>Clean Markdown, JSON, and CSV exports ready</span>
                     <Link
-                      href={user ? "/workspace" : "/#auth-section"}
+                      href="/workspace"
                       className="text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1"
                     >
                       Try with your files <ArrowRight size={13} />
@@ -659,7 +395,7 @@ export default function LandingPage() {
 
           <div className="mt-10 text-center">
             <Link
-              href={user ? "/rooms" : "/#auth-section"}
+              href="/rooms"
               className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-gray-800"
             >
               <BookOpen size={16} /> Open DealLens <ArrowRight size={15} />
@@ -684,7 +420,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-6">
                 <Link
-                  href={user ? "/workspace" : "/#auth-section"}
+                  href="/workspace"
                   className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-card transition-colors hover:bg-blue-700"
                 >
                   Start an extraction <ArrowRight size={15} />
@@ -800,16 +536,16 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
                 <Link
-                  href={user ? "/workspace" : "/#auth-section"}
+                  href="/workspace"
                   className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-blue-500"
                 >
-                  {user ? "Open Workspace" : "Get started for free"} <ArrowRight size={16} />
+                  Start Extracting <ArrowRight size={16} />
                 </Link>
                 <Link
-                  href={user ? "/rooms" : "/#auth-section"}
+                  href="/rooms"
                   className="inline-flex items-center gap-2 rounded-full border border-gray-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
                 >
-                  <BookOpen size={16} /> {user ? "Open DealLens" : "Try DealLens"}
+                  <BookOpen size={16} /> Open DealLens
                 </Link>
               </div>
             </div>

@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
 import {
   cancelBenchmark,
   getActiveBenchRun,
@@ -34,7 +32,6 @@ type Tab = "run" | "history" | "compare" | "inspect" | "import";
 const TABS: [Tab, string][] = [["run", "Run"], ["history", "History and trends"], ["compare", "Compare"], ["inspect", "Failures"], ["import", "Import"]];
 
 export default function BenchmarkPage() {
-  const { user, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>("run");
   const [meta, setMeta] = useState<BenchCategoriesResponse | null>(null);
   const [env, setEnv] = useState<BenchEnvironment | null>(null);
@@ -57,7 +54,6 @@ export default function BenchmarkPage() {
 
   // First load, including refresh recovery: re-attach to the run that is executing (else the newest run).
   useEffect(() => {
-    if (authLoading || !user) return;
     getBenchCategories().then(setMeta).catch((e) => {
       if (e?.code === "HTTP_403") setDenied(true);
       setError(errorText(e, "The benchmark is unavailable."));
@@ -69,13 +65,12 @@ export default function BenchmarkPage() {
         setActiveId(pickRunToRestore(a.run?.run_id ?? null, h.runs));
       })
       .catch(() => {});
-  }, [authLoading, user]);
+  }, []);
 
   useEffect(() => {
-    if (!user) return;
     const t = setInterval(refreshEnv, 15000);
     return () => clearInterval(t);
-  }, [user, refreshEnv]);
+  }, [refreshEnv]);
 
   // Follow the selected run: poll while it is active, load results once it has finished.
   const status = run?.status;
@@ -132,21 +127,11 @@ export default function BenchmarkPage() {
   const cancel = () => act(async () => { await cancelBenchmark(run!.run_id); setRun({ ...run!, cancel_requested: true }); });
 
   const shell = "mx-auto w-full max-w-6xl px-4 py-6 sm:px-6";
-  if (authLoading) return <main className={shell} aria-busy="true"><div className="ax-skeleton h-10 w-64" /></main>;
-  if (!user) {
-    return (
-      <main className={shell}>
-        <div className={`${card} text-center text-sm text-gray-600`}>
-          Please <Link href="/login" className="font-medium text-blue-700 underline">sign in</Link> to use the benchmark runner.
-        </div>
-      </main>
-    );
-  }
   if (denied) {
     return (
       <main className={shell}>
         <div className={`${card} text-center text-sm text-gray-700`} role="alert">
-          Your account is not allowed to use the benchmark runner. Ask an administrator to add you to the benchmark users list.
+          The benchmark API rejected local access. Check that both servers use their loopback launchers.
         </div>
       </main>
     );

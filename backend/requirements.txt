@@ -33,17 +33,10 @@ pypdf              # BSD-3: deliberately naive baseline pipeline
 # Text similarity for verification
 python-Levenshtein
 
-# Database
-asyncpg
-python-dotenv
-
-# Authentication
-PyJWT[crypto]
-
 # Encryption
 cryptography
 
-# HTTP client (for Supabase Storage)
+# HTTP client (local services and tests)
 httpx
 
 # Testing

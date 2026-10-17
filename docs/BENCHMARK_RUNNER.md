@@ -1,3 +1,5 @@
+> Local access now uses the verified loopback launcher; see [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md). No account configuration is required.
+
 # Smart Benchmark Runner
 
 Test AXTRACT against the official olmOCR-bench quickly, without re-running all 1,403 PDFs after every change.
@@ -39,7 +41,6 @@ rates computed from the per-case results, marked `basis: "diagnostic"`. Missing 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AXTRACT_BENCHMARK_USERS` | empty (nobody) | Comma-separated Supabase user ids or emails allowed to use the API. `*` = any signed-in user. |
 | `AXTRACT_BENCH_DATA_DIR` | `benchmarks/olmOCR-bench/bench_data` | Official dataset (`pdfs/` and `*.jsonl`). Read-only. |
 | `AXTRACT_BENCH_WORKSPACE` | `benchmark_runs/` | Where runs are written. Must not overlap the dataset, `reports/benchmarks` or the import root. |
 | `AXTRACT_BENCH_SCORER_PYTHON` | `benchmarks/.venv/Scripts/python.exe` | Python with `olmocr` installed (runs the official scorer). |
@@ -80,7 +81,7 @@ the 800 MB `official_results.html`. The imported run keeps `official_status: "FA
 `overall_score_pct: null`, `is_official: false`, and shows the 22.28% only as a *diagnostic average*. Importing twice
 returns the same run. The source folder must be inside the import root.
 
-## API (`/api/benchmark`, all require an allow-listed user)
+## API (`/api/benchmark`, all require verified local-loopback access)
 
 `GET /environment` · `GET /categories` · `GET /changes?base=` · `POST /runs` · `GET /runs` · `GET /runs/active` ·
 `GET /runs/{id}` · `GET /runs/{id}/results|manifest|log|report|cases|case?case_id=` · `POST /runs/{id}/resume|cancel` ·
@@ -101,8 +102,8 @@ Ctrl-C during `run` cancels cleanly; `resume RUN_ID` continues.
 
 ## Dashboard
 
-Sidebar, **Benchmark** (`/benchmark`): Run, History and trends, Compare, Failures, Import. Sign in as an allow-listed
-user. After a page refresh it re-attaches to the running benchmark.
+Sidebar, **Benchmark** (`/benchmark`): Run, History and trends, Compare, Failures, Import.
+No account is required on the verified local listener. After a page refresh it re-attaches to the running benchmark.
 
 ## Tests
 

@@ -1,4 +1,4 @@
-"""Authenticated document persistence: upload, list, retrieve, download, delete.
+"""Loopback-only document persistence: upload, list, retrieve, download, delete.
 
 These endpoints are additive. Parsing itself is main's `parse_upload` pipeline, unchanged;
 this router only encrypts and stores the original, records the run, and saves the result.
@@ -23,9 +23,9 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as BytesUpload
 
-from auth.supabase import get_user_id
+from auth.local_dev import get_user_id
 from crypto.encryption import decrypt_document, encrypt_document, get_key_version
-from db import prisma_client as db
+from db import local_documents as db
 from db.storage import delete_from_storage, download_encrypted, storage_path, upload_encrypted
 from extractors.registry import get_extractor
 from models.document import DocumentResponse
@@ -47,7 +47,7 @@ _PREVIEW_ID = re.compile(r"^[0-9a-f]{32}$")
 
 
 def _as_dict(value) -> dict:
-    """asyncpg returns jsonb as text unless a codec is registered."""
+    """Accept saved JSON objects and older serialized responses."""
     return json.loads(value) if isinstance(value, (str, bytes)) else value
 
 
