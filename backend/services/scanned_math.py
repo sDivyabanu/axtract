@@ -11,7 +11,6 @@ from services.vision import pix2text_mfr
 from services.vision.line_math import segment_lines,looks_like_prose,tidy_latex
 from services.vision.latex import validate_latex,looks_mathy
 from utils import deadline
-from utils.request_cache import get_cached_image
 
 logger=logging.getLogger(__name__)
 
@@ -58,10 +57,11 @@ def render_dpi_for(width_pt, height_pt, base=200):
 
 
 def page_image(path, page):
-    """The page image already rendered for OCR in this request when available, else a capped render."""
-    cached = get_cached_image(path, page)
-    if cached is not None:
-        return cached
+    """Page image for line recognition, rendered under the OCR pixel/side caps.
+
+    The OCR stage's cached image is deliberately not reused: it comes from a different renderer, and
+    measured on the fixed scanned-math sample the pixel differences move line bands enough to lose
+    assertions (see evaluation/test_integration_interactions.py). Memory stays bounded by the caps."""
     from services.preview_service import render_page_pil
     size = page_size_points(path, page)
     dpi = render_dpi_for(*size) if size else 100

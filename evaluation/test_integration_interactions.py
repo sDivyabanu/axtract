@@ -92,22 +92,24 @@ def test_render_dpi_respects_the_pixel_cap():
         assert max(w, h) * dpi / 72 <= pdf_router._MAX_OCR_SIDE + 1
 
 
-def test_cached_page_image_is_reused_without_rerendering(monkeypatch):
+def test_ocr_cache_image_is_not_used_for_line_recognition(monkeypatch):
+    """Measured: the OCR cache comes from another renderer and loses scanned-math assertions."""
     enable(monkeypatch)
-    cached = Image.new("RGB", (200, 200), "white")
-    monkeypatch.setattr(scanned_math, "get_cached_image", lambda path, page: cached)
-    monkeypatch.setattr("services.preview_service.render_page_pil", lambda *a, **k: pytest.fail("re-rendered"))
+    from utils import request_cache
+    monkeypatch.setattr(request_cache, "get_cached_image", lambda path, page: pytest.fail("cache consulted"))
+    rendered = []
+    monkeypatch.setattr("services.preview_service.render_page_pil",
+                        lambda path, page, dpi: rendered.append(dpi) or Image.new("RGB", (200, 200), "white"))
     monkeypatch.setattr(pix2text_mfr, "recognize",
                         lambda *a, **k: pix2text_mfr.Prediction("x^2=4", True, "eos", 8, .1))
     result = scanned_source()
     scanned_math.route_scanned_math(result, Path("unused"))
-    assert len(result.blocks) == 2 and result.blocks[1].type == BlockType.EQUATION
+    assert rendered and len(result.blocks) == 2 and result.blocks[1].type == BlockType.EQUATION
 
 
 def test_oversized_page_is_rendered_at_a_capped_dpi(monkeypatch):
     enable(monkeypatch)
     seen = []
-    monkeypatch.setattr(scanned_math, "get_cached_image", lambda path, page: None)
     monkeypatch.setattr(scanned_math, "page_size_points", lambda path, page: (3000.0, 4000.0))
 
     def render(path, page, dpi):
