@@ -66,3 +66,25 @@ def test_markdown_output_never_double_escapes():
                             content=sanitise_block_text("normal (<25 kg/m2) & <b>x</b> &lt;ok&gt;"))]
     md = blocks_to_markdown(blocks)
     assert "&amp;lt;" not in md and "&amp;gt;" not in md and "(<25 kg/m2)" in md and "&lt;ok&gt;" in md
+
+
+# --- exponents of units and variables are text, not footnote markers ---------------------------------------------
+
+@pytest.mark.parametrize("text,refs,expected", [
+    ("normal (<25 kg/m2), overweight", ["2"], "normal (<25 kg/m\u00b2), overweight"),     # 027c3905: kg/m^2
+    ("area 5 cm2 and 3 m3", ["2", "3"], "area 5 cm\u00b2 and 3 m\u00b3"),
+    ("x2 + y2 = 9", ["2"], "x\u00b2 + y\u00b2 = 9"),
+    ("cited in work2, and Smith et al.2 agree", ["2"], "cited in work, and Smith et al. agree"),  # markers after words/punctuation go
+    ("the result3 held", ["3"], "the result held"),
+])
+def test_exponents_become_superscript_characters_and_footnote_markers_still_go(text, refs, expected):
+    assert strip_superscript_refs(text, refs) == expected
+
+
+@pytest.mark.parametrize("text,refs,expected", [
+    ("page 2 of 3 and 3 m3", ["3"], "page 2 of 3 and 3 m³"),             # real numbers survive a same-digit marker
+    ("see page 2 for details2, and more", ["2"], "see page 2 for details, and more"),
+    ("Smith et al.2 and Jones (2020).3 agree", ["2", "3"], "Smith et al. and Jones (2020). agree"),
+])
+def test_real_numbers_are_never_deleted_because_a_footnote_shares_the_digit(text, refs, expected):
+    assert strip_superscript_refs(text, refs) == expected

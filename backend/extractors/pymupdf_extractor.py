@@ -103,6 +103,9 @@ def _detach_footnote_markers(text: str) -> tuple[str, list[str]]:
     return " ".join(words), refs
 
 
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
+
+
 def strip_superscript_refs(content: str, refs: list[str]) -> str:
     """Remove detected superscript footnote markers without touching the surrounding punctuation.
 
@@ -113,9 +116,14 @@ def strip_superscript_refs(content: str, refs: list[str]) -> str:
     if not digits:
         return content
     alt = "|".join(re.escape(r) for r in digits)
+    # A raised digit right after a short unit or variable (m2, cm3, x2) is an exponent: keep it as a real superscript
+    # character (m\u00b2). Footnote markers follow words and punctuation, so they are still removed below.
+    content = re.sub(rf"(?<![A-Za-z])([A-Za-z]{{1,2}})({alt})(?!\w)", lambda m: m.group(1) + m.group(2).translate(_SUPERSCRIPT_DIGITS), content)
     content = re.sub(rf"(?<=[A-Za-z])(?:{alt})(?:,(?:{alt}))*(?!\w)", "", content)
     for ref in digits:
-        content = re.sub(rf"(?<!\w){re.escape(ref)}(?!\w)", "", content)
+        # a marker glued to punctuation or a closing bracket ("al.2", "(see)3"); a digit set off by white space is a real
+        # number ("3 m", "page 2") and is never deleted just because a footnote with the same digit exists in the block
+        content = re.sub(rf"(?<=[^\w\s]){re.escape(ref)}(?!\w)", "", content)
     return content
 
 
