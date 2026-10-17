@@ -108,7 +108,8 @@ def diagnostic_from_outcomes(path: Path, source_to_category: dict[str, str]) -> 
 
 def make_default_scorer(settings: config.BenchmarkSettings) -> ScoreFn:
     def score(scoring_dir: Path, outcomes: Path, html: Path | None, skip_baseline: bool, cancel: threading.Event) -> dict:
-        cmd = [str(settings.scorer_python), "-I", "-X", "utf8", str(WRAPPER),
+        cmd = [str(settings.scorer_python), "-I", "-B", "-X", "utf8", str(WRAPPER),  # -B: never write .pyc into the scorer checkout
+               
                "--dir", str(scoring_dir), "--candidate", "axtract", "--outcomes", str(outcomes)]
         if html:
             cmd += ["--html", str(html)]
