@@ -343,8 +343,8 @@ class BenchmarkRunner:
                     meta = self.extract_fn(scoring / "pdfs" / rel, rel, candidate)  # type: ignore[misc]
             except Exception as exc:  # noqa: BLE001 - one bad document never stops the run
                 meta = {"success": False, "error": f"{type(exc).__name__}: {exc}", "pages": 0}
-            if meta.get("cancelled"):
-                return None
+            if meta.get("cancelled") or (cancel.is_set() and not meta.get("success")):
+                return None  # interrupted by cancel: not a real failure, stays pending for resume
             meta.setdefault("total_elapsed_ms", (time.perf_counter() - t0) * 1000.0)
             return meta
 

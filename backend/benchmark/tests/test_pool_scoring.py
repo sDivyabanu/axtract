@@ -196,3 +196,17 @@ def test_detector_fails_open_when_processes_cannot_be_listed(monkeypatch):
 
 def test_worker_budget_is_bounded():
     assert procutil.worker_budget(99, 4) <= 4 and procutil.worker_budget(1, 4) == 1 and procutil.worker_budget(0, 4) == 1
+
+
+def test_cancel_never_records_an_interrupted_document_as_a_crash(tmp_path, stub):
+    """Regression: cancel kills the worker, whose end-of-stream used to be reported as WorkerCrashed."""
+    for _ in range(5):
+        pool = make_pool(tmp_path, stub, timeout=30)
+        result = {}
+        t = threading.Thread(target=lambda: result.update(pool.extract(Path("a.pdf"), Path("cat/slow.pdf"), tmp_path)))
+        t.start()
+        time.sleep(0.8)
+        pool.cancel()
+        t.join(10)
+        pool.close()
+        assert result == {"cancelled": True}

@@ -132,6 +132,10 @@ class ExtractorPool:
                         return self._fail(f"TimeoutError: no result within {self.timeout_s:.0f}s", started, timed_out=True)
                     continue
                 if line is _EOF:
+                    if self.cancelled.is_set():  # the worker was killed by cancel(), not by a crash
+                        worker.close()
+                        worker = None
+                        return {"cancelled": True}
                     code = worker.proc.poll()
                     worker.close()
                     worker = None

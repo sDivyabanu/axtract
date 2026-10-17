@@ -320,3 +320,18 @@ def test_logs_and_errors_do_not_leak_paths(make_runner):
     r.execute(run_id)
     log = r.log_tail(run_id)
     assert str(r.settings.workspace) not in log and str(r.settings.data_dir) not in log
+
+
+def test_a_failure_caused_by_cancel_stays_pending_instead_of_failed(make_runner):
+    """A killed in-flight document reports an error; because cancel is set it must not become a recorded failure."""
+    cancel = threading.Event()
+
+    def killed_by_cancel(pdf, rel, candidate):
+        cancel.set()
+        return {"success": False, "pages": 0, "error": "WorkerCrashed: extraction process exited (code 1)"}
+
+    r = make_runner(extract=killed_by_cancel)
+    run_id = r.create_run(per_category=2, categories=["beta"], workers=1)
+    assert r.execute(run_id, cancel)["status"] == "cancelled"
+    counts = r.status(run_id)["counts"]
+    assert counts["failed"] == 0 and counts["pending"] == 2 and r.status(run_id)["resumable"]
