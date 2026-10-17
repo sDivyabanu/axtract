@@ -503,9 +503,10 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
         regions = []
         try:
-            # Layout inference is only useful when formula models are available
-            # to read equation regions, and enough deadline remains.
-            if must_analyze_pixels and models.latex_model_available() and _budget_ok():
+            # RapidLayout (bundled CDLA ONNX) is independent of the formula weights: it finds
+            # charts/figures on scanned pages even without them. Equation regions are only
+            # *read* where the formula model exists (see 2c / _classify). Needs deadline left.
+            if must_analyze_pixels and _budget_ok():
                 regions = models.detect_layout(img)
         except Exception:  # noqa: BLE001
             logger.exception("layout detection failed on page %s", pno)
