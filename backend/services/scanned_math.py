@@ -6,6 +6,7 @@ import os
 import time
 from pathlib import Path
 from models.document import BlockType
+from models.errors import AppError
 from services.equation_service import make_equation_block
 from services.vision import pix2text_mfr
 from services.vision.line_math import segment_lines,looks_like_prose,tidy_latex
@@ -140,8 +141,10 @@ def _warn_unavailable_once(status):
 
 
 def route_scanned_math(result,path: Path):
-    if os.environ.get("AXTRACT_SCANNED_MATH","0").strip().lower() not in ("1","true","on"):
+    mode=os.environ.get("AXTRACT_SCANNED_MATH","0").strip().lower()
+    if mode not in ("1","true","on","require"):
         return
+    strict=mode=="require"  # benchmark/reproduction mode: a missing package or model is an error, never a silent fallback
     native=hidden_scan_words(path,result.blocks)
     pages=sorted({b.page for b in result.blocks if b.metadata.get("route") in ("scanned","mixed-ocr")} | set(native))
     if not pages:
@@ -155,6 +158,11 @@ def route_scanned_math(result,path: Path):
         if not status["available"]:
             stats["stop_reason"]="model_unavailable"
             stats["setup"]={k:v for k,v in status.items() if k!="available"}
+            if strict:
+                raise AppError("SCANNED_MATH_UNAVAILABLE",
+                               f"AXTRACT_SCANNED_MATH=require but Pix2Text-MFR cannot load ({stats['setup']}). Install the pinned "
+                               "packages, run `python scripts/scanned_math_assets.py check`, and see docs/SCANNED_MATH_SETUP.md.",
+                               status_code=503)
             _warn_unavailable_once(status)
             continue
         ram=available_memory_bytes()

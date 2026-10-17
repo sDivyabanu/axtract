@@ -113,3 +113,28 @@ def test_scanned_math_on_without_assets_warns_once_and_never_crashes(monkeypatch
     warnings = [r for r in caplog.records if "Pix2Text-MFR is unavailable" in r.getMessage()]
     assert len(warnings) == 1 and "scanned_math_assets.py" in warnings[0].getMessage()
     assert result.blocks[0].metadata["scanned_math_page"]["stop_reason"] == "model_unavailable"
+
+
+def test_require_mode_fails_loudly_instead_of_falling_back(monkeypatch):
+    from extractors.base import ExtractionResult
+    from models.document import BlockType, DocumentBlock
+    from models.errors import AppError
+    from services import scanned_math
+    from services.vision import pix2text_mfr
+
+    monkeypatch.setattr(scanned_math, "hidden_scan_words", lambda *a: {})
+    monkeypatch.setattr(pix2text_mfr, "mfr_status", lambda: {"available": False, "weights_missing": ["encoder_model.onnx"], "tokenizers_available": False})
+
+    def result():
+        return ExtractionResult(page_count=1, blocks=[DocumentBlock(id="o", type=BlockType.PARAGRAPH, content="x", page=1, bbox=(0, 0, .5, .1),
+                                                                    confidence=.9, extractor="rapidocr", metadata={"route": "scanned"})])
+
+    monkeypatch.setenv("AXTRACT_SCANNED_MATH", "require")
+    with pytest.raises(AppError) as err:
+        scanned_math.route_scanned_math(result(), Path("unused.pdf"))
+    assert err.value.code == "SCANNED_MATH_UNAVAILABLE" and "encoder_model.onnx" in err.value.message
+    for lenient in ("1", "true", "on"):                     # plain enable keeps the warn-and-continue behaviour
+        monkeypatch.setenv("AXTRACT_SCANNED_MATH", lenient)
+        scanned_math.route_scanned_math(result(), Path("unused.pdf"))
+    monkeypatch.setenv("AXTRACT_SCANNED_MATH", "0")          # and off stays off, even with the assets missing
+    scanned_math.route_scanned_math(result(), Path("unused.pdf"))
