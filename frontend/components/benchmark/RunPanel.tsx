@@ -85,7 +85,7 @@ export default function RunPanel({ run, busy, onCancel, onResume }: Props) {
         )}
         {run.resumable && run.status !== "created" && (
           <button type="button" disabled={busy} className={btnPrimary} onClick={onResume}>
-            <RotateCcw size={14} /> Resume{c ? ` (${c.pending + c.failed} left)` : ""}
+            <RotateCcw size={14} /> Resume{c ? (c.pending + c.failed > 0 ? ` (${c.pending + c.failed} left)` : " (score the finished documents)") : ""}
           </button>
         )}
         <button type="button" onClick={showLog} className={btn}>View log</button>

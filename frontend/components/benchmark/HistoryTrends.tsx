@@ -33,7 +33,7 @@ function TrendChart({ trend, metric }: { trend: TrendResponse; metric: string })
         {[0, 50, 100].map((g) => (
           <g key={g}>
             <line x1={0} x2={W} y1={6 + (H - 12) * (1 - g / 100)} y2={6 + (H - 12) * (1 - g / 100)} stroke="#dadce0" strokeDasharray="3 3" />
-            <text x={2} y={4 + (H - 12) * (1 - g / 100)} fontSize="9" fill="#5f6368">{g}%</text>
+            <text x={2} y={(g === 100 ? 15 : 4) + (H - 12) * (1 - g / 100)} fontSize="9" fill="#5f6368">{g}%</text>
           </g>
         ))}
         {lines.map((l) => l.segs.map((seg, i) => (
