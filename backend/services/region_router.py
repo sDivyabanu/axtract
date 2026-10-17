@@ -440,17 +440,17 @@ def _page_content_crop(doc, pno: int, page_img: Image.Image) -> Image.Image:
     return page_img
 
 
-def _capped_render_dpi(file_path: Path, pno: int) -> int:
+def _capped_render_dpi(file_path: Path, pno: int) -> float:
     """RENDER_DPI, lowered so the page raster obeys the OCR side/area caps (ordinary pages are unchanged)."""
     import pymupdf
 
-    from services.pdf_router import fit_dpi
+    from services.pdf_router import fit_zoom
 
     try:
         with pymupdf.open(str(file_path)) as doc:
             rect = doc[pno - 1].rect
-        return min(RENDER_DPI, fit_dpi(rect.width, rect.height, base_dpi=RENDER_DPI))
-    except Exception:  # noqa: BLE001 - unknown size: fall back to a conservative DPI, never an unbounded one
+        return min(RENDER_DPI, 72.0 * fit_zoom(rect.width, rect.height, base_dpi=RENDER_DPI))
+    except Exception:  # noqa: BLE001 - PDFium rechecks its own geometry and raster before returning an image
         return 72
 
 
