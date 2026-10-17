@@ -72,7 +72,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/" || pathname.startsWith("/login")) return <>{children}</>;
 
   const [, title, crumb] = TITLES.find(([m]) => m(pathname))!;
-  const items = NAV.filter((i) => !i.needsAuth || user);
+  // Gate auth-only items on `!loading` so the first client render matches the
+  // server (both have loading=true / user=null when Supabase is configured),
+  // then reveal them once the session resolves — same pattern as the footer.
+  const items = NAV.filter((i) => !i.needsAuth || (!loading && user));
 
   const sidebar = (mobile: boolean) => {
     const wide = mobile || !collapsed;

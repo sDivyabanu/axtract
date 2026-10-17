@@ -64,23 +64,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient();
-    if (!supabase) return;
-
-    supabase.auth.getSession().then(({ data: { session: s } }: { data: { session: Session | null } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
+    if (!supabase) {
       setLoading(false);
-    });
+      return;
+    }
+
+    // `loading` disables the sign-in/sign-up button, so it must always clear.
+    // getSession() can reject or hang (it waits on a cross-tab lock), which
+    // would otherwise leave the form permanently unusable; the timer bounds
+    // that wait, and onAuthStateChange still fills in the session when it lands.
+    const settle = setTimeout(() => setLoading(false), 3000);
+    const done = () => {
+      clearTimeout(settle);
+      setLoading(false);
+    };
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: s } }: { data: { session: Session | null } }) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+      })
+      .catch(() => {
+        setSession(null);
+        setUser(null);
+      })
+      .finally(done);
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, s: Session | null) => {
       setSession(s);
       setUser(s?.user ?? null);
-      setLoading(false);
+      done();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(settle);
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (!isSupabaseConfigured) {
