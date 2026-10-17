@@ -62,6 +62,7 @@ export default function RunPanel({ run, busy, onCancel, onResume }: Props) {
             {processed(c)} of {c.total} documents processed ·{" "}
             <span className="text-green-700">{c.done} succeeded</span> ·{" "}
             <span className={c.failed ? "text-red-700" : ""}>{c.failed} failed{c.timed_out ? ` (${c.timed_out} timed out)` : ""}</span>
+            {c.partial ? <> · <span className="text-amber-800">{c.partial} missing pages</span></> : null}
             {c.empty ? <> · <span className="text-amber-800">{c.empty} empty</span></> : null} · {c.pending} remaining
           </p>
         </>
@@ -85,7 +86,7 @@ export default function RunPanel({ run, busy, onCancel, onResume }: Props) {
         )}
         {run.resumable && run.status !== "created" && (
           <button type="button" disabled={busy} className={btnPrimary} onClick={onResume}>
-            <RotateCcw size={14} /> Resume{c ? (c.pending + c.failed > 0 ? ` (${c.pending + c.failed} left)` : " (score the finished documents)") : ""}
+            <RotateCcw size={14} /> Resume{c ? (c.pending + c.failed + (c.partial ?? 0) > 0 ? ` (${c.pending + c.failed + (c.partial ?? 0)} left)` : " (score the finished documents)") : ""}
           </button>
         )}
         <button type="button" onClick={showLog} className={btn}>View log</button>

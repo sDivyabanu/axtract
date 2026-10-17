@@ -73,11 +73,11 @@ export function fmtDuration(seconds: number): string {
 export const fmtPct = (v: number | null | undefined, digits = 1): string => (v === null || v === undefined ? "n/a" : `${v.toFixed(digits)}%`);
 export const fmtDelta = (v: number | null | undefined): string => (v === null || v === undefined ? "n/a" : `${v > 0 ? "+" : ""}${v}`);
 
-export function processed(counts: { done: number; failed: number } | null): number {
-  return counts ? counts.done + counts.failed : 0;
+export function processed(counts: { done: number; failed: number; partial?: number } | null): number {
+  return counts ? counts.done + counts.failed + (counts.partial ?? 0) : 0;
 }
 
-export function progressPercent(counts: { total: number; done: number; failed: number } | null): number {
+export function progressPercent(counts: { total: number; done: number; failed: number; partial?: number } | null): number {
   return counts && counts.total ? Math.min(100, (processed(counts) / counts.total) * 100) : 0;
 }
 
