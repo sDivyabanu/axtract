@@ -402,12 +402,16 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
     inline_pages = {b.page for b in blocks if b.type in (BlockType.PARAGRAPH, BlockType.LIST)}
 
     # 1. vector charts (pdfplumber) on pages that actually have drawing primitives
+    MAX_VECTOR_CHART_DRAWINGS = 5000
     vector_pages: list[int] = []
     with pymupdf.open(str(file_path)) as doc:
         for pno in range(1, doc.page_count + 1):
             try:
-                if len(doc[pno - 1].get_cdrawings()) >= 8:
+                drawings_count = len(doc[pno - 1].get_cdrawings())
+                if 8 <= drawings_count <= MAX_VECTOR_CHART_DRAWINGS:
                     vector_pages.append(pno)
+                elif drawings_count > MAX_VECTOR_CHART_DRAWINGS:
+                    logger.info("Page %d has %d drawings; skipping vector chart analysis", pno, drawings_count)
             except Exception:  # noqa: BLE001
                 continue
     vector_found: dict[int, list] = {}
@@ -418,7 +422,9 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
         with source_pdf(file_path) as plumber:
             for pno in vector_pages:
-                deadline.check()
+                if deadline.remaining() <= _MIN_BUDGET:
+                    result.errors.append(DocumentError(code="VECTOR_CHART_SKIPPED", message="Time budget reached; vector chart search skipped.", page=pno))
+                    break
                 try:
                     page = plumber.pages[pno - 1]
                     charts = read_vector_charts(page)
@@ -448,14 +454,18 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
     def image_of(pno: int) -> Image.Image:
         if pno not in page_img:
-            page_img[pno] = preview_service.render_page_pil(file_path, pno, RENDER_DPI)
+            from utils.request_cache import get_cached_image
+            cached = get_cached_image(file_path, pno)
+            if cached is not None:
+                page_img[pno] = cached
+            else:
+                page_img[pno] = preview_service.render_page_pil(file_path, pno, RENDER_DPI)
         return page_img[pno]
 
     analyzed = 0
     fitz_doc = pymupdf.open(str(file_path))
     for pno in work_pages:
-        deadline.check()
-        if not _budget_ok():
+        if deadline.remaining() <= _MIN_BUDGET:
             result.errors.append(DocumentError(code="REGION_ROUTING_SKIPPED", message="Time budget reached; remaining pages were not analysed for charts/equations.", page=pno))
             break
         page_figures = [b for b in blocks if b.page == pno and b.type == BlockType.FIGURE
@@ -483,9 +493,10 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
         regions = []
         try:
-            # Layout inference is useful for equation candidates and scanned pages;
-            # figure crops are already routed through the visual classifier below.
-            regions = models.detect_layout(img) if must_analyze_pixels else []
+            # Layout inference is only useful when formula models are available
+            # to read equation regions, and enough deadline remains.
+            if must_analyze_pixels and models.latex_model_available() and _budget_ok():
+                regions = models.detect_layout(img)
         except Exception:  # noqa: BLE001
             logger.exception("layout detection failed on page %s", pno)
 

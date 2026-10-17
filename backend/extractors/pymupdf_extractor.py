@@ -1,4 +1,4 @@
-﻿"""PyMuPDF extraction for digital PDFs with conservative layout heuristics."""
+"""PyMuPDF extraction for digital PDFs with conservative layout heuristics."""
 
 from __future__ import annotations
 
@@ -309,7 +309,14 @@ class PyMuPDFExtractor(BaseExtractor):
         if has_table_evidence:
             table_detection_count = 1
             try:
-                found_tables = page.find_tables()
+                # Pathological drawing count guard: if drawing primitives exceed 20,000,
+                # scanning vector curves for line borders causes a 15-25s C-level stall.
+                # Use text-based table strategy instead on such vector-dense pages.
+                cdrawings_count = len(page.get_cdrawings())
+                if cdrawings_count <= 20000:
+                    found_tables = page.find_tables()
+                else:
+                    found_tables = page.find_tables(strategy="text")
             except Exception:
                 found_tables = None
         if aligned_columns and (not found_tables or not found_tables.tables):
