@@ -1,0 +1,48 @@
+{
+  "model": "Pix2Text-MFR (mathematical formula recognition), ONNX export of a VisionEncoderDecoder (TrOCR-style) model",
+  "source_repository": "https://huggingface.co/breezedeus/pix2text-mfr",
+  "config_name_or_path": "breezedeus/pix2text-mfr",
+  "license": "MIT (per the model card metadata, verified 2026-10-18); architecture derived from Microsoft TrOCR",
+  "provenance_note": "These files were placed on this machine on 2026-10-17 for the scanned-math sprint. The repository does not record the exact download URL of the ONNX export, only the source model id above, so the hashes below are the authoritative identity of the verified assets.",
+  "runtime": {
+    "onnxruntime": "1.30.0",
+    "tokenizers": "0.23.3",
+    "numpy": "2.5.3",
+    "Pillow": "12.3.0"
+  },
+  "default_directory": "backend/model_weights/pix2text_mfr",
+  "files": {
+    "config.json": {
+      "bytes": 4556,
+      "sha256": "9f3812441d397c871b9b2a74e8d956b939aec5f4f45745bba9214e968d56449d"
+    },
+    "decoder_model.onnx": {
+      "bytes": 30114937,
+      "sha256": "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed"
+    },
+    "encoder_model.onnx": {
+      "bytes": 87496990,
+      "sha256": "bd8d5c322792e9ec45793af5569e9748f82a3d728a9e00213dbfc56c1486f37d"
+    },
+    "generation_config.json": {
+      "bytes": 210,
+      "sha256": "cbea88288d5576a9655ad04e2456768544be22273a1c5ca160e0d16384639b4f"
+    },
+    "preprocessor_config.json": {
+      "bytes": 450,
+      "sha256": "36a945a7cc645688b9ef64dabae16979cf5f7c1c448569cc306694edc0598b9b"
+    },
+    "special_tokens_map.json": {
+      "bytes": 964,
+      "sha256": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835"
+    },
+    "tokenizer.json": {
+      "bytes": 39161,
+      "sha256": "3e2ab757277d22639bec28c9d7972e352d3d1dba223051fa674002dc5ab64df3"
+    },
+    "tokenizer_config.json": {
+      "bytes": 1181,
+      "sha256": "7ffff31747c73b1a462b766abfc128e03f669e5b8452fe6e175b1430a078ac8d"
+    }
+  }
+}

@@ -38,6 +38,7 @@ Thumbs.db
 
 # Model weights are fetched by scripts/fetch_models.py, never committed
 backend/model_weights/**/*.onnx
+backend/model_weights/pix2text_mfr/
 reports/previews/
 reports/c[0-9]_report.*
 

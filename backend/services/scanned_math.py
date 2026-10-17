@@ -126,6 +126,19 @@ def hidden_scan_words(path,blocks):
     return found
 
 
+_warned_unavailable=False
+
+
+def _warn_unavailable_once(status):
+    """AXTRACT_SCANNED_MATH is on but the recognizer cannot load: say why, once per process (never download anything)."""
+    global _warned_unavailable
+    if _warned_unavailable:
+        return
+    _warned_unavailable=True
+    logger.warning("Scanned math is enabled but Pix2Text-MFR is unavailable (%s). Install the pinned packages from "
+                   "backend/requirements.txt and run `python scripts/scanned_math_assets.py verify`; see docs/SCANNED_MATH_SETUP.md.",status)
+
+
 def route_scanned_math(result,path: Path):
     if os.environ.get("AXTRACT_SCANNED_MATH","0").strip().lower() not in ("1","true","on"):
         return
@@ -140,7 +153,10 @@ def route_scanned_math(result,path: Path):
         if originals:
             originals[0].metadata["scanned_math_page"]=stats
         if not status["available"]:
-            stats["stop_reason"]="model_unavailable";continue
+            stats["stop_reason"]="model_unavailable"
+            stats["setup"]={k:v for k,v in status.items() if k!="available"}
+            _warn_unavailable_once(status)
+            continue
         ram=available_memory_bytes()
         if ram is not None and ram<650*1024**2:
             stats["stop_reason"]="low_memory";continue

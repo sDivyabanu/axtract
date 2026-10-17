@@ -1,46 +1,49 @@
 # Core API
-fastapi
-uvicorn
-python-multipart
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
 
 # PDF extraction
-pymupdf            # AGPL-3.0 (see docs: replace before commercial distribution)
-pdfplumber         # MIT: vector chart primitives
-pypdfium2          # BSD-3 / Apache-2.0: page rendering for preview + OCR crops
+pymupdf==1.28.2  # AGPL-3.0 (see docs: replace before commercial distribution)
+pdfplumber==0.11.10  # MIT: vector chart primitives
+pypdfium2==5.14.0  # BSD-3 / Apache-2.0: page rendering for preview + OCR crops
 
 # Office document extraction
-python-docx
-python-pptx
-openpyxl
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
 
 # OCR (self-hosted, uses PaddleOCR models via ONNX Runtime)
-rapidocr-onnxruntime
+rapidocr-onnxruntime==1.2.3
 
 # Image processing
-Pillow
+Pillow==12.3.0
+
+# Runtime packages imported directly by the recognizers (pinned to the measured environment, Python 3.14.6)
+numpy==2.5.3  # array handling (all image paths)
+onnxruntime==1.30.0  # ONNX Runtime: OCR, layout and Pix2Text-MFR
+tokenizers==0.23.3  # Apache-2.0: Pix2Text-MFR tokenizer (scanned math; previously undeclared)
 
 # Region detection and formula recognition (self-hosted ONNX models)
-rapid-layout       # Apache-2.0: layout model bundled in the wheel (CDLA classes incl. equation)
-rapid-latex-ocr    # Apache-2.0: image -> LaTeX; weights fetched once by scripts/fetch_models.py
-defusedxml         # PSF: safe XML parsing for Office chart / equation parts
-latex2mathml       # MIT: LaTeX syntax validation
-requests
+rapid-layout==1.2.1  # Apache-2.0: layout model bundled in the wheel (CDLA classes incl. equation)
+defusedxml==0.7.1  # PSF: safe XML parsing for Office chart / equation parts
+latex2mathml==3.81.1  # MIT: LaTeX syntax validation
+requests==2.34.2
 
-# RAG layer (DealLens): local embeddings + reranker, baseline text extraction
-fastembed          # Apache-2.0: ONNX embeddings (bge-small, MIT) + cross-encoder reranker (MiniLM, Apache-2.0)
-pypdf              # BSD-3: deliberately naive baseline pipeline
+# Optional / legacy packages are in requirements-optional.txt (legacy pix2tex formula model, DealLens RAG layer).
+# They are NOT part of the measured environment and rapid-latex-ocr does not install on Python >= 3.13.
 
 # Text similarity for verification
-python-Levenshtein
+python-Levenshtein==0.27.5
 
 # Encryption
-cryptography
+cryptography==50.0.2
 
 # HTTP client (local services and tests)
-httpx
+httpx==0.28.1
 
 # Testing
-pytest
-reportlab          # BSD: fixture PDFs
-matplotlib         # fixture charts / rendered equations
-python-dotenv
+pytest==9.1.1
+reportlab==5.0.1  # BSD: fixture PDFs
+matplotlib==3.11.2  # fixture charts / rendered equations
+python-dotenv==1.2.4
