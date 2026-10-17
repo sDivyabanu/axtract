@@ -249,11 +249,11 @@ runtime). Set up and verify it in a clean virtual environment:
 
 ```powershell
 py -3.14 -m venv .venv
-.venv\Scripts\python -m pip install -r backendequirements.txt          # pinned; backendequirements.lock.txt is the tested full lock
+.venv\Scripts\python -m pip install -r backend\requirements.txt          # pinned; backend\requirements.lock.txt is the tested full lock
 .venv\Scripts\python scripts\scanned_math_assets.py install --from <folder with the 8 Pix2Text-MFR files>
 .venv\Scripts\python scripts\scanned_math_assets.py check                # must print: OK: Pix2Text-MFR loads from ...
-$env:AXTRACT_SCANNED_MATH = "1"                                            # "1" warns and continues if assets are missing; "require" fails loudly
-.venv\Scripts\python scriptsxtract_batch.py .\input-pdfs .\markdown-output
+$env:AXTRACT_SCANNED_MATH = "1"                                          # "1" warns and continues if assets are missing; "require" fails loudly
+.venv\Scripts\python scripts\axtract_batch.py .\input-pdfs .\markdown-output
 ```
 
 To reproduce the 70-PDF / 430-assertion diagnostic (a sample, **not** full-corpus accuracy) with the unchanged official scorer, follow
