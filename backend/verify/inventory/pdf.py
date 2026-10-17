@@ -154,6 +154,7 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
     opts = opts or InventoryOptions()
     t0 = time.perf_counter()
     inv = SourceInventory(file_type="pdf", signals=list(SIGNALS), limitations=list(LIMITATIONS))
+    overloaded_pages: list[int] = []  # bound before anything can fail: an early error keeps its own diagnostic
     try:
         import pypdfium2 as pdfium
         import pypdfium2.raw as pdfium_c
@@ -210,7 +211,6 @@ def inventory_pdf(path: Path, opts: InventoryOptions | None = None) -> SourceInv
             plumber = acquire_pdf(path)
         except Exception:  # noqa: BLE001
             inv.limitations.append("pdfplumber could not open this file: no word regions or table candidates.")
-        overloaded_pages: list[int] = []
         try:
             for i, pg in enumerate(pages, start=1):
                 unit = UnitRef(type=UnitType.PAGE, index=i)

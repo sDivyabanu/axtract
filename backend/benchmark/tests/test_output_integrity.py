@@ -151,3 +151,61 @@ def test_full_mode_with_partial_documents_is_never_an_official_score(make_runner
     r.execute(run_id)
     res = r.results(run_id)
     assert res["is_official"] is False and res["score_kind"] == "full_incomplete"
+
+
+# ---- expected page identities, not raw file counts -----------------------------------------------------
+class RepeatExtract(PagesExtract):
+    """Writes N repeats of page 1 only (the scorer's _repeatN naming) and claims the 2-page document succeeded."""
+
+    def __init__(self, repeats: int = 2, empty_first: bool = False):
+        super().__init__()
+        self.repeats, self.empty_first = repeats, empty_first
+
+    def __call__(self, pdf, rel, candidate_dir):
+        with self._lock:
+            self.calls.append(str(rel).replace("\\", "/"))
+        out = candidate_dir / rel.parent
+        out.mkdir(parents=True, exist_ok=True)
+        for n in range(1, self.repeats + 1):
+            (out / f"{rel.stem}_pg1_repeat{n}.md").write_text("" if self.empty_first and n == 1 else "md", encoding="utf-8")
+        return {"success": True, "pages": 2, "total_elapsed_ms": 10.0}
+
+
+def test_two_repeats_of_page_one_are_one_page_not_two(make_runner):
+    r, run_id, _ = run_quick(make_runner, lambda n: RepeatExtract(2))
+    rec = next(iter(doc_records(r, run_id).values()))
+    assert rec["status"] == "partial" and rec["written_pages"] == 1 and rec["missing_pages"] == 1
+    assert r.status(run_id)["counts"]["partial"] == 3 and r.results(run_id)["completeness"] == "incomplete"
+
+
+def test_a_page_with_an_empty_and_a_non_empty_repeat_counts_once_as_written(make_runner):
+    r, run_id, _ = run_quick(make_runner, lambda n: RepeatExtract(2, empty_first=True))
+    rec = next(iter(doc_records(r, run_id).values()))
+    assert rec["written_pages"] == 1 and rec["empty_pages"] == 0
+
+
+def test_resume_demotes_a_done_document_whose_pages_are_only_repeats(make_runner):
+    r, run_id, _ = run_quick(make_runner, lambda n: PagesExtract())
+    rdir = store.run_dir(r.settings.workspace, run_id)
+    victim = r.manifest(run_id)["documents"][0]["pdf"]
+    folder = rdir / "scoring" / CANDIDATE / Path(victim).parent
+    stem = Path(victim).stem
+    (folder / f"{stem}_pg2_repeat1.md").unlink()                       # page 2 lost ...
+    (folder / f"{stem}_pg1_repeat2.md").write_text("md", encoding="utf-8")  # ... but two files remain for page 1
+    r._set_status(rdir, "running")
+    retry = PagesExtract()
+    r.extract_fn = retry
+    r.execute(run_id)
+    assert retry.calls == [victim]
+
+
+def test_unrelated_files_with_a_similar_name_are_not_counted(make_runner):
+    r, run_id, _ = run_quick(make_runner, lambda n: PagesExtract({}))
+    rdir = store.run_dir(r.settings.workspace, run_id)
+    first = r.manifest(run_id)["documents"][0]["pdf"]
+    folder = rdir / "scoring" / CANDIDATE / Path(first).parent
+    for f in folder.glob(f"{Path(first).stem}_pg*"):
+        f.unlink()
+    (folder / f"{Path(first).stem}_pg9_repeat1.md").write_text("md", encoding="utf-8")  # page 9 of a 2-page document
+    written, empty = r._output_pages(rdir / "scoring" / CANDIDATE, Path(first), 2)
+    assert (written, empty) == (0, 0)

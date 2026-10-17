@@ -25,6 +25,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+import re
 from glob import escape as glob_escape
 from pathlib import Path
 from typing import Any, Callable
@@ -368,7 +369,7 @@ class BenchmarkRunner:
                 pages = int(meta.get("pages") or 0)
                 total_ms = float(meta.get("total_elapsed_ms") or 0.0)
                 ok = bool(meta.get("success"))
-                written, blank = self._output_pages(candidate, Path(doc["pdf"]))
+                written, blank = self._output_pages(candidate, Path(doc["pdf"]), pages)
                 if ok and written <= 0:
                     ok, meta["error"] = False, meta.get("error") or "Extraction reported success but wrote no output."
                 if not ok:
@@ -404,11 +405,25 @@ class BenchmarkRunner:
         return list(folder.glob(f"{glob_escape(rel.stem)}_pg*_repeat*.md")) if folder.is_dir() else []
 
     @classmethod
-    def _output_pages(cls, candidate: Path, rel: Path) -> tuple[int, int]:
-        """(pages with non-empty output, pages with empty output) found on disk for one document."""
-        files = cls._output_files(candidate, rel)
-        empty = sum(1 for f in files if f.stat().st_size == 0)
-        return len(files) - empty, empty
+    def _page_status(cls, candidate: Path, rel: Path) -> dict[int, bool]:
+        """page number -> has a non-empty output. Repeats of one page (_pg1_repeat1, _pg1_repeat2) are ONE page."""
+        pattern = re.compile(rf"{re.escape(rel.stem)}_pg(\d+)_repeat\d+\.md", re.I)
+        pages: dict[int, bool] = {}
+        for f in cls._output_files(candidate, rel):
+            m = pattern.fullmatch(f.name)
+            if m:
+                pages[int(m.group(1))] = pages.get(int(m.group(1)), False) or f.stat().st_size > 0
+        return pages
+
+    @classmethod
+    def _output_pages(cls, candidate: Path, rel: Path, expected_pages: int = 0) -> tuple[int, int]:
+        """(distinct expected pages with non-empty output, distinct expected pages whose output is empty).
+        Expected pages are 1..N; with N unknown (0) every page number found counts."""
+        status = cls._page_status(candidate, rel)
+        wanted = range(1, expected_pages + 1) if expected_pages else status.keys()
+        written = sum(1 for p in wanted if status.get(p))
+        empty = sum(1 for p in wanted if p in status and not status[p])
+        return written, empty
 
     @classmethod
     def _clear_outputs(cls, candidate: Path, rel: Path) -> None:
@@ -425,8 +440,9 @@ class BenchmarkRunner:
             rec = docs.get(d["pdf"])
             if not rec or rec.get("status") != "done":
                 continue
-            written, _ = self._output_pages(candidate, Path(d["pdf"]))
-            if written < max(1, int(rec.get("pages") or 1)):
+            expected = max(1, int(rec.get("pages") or 1))
+            written, _ = self._output_pages(candidate, Path(d["pdf"]), expected)
+            if written < expected:
                 demoted = {**rec, "status": "failed", "written_pages": written, "ts": now_iso(),
                            "error": f"Output files missing on resume ({written} of {rec.get('pages')} page(s) found); will re-extract."}
                 store.append_jsonl(rdir / "docs.jsonl", demoted)
