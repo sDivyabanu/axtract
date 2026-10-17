@@ -24,7 +24,7 @@ from services import progress
 from security.output_safety import sanitise_block_text, sanitise_markdown
 from extractors.registry import get_extractor
 from models.document import DocumentResponse
-from models.errors import AppError
+from models.errors import AppError, DocumentError
 from services.region_router import route_regions
 from services.layout_service import assign_reading_order
 from services import preview_service
@@ -73,6 +73,7 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
         remove_temp_file(temp_path)  # kept until now so AXTRACT Verify can read the original
 
 
+@cached_request
 def parse_path(
     path: Path,
     filename: str,
@@ -135,7 +136,34 @@ def _parse_file(
     _report_security(security_findings)  # the security stage now also covers the extracted text
 
     # 4a. Charts, equations and figures: route every region to its reader
-    route_regions(result, temp_path, file_type)
+    if deadline.remaining() > 4.0:
+        try:
+            route_regions(result, temp_path, file_type)
+        except AppError as exc:
+            if exc.code == "TIMEOUT":
+                result.errors.append(
+                    DocumentError(
+                        code="REGION_ROUTING_TIMEOUT",
+                        message="Region routing skipped due to remaining time budget.",
+                    )
+                )
+            else:
+                raise
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Region routing failed non-fatally")
+            result.errors.append(
+                DocumentError(
+                    code="REGION_ROUTING_FAILED",
+                    message=f"Region routing failed: {exc}",
+                )
+            )
+    else:
+        result.errors.append(
+            DocumentError(
+                code="REGION_ROUTING_SKIPPED",
+                message="Time budget reached; region routing skipped.",
+            )
+        )
 
     # 4b. Preview artifacts (never fatal). Office files are converted to PDF here.
     preview = preview_service.prepare(document_id, temp_path, file_type, persistent=persistent_preview)

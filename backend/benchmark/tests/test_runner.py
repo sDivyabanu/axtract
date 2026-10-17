@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -172,7 +173,7 @@ def test_failed_documents_make_the_result_invalid_and_diagnostic(make_runner):
     run_id = r.create_run(per_category=8, seed=1, categories=["alpha"])  # includes doc03
     assert r.execute(run_id)["status"] == "completed"
     st = r.status(run_id)
-    assert st["counts"] == {"total": 8, "done": 7, "failed": 1, "timed_out": 0, "empty": 0, "pending": 0}
+    assert st["counts"] == {"total": 8, "done": 7, "partial": 0, "failed": 1, "timed_out": 0, "empty": 0, "pending": 0, "degraded": 0}
     assert st["failures"][0]["pdf"] == "alpha/doc03.pdf" and st["failures"][0]["error"] == "RuntimeError: boom"
     res = r.results(run_id)
     assert res["validity"] == "invalid" and res["completeness"] == "incomplete"
@@ -235,6 +236,10 @@ def test_resume_after_crash_reports_interrupted_and_picks_up(make_runner):
     first = r.manifest(run_id)["documents"][0]["pdf"]
     store.append_jsonl(rdir / "docs.jsonl", {"pdf": first, "category": "alpha", "status": "done", "pages": 2,
                                              "total_ms": 10.0, "per_page_ms": 5.0})
+    out = rdir / "scoring" / "axtract" / Path(first).parent  # the finished document's pages are on disk
+    out.mkdir(parents=True, exist_ok=True)
+    for pg in (1, 2):
+        (out / f"{Path(first).stem}_pg{pg}_repeat1.md").write_text("md", encoding="utf-8")
     with (rdir / "docs.jsonl").open("a", encoding="utf-8") as fh:
         fh.write('{"pdf": "torn')  # the crash happened mid-write
     r._set_status(rdir, "running")  # simulate a crash: status stuck on running, no live lock

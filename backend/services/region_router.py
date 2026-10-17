@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -73,8 +74,52 @@ def _crop(img: Image.Image, bbox: BBox, pad: float = 0.004) -> Image.Image:
     return img.crop((x0, y0, max(x0 + 1, x1), max(y0 + 1, y1)))
 
 
+# pixel re-reads of text-layer formula candidates per page (each costs ~1-2 s with the local model)
+_MAX_REREAD_PER_PAGE = int(os.environ.get("AXTRACT_FORMULA_REREAD_PER_PAGE", "6"))
+# The current local recognizer scores 0 assertions on scanned pages (measured on the fixed sample) and costs
+# ~10-20 s per page there, so scanned PDF pages skip it unless explicitly enabled.
+_FORMULA_ON_SCANNED = os.environ.get("AXTRACT_FORMULA_SCANNED", "0") == "1"
+
+
 def _budget_ok() -> bool:
     return deadline.remaining() > _MIN_BUDGET
+
+
+# A scanned-page figure may replace its OCR text with a numeric chart only on strong positive evidence. The layout
+# model calling a region "figure" is not evidence (a handwritten letter was turned into a fabricated pie chart).
+_MIN_SCANNED_CHART_CONFIDENCE = 0.7
+_MAX_OCR_CHARS_IN_CHART = 600  # paragraphs of text are not a chart; real charts carry only labels
+_UNRELIABLE_CHART_FLAGS = frozenset({
+    "some_slice_labels_unreadable", "some_category_labels_unreadable", "some_values_unreadable",
+    "data_labels_disagree_with_measurement", "printed_percentages_do_not_sum_to_100",
+    "y_axis_not_calibrated", "x_axis_not_calibrated", "y_axis_calibration_poor", "no_x_labels",
+})
+_GENERIC_LABEL = re.compile(r"^(slice|series|category)\s*\d+$", re.I)
+
+
+def looks_like_fabricated_pie(reading) -> bool:
+    """The signature of the old_scans/40 false chart: values estimated from pixel shares AND slice labels that could not
+    be read (so categories fell back to 'Slice N'). No reader should turn that into data on any route."""
+    if reading is None:
+        return False
+    data = reading.data or {}
+    cats = [str(c).strip() for c in (data.get("categories") or [])]
+    unreadable = "some_slice_labels_unreadable" in (reading.flags or []) or any(_GENERIC_LABEL.match(c) for c in cats)
+    return data.get("chart_type") == "pie" and bool(data.get("values_estimated")) and unreadable
+
+
+def scanned_chart_evidence_is_strong(reading, ocr_chars_in_region: int) -> bool:
+    """True only for a reading that measured and labelled real data; anything doubtful keeps the original OCR."""
+    if reading is None or reading.confidence < _MIN_SCANNED_CHART_CONFIDENCE:
+        return False
+    if _UNRELIABLE_CHART_FLAGS & set(reading.flags or []):
+        return False
+    if ocr_chars_in_region > _MAX_OCR_CHARS_IN_CHART:
+        return False
+    cats = reading.data.get("categories") or []
+    if any(not str(c).strip() or _GENERIC_LABEL.match(str(c).strip()) for c in cats):
+        return False
+    return has_numeric_values(reading.data)
 
 
 def _is_monochrome(img: Image.Image) -> bool:
@@ -105,7 +150,7 @@ def _classify(img: Image.Image, hint: str | None = None, layout_class: str | Non
         except Exception:  # noqa: BLE001 - a bad image must not fail the document
             logger.exception("chart reader failed")
             reading = None
-        if reading is not None and has_numeric_values(reading.data):
+        if reading is not None and not looks_like_fabricated_pie(reading) and has_numeric_values(reading.data):
             return "chart", reading
 
     aspect = w / h
@@ -156,6 +201,8 @@ def route_regions(result: ExtractionResult, file_path: Path, file_type: str) -> 
     try:
         if file_type == "pdf":
             _route_pdf(result, file_path)
+            from services.scanned_math import route_scanned_math
+            route_scanned_math(result, file_path)
         elif file_type in ("docx", "pptx"):
             _route_office_pictures(result)
         elif file_type in ("jpg", "jpeg", "png"):
@@ -313,7 +360,9 @@ def _route_regions_on_image(result: ExtractionResult, img: Image.Image, page: in
                 reading = read_chart(_crop(img, r.bbox))
             except Exception:  # noqa: BLE001
                 logger.exception("chart reader failed")
-            if reading is not None and has_numeric_values(reading.data):
+            ocr_chars = sum(len("".join(b.content.split())) for b in result.blocks
+                            if b.page == page and b.extractor == "rapidocr" and b.bbox and _center_in(r.bbox, b.bbox))
+            if scanned_chart_evidence_is_strong(reading, ocr_chars):
                 _replace_ocr_inside(result, page, r.bbox)
                 result.blocks.append(make_chart_block(
                     f"p{page}-chart{n_ch}", page, r.bbox, reading.data, reading.confidence, reading.flags,
@@ -391,6 +440,20 @@ def _page_content_crop(doc, pno: int, page_img: Image.Image) -> Image.Image:
     return page_img
 
 
+def _capped_render_dpi(file_path: Path, pno: int) -> float:
+    """RENDER_DPI, lowered so the page raster obeys the OCR side/area caps (ordinary pages are unchanged)."""
+    import pymupdf
+
+    from services.pdf_router import fit_zoom
+
+    try:
+        with pymupdf.open(str(file_path)) as doc:
+            rect = doc[pno - 1].rect
+        return min(RENDER_DPI, 72.0 * fit_zoom(rect.width, rect.height, base_dpi=RENDER_DPI))
+    except Exception:  # noqa: BLE001 - PDFium rechecks its own geometry and raster before returning an image
+        return 72
+
+
 def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
     import pdfplumber
     import pymupdf
@@ -402,12 +465,16 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
     inline_pages = {b.page for b in blocks if b.type in (BlockType.PARAGRAPH, BlockType.LIST)}
 
     # 1. vector charts (pdfplumber) on pages that actually have drawing primitives
+    MAX_VECTOR_CHART_DRAWINGS = 5000
     vector_pages: list[int] = []
     with pymupdf.open(str(file_path)) as doc:
         for pno in range(1, doc.page_count + 1):
             try:
-                if len(doc[pno - 1].get_cdrawings()) >= 8:
+                drawings_count = len(doc[pno - 1].get_cdrawings())
+                if 8 <= drawings_count <= MAX_VECTOR_CHART_DRAWINGS:
                     vector_pages.append(pno)
+                elif drawings_count > MAX_VECTOR_CHART_DRAWINGS:
+                    logger.info("Page %d has %d drawings; skipping vector chart analysis", pno, drawings_count)
             except Exception:  # noqa: BLE001
                 continue
     vector_found: dict[int, list] = {}
@@ -418,7 +485,9 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
         with source_pdf(file_path) as plumber:
             for pno in vector_pages:
-                deadline.check()
+                if deadline.remaining() <= _MIN_BUDGET:
+                    result.errors.append(DocumentError(code="VECTOR_CHART_SKIPPED", message="Time budget reached; vector chart search skipped.", page=pno))
+                    break
                 try:
                     page = plumber.pages[pno - 1]
                     charts = read_vector_charts(page)
@@ -448,14 +517,18 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
     def image_of(pno: int) -> Image.Image:
         if pno not in page_img:
-            page_img[pno] = preview_service.render_page_pil(file_path, pno, RENDER_DPI)
+            from utils.request_cache import get_cached_image
+            cached = get_cached_image(file_path, pno)
+            if cached is not None:
+                page_img[pno] = cached
+            else:
+                page_img[pno] = preview_service.render_page_pil(file_path, pno, _capped_render_dpi(file_path, pno))
         return page_img[pno]
 
     analyzed = 0
     fitz_doc = pymupdf.open(str(file_path))
     for pno in work_pages:
-        deadline.check()
-        if not _budget_ok():
+        if deadline.remaining() <= _MIN_BUDGET:
             result.errors.append(DocumentError(code="REGION_ROUTING_SKIPPED", message="Time budget reached; remaining pages were not analysed for charts/equations.", page=pno))
             break
         page_figures = [b for b in blocks if b.page == pno and b.type == BlockType.FIGURE
@@ -483,9 +556,11 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
 
         regions = []
         try:
-            # Layout inference is useful for equation candidates and scanned pages;
-            # figure crops are already routed through the visual classifier below.
-            regions = models.detect_layout(img) if must_analyze_pixels else []
+            # RapidLayout (bundled CDLA ONNX) is independent of the formula weights: it finds
+            # charts/figures on scanned pages even without them. Equation regions are only
+            # *read* where the formula model exists (see 2c / _classify). Needs deadline left.
+            if must_analyze_pixels and _budget_ok():
+                regions = models.detect_layout(img)
         except Exception:  # noqa: BLE001
             logger.exception("layout detection failed on page %s", pno)
 
@@ -515,12 +590,15 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
             blocks[idx] = _to_chart(blk, payload) if kind == "chart" else _to_equation(blk, payload)
 
         # 2b. formula candidates in the text layer: re-read the rendered crop
+        n_reread = 0
         for blk in page_candidates:
             if blk not in blocks:
                 continue
-            if not _budget_ok() or not models.latex_model_available():
+            if (not _budget_ok() or not models.latex_model_available()
+                    or n_reread >= _MAX_REREAD_PER_PAGE or len(blk.content.strip()) < 4):
                 blk.metadata.setdefault("flags", []).append("formula_not_checked")
                 continue
+            n_reread += 1
             fr = recognize_formula(_crop(img, blk.bbox, pad=0.003))
             if fr.latex and fr.valid and fr.mathy and not fr.looks_like_prose and crosscheck(fr.latex, blk.content) >= 0.5:
                 idx = blocks.index(blk)
@@ -530,6 +608,8 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
         n_eq = 0
         for r in regions:
             if r.cls != "equation" or r.score < 0.5 or not _budget_ok() or not models.latex_model_available():
+                continue
+            if pno in scanned_pages and not _FORMULA_ON_SCANNED:
                 continue
             if any(b.page == pno and b.bbox and b.type in (BlockType.EQUATION, BlockType.FIGURE, BlockType.CHART)
                    and _iou(r.bbox, b.bbox) > 0.25 for b in blocks):
@@ -571,9 +651,11 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
                         reading = read_chart(_crop(img, r.bbox))
                     except Exception:  # noqa: BLE001
                         reading = None
-                    if reading is not None and has_numeric_values(reading.data):
-                        blocks[:] = [b for b in blocks if not (b.page == pno and b.extractor == "rapidocr"
-                                                              and b.bbox and _center_in(r.bbox, b.bbox))]
+                    inside_ocr = [b for b in blocks if b.page == pno and b.extractor == "rapidocr"
+                                  and b.bbox and _center_in(r.bbox, b.bbox)]
+                    ocr_chars = sum(len("".join(b.content.split())) for b in inside_ocr)
+                    if scanned_chart_evidence_is_strong(reading, ocr_chars):
+                        blocks[:] = [b for b in blocks if b not in inside_ocr]
                         blocks.append(make_chart_block(
                             f"p{pno}-chart{analyzed}", pno, r.bbox, reading.data, reading.confidence,
                             reading.flags, {"route": "scanned", "layout_class": "figure"}))
@@ -584,7 +666,7 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
         # one formula (same guards as the standalone-image path, so scanned text
         # pages can never be misread as math).
         if (
-            pno in scanned_pages and n_eq == 0 and _budget_ok()
+            pno in scanned_pages and _FORMULA_ON_SCANNED and n_eq == 0 and _budget_ok()
             and models.latex_model_available()
             and not any(b.page == pno and b.type in (BlockType.EQUATION, BlockType.CHART, BlockType.TABLE)
                         for b in blocks)

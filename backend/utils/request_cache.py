@@ -8,7 +8,7 @@ _state = ContextVar('parse_intermediates', default=None)
 
 @contextmanager
 def request_cache():
-    state = {'memo': {}, 'chars': 0, 'pdfs': {}, 'ocr': {}}
+    state = {'memo': {}, 'chars': 0, 'pdfs': {}, 'ocr': {}, 'images': {}}
     token = _state.set(state)
     try:
         yield
@@ -82,3 +82,23 @@ def close_source_path(path):
         pdf = state['pdfs'].pop(str(Path(path).resolve()), None)
         if pdf is not None:
             pdf.close()
+
+
+def get_cached_image(path, page: int):
+    """Retrieve pre-rendered page image from request cache if available."""
+    state = _state.get()
+    if state is None or path is None:
+        return None
+    key = (str(Path(path).resolve()), page)
+    return state.get("images", {}).get(key)
+
+
+def set_cached_image(path, page: int, image) -> None:
+    """Store pre-rendered page image in request cache for downstream stage reuse."""
+    state = _state.get()
+    if state is None or path is None or image is None:
+        return
+    images = state.setdefault("images", {})
+    if len(images) < 16:  # bounded per-request memory
+        key = (str(Path(path).resolve()), page)
+        images[key] = image

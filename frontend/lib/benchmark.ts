@@ -30,6 +30,10 @@ export interface BenchCounts {
   timed_out: number;
   empty: number;
   pending: number;
+  /** Some pages have no output; the run is incomplete. Absent on imported runs. */
+  partial?: number;
+  /** Every page written, but extraction reported errors. Informational. */
+  degraded?: number;
 }
 
 export type BenchStatus = "created" | "running" | "completed" | "failed" | "cancelled" | "interrupted" | "imported";
@@ -57,6 +61,7 @@ export interface BenchRunStatus {
   elapsed_s: number;
   error: string | null;
   resumable: boolean;
+  completeness?: "complete" | "incomplete" | null;
   cancel_requested?: boolean;
   sample_id: string | null;
   dataset_id: string | null;

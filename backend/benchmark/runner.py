@@ -25,6 +25,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+import re
+from glob import escape as glob_escape
 from pathlib import Path
 from typing import Any, Callable
 
@@ -205,14 +207,21 @@ class BenchmarkRunner:
     # ---- progress ---------------------------------------------------------------------------
     @staticmethod
     def _counts(manifest: list[dict], docs: dict) -> dict:
-        c = {"total": len(manifest), "done": 0, "failed": 0, "timed_out": 0, "empty": 0, "pending": 0}
+        """done = every page has non-empty output; partial = some pages have none; failed = no usable output.
+        `degraded` (extraction reported errors but every page was written) is informational only."""
+        c = {"total": len(manifest), "done": 0, "partial": 0, "failed": 0, "timed_out": 0, "empty": 0, "pending": 0,
+             "degraded": 0}
         for d in manifest:
             rec = docs.get(d["pdf"])
             if not rec:
                 c["pending"] += 1
-            elif rec["status"] == "done":
+                continue
+            c["empty"] += 1 if rec.get("empty") else 0
+            if rec["status"] == "done":
                 c["done"] += 1
-                c["empty"] += 1 if rec.get("empty") else 0
+                c["degraded"] += 1 if rec.get("degraded") else 0
+            elif rec["status"] == "partial":
+                c["partial"] += 1
             else:
                 c["failed"] += 1
                 c["timed_out"] += 1 if rec.get("timed_out") else 0
@@ -226,7 +235,7 @@ class BenchmarkRunner:
         self._progress_at[key] = time.monotonic()
         manifest = store.read_json(rdir / "manifest.json", {"documents": []})["documents"]
         failures = [{"pdf": p, "category": d["category"], "error": d.get("error"), "timed_out": bool(d.get("timed_out"))}
-                    for p, d in docs.items() if d["status"] == "failed"]
+                    for p, d in docs.items() if d["status"] in ("failed", "partial")]
         elapsed = elapsed_base + (time.time() - session_start if session_start else 0.0)
         store.atomic_write_json(rdir / "progress.json", {
             "run_id": key, "phase": phase, "updated_at": now_iso(), "counts": self._counts(manifest, docs),
@@ -246,7 +255,7 @@ class BenchmarkRunner:
         run = store.read_json(rdir / "run.json")
         if not run:
             raise RunError("RUN_NOT_FOUND", "Run not found.", 404)
-        if run["status"] in ("completed", "imported"):
+        if run["status"] == "imported" or (run["status"] == "completed" and run.get("completeness") != "incomplete"):
             raise RunError("RUN_COMPLETED", "This run is already complete.", 409)
         if not self.lock.acquire(run_id):
             raise RunError("RUN_CONFLICT", "Another benchmark run is already active.", 409)
@@ -278,6 +287,7 @@ class BenchmarkRunner:
 
             manifest = store.read_json(rdir / "manifest.json")["documents"]
             docs = store.read_jsonl_last(rdir / "docs.jsonl", "pdf")
+            self._reverify_outputs(rdir, manifest, docs)
             pending = [d for d in manifest if docs.get(d["pdf"], {}).get("status") != "done"]
             workers = procutil.worker_budget(run["config"]["workers"], config.MAX_WORKERS)
             if workers != run["config"]["workers"]:
@@ -313,7 +323,8 @@ class BenchmarkRunner:
             if failed:
                 return self._set_status(rdir, "failed", error=results["scoring_error"])
             return self._set_status(rdir, "completed", finished_at=now_iso(), score_kind=results["score_kind"],
-                                    is_official=results["is_official"], score_label=results["score_label"])
+                                    is_official=results["is_official"], score_label=results["score_label"],
+                                    completeness=results["completeness"])
         except RunError:
             self._set_status(rdir, run["status"])
             raise
@@ -336,6 +347,7 @@ class BenchmarkRunner:
                 return None
             rel = Path(doc["pdf"])
             t0 = time.perf_counter()
+            self._clear_outputs(candidate, rel)  # a retry must not inherit pages written by an earlier attempt
             try:
                 if pool:
                     meta = pool.extract(scoring / "pdfs" / rel, rel, candidate)
@@ -357,29 +369,85 @@ class BenchmarkRunner:
                 pages = int(meta.get("pages") or 0)
                 total_ms = float(meta.get("total_elapsed_ms") or 0.0)
                 ok = bool(meta.get("success"))
-                empty_pages = self._empty_pages(candidate, Path(doc["pdf"])) if ok else 0
+                written, blank = self._output_pages(candidate, Path(doc["pdf"]), pages)
+                if ok and written <= 0:
+                    ok, meta["error"] = False, meta.get("error") or "Extraction reported success but wrote no output."
+                if not ok:
+                    status = "failed"
+                elif pages and written < pages:
+                    status = "partial"  # the scorer would find these pages missing
+                    meta["error"] = f"{pages - written} of {pages} page(s) have no output" + (
+                        f" ({meta['error']})" if meta.get("error") else "")
+                else:
+                    status = "done"
+                err_text = str(meta.get("error") or "")
                 rec = {
-                    "pdf": doc["pdf"], "category": doc["category"], "status": "done" if ok else "failed",
+                    "pdf": doc["pdf"], "category": doc["category"], "status": status,
                     "pages": pages, "total_ms": round(total_ms, 1),
-                    "per_page_ms": round(total_ms / pages, 1) if ok and pages else None,
-                    "empty": bool(ok and pages and empty_pages >= pages), "empty_pages": empty_pages,
+                    "per_page_ms": round(total_ms / pages, 1) if status != "failed" and pages else None,
+                    "written_pages": written, "missing_pages": max(0, pages - written) if pages else 0,
+                    "empty": bool(not ok and written <= 0 and (err_text.startswith("EMPTY_OUTPUT") or "no output" in err_text)),
+                    "empty_pages": blank, "degraded": bool(status == "done" and meta.get("partial")),
                     "timed_out": bool(meta.get("timed_out")), "verify_ms": meta.get("verify_ms"),
-                    "error": self.scrub(str(meta.get("error"))) if meta.get("error") else None, "ts": now_iso(),
+                    "error": self.scrub(err_text) if err_text else None, "ts": now_iso(),
                 }
                 store.append_jsonl(rdir / "docs.jsonl", rec)
                 docs[doc["pdf"]] = rec
                 self._write_progress(rdir, run, "extracting", docs, False, elapsed_base, session_start)
                 self.lock.beat(run["run_id"])
-                note = "EMPTY OUTPUT" if rec["empty"] else ("OK" if ok else "FAILED")
-                self._log(rdir, f"{note} {doc['pdf']} ({pages} pages, {total_ms:.0f} ms)" + (f": {meta.get('error')}" if not ok else ""))
+                note = "EMPTY OUTPUT" if rec["empty"] else {"done": "OK", "partial": "PARTIAL", "failed": "FAILED"}[status]
+                self._log(rdir, f"{note} {doc['pdf']} ({pages} pages, {total_ms:.0f} ms)" + (f": {rec['error']}" if status != "done" else ""))
         self._write_progress(rdir, run, "extracting", docs, True, elapsed_base, session_start)
 
     @staticmethod
-    def _empty_pages(candidate: Path, rel: Path) -> int:
+    def _output_files(candidate: Path, rel: Path) -> list[Path]:
         folder = candidate / rel.parent
-        if not folder.is_dir():
-            return 0
-        return sum(1 for f in folder.glob(f"{rel.stem}_pg*_repeat*.md") if f.stat().st_size == 0)
+        return list(folder.glob(f"{glob_escape(rel.stem)}_pg*_repeat*.md")) if folder.is_dir() else []
+
+    @classmethod
+    def _page_status(cls, candidate: Path, rel: Path) -> dict[int, bool]:
+        """page number -> has a non-empty output. Repeats of one page (_pg1_repeat1, _pg1_repeat2) are ONE page."""
+        pattern = re.compile(rf"{re.escape(rel.stem)}_pg(\d+)_repeat\d+\.md", re.I)
+        pages: dict[int, bool] = {}
+        for f in cls._output_files(candidate, rel):
+            m = pattern.fullmatch(f.name)
+            if m:
+                pages[int(m.group(1))] = pages.get(int(m.group(1)), False) or f.stat().st_size > 0
+        return pages
+
+    @classmethod
+    def _output_pages(cls, candidate: Path, rel: Path, expected_pages: int = 0) -> tuple[int, int]:
+        """(distinct expected pages with non-empty output, distinct expected pages whose output is empty).
+        Expected pages are 1..N; with N unknown (0) every page number found counts."""
+        status = cls._page_status(candidate, rel)
+        wanted = range(1, expected_pages + 1) if expected_pages else status.keys()
+        written = sum(1 for p in wanted if status.get(p))
+        empty = sum(1 for p in wanted if p in status and not status[p])
+        return written, empty
+
+    @classmethod
+    def _clear_outputs(cls, candidate: Path, rel: Path) -> None:
+        for f in cls._output_files(candidate, rel):  # run-owned folder only: never an official output tree
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+    def _reverify_outputs(self, rdir: Path, manifest: list[dict], docs: dict) -> None:
+        """A checkpoint says "done", the disk decides: demote documents whose output files went missing."""
+        candidate = rdir / "scoring" / CANDIDATE
+        for d in manifest:
+            rec = docs.get(d["pdf"])
+            if not rec or rec.get("status") != "done":
+                continue
+            expected = max(1, int(rec.get("pages") or 1))
+            written, _ = self._output_pages(candidate, Path(d["pdf"]), expected)
+            if written < expected:
+                demoted = {**rec, "status": "failed", "written_pages": written, "ts": now_iso(),
+                           "error": f"Output files missing on resume ({written} of {rec.get('pages')} page(s) found); will re-extract."}
+                store.append_jsonl(rdir / "docs.jsonl", demoted)
+                docs[d["pdf"]] = demoted
+                self._log(rdir, f"Output missing for {d['pdf']}: re-extracting")
 
     def _score(self, rdir: Path, run: dict, manifest: list[dict], docs: dict, cancel: threading.Event) -> dict | None:
         scoring = rdir / "scoring"
@@ -408,7 +476,7 @@ class BenchmarkRunner:
         jsonl_to_cat = {j: c for c, j in run["category_jsonl"].items()}
         diag = diagnostic_from_outcomes(outcomes, jsonl_to_cat)
         counts = self._counts(manifest, docs)
-        complete = counts["failed"] == 0 and counts["pending"] == 0
+        complete = counts["failed"] == 0 and counts["pending"] == 0 and counts["partial"] == 0
         validity = "error" if error else ("valid" if parsed["status"] == "valid" else "invalid" if parsed["status"] == "invalid" else "error")
         if validity == "error" and not error:
             error = "The official scorer produced no recognisable summary."
@@ -428,10 +496,10 @@ class BenchmarkRunner:
                 d = diag["categories"][name]
                 cats[name] = {"pass_rate_pct": d["pass_rate_pct"], "passed": d["passed"], "total": d["total"], "basis": "diagnostic"}
 
-        done = [d for d in docs.values() if d["status"] == "done"]
+        done = [d for d in docs.values() if d["status"] in ("done", "partial")]
         per_page = [d["per_page_ms"] for d in done if d.get("per_page_ms") is not None]
         timing = {
-            "documents": {pdf: {k: d.get(k) for k in ("category", "status", "pages", "total_ms", "per_page_ms", "empty", "timed_out", "error")}
+            "documents": {pdf: {k: d.get(k) for k in ("category", "status", "pages", "written_pages", "missing_pages", "total_ms", "per_page_ms", "empty", "degraded", "timed_out", "error")}
                           for pdf, d in docs.items()},
             "total_extraction_ms": round(sum(d.get("total_ms") or 0 for d in docs.values()), 1),
             "per_page_ms": {"mean": round(statistics.mean(per_page), 1) if per_page else None,
@@ -441,8 +509,14 @@ class BenchmarkRunner:
         notes = []
         if counts["failed"]:
             notes.append(f"{counts['failed']} document(s) produced no output ({counts['timed_out']} timed out), so the official scorer rejects the candidate; scores below are diagnostic.")
+        if counts["partial"]:
+            notes.append(f"{counts['partial']} document(s) are missing output for some pages, so the run is incomplete.")
+        if counts["pending"]:
+            notes.append(f"{counts['pending']} document(s) have not been extracted yet.")
         if counts["empty"]:
             notes.append(f"{counts['empty']} document(s) produced empty output.")
+        if counts["degraded"]:
+            notes.append(f"{counts['degraded']} document(s) wrote every page but reported extraction errors or timeouts.")
         results = {
             "run_id": run["run_id"], "mode": run["mode"], "score_kind": kind, "is_official": official,
             "score_label": LABELS[kind], "validity": validity, "completeness": "complete" if complete else "incomplete",
@@ -452,6 +526,7 @@ class BenchmarkRunner:
             "diagnostic_score_pct": diag["macro_average_pct"],
             "categories": cats, "test_types": diag["test_types"],
             "documents": {"total": counts["total"], "succeeded": counts["done"], "failed": counts["failed"],
+                          "partial": counts["partial"], "pending": counts["pending"], "degraded": counts["degraded"],
                           "timed_out": counts["timed_out"], "empty": counts["empty"]},
             "cases": {"evaluated": diag["cases"], "missing_output": diag["missing_output_cases"],
                       "failed": sum(v["total"] - v["passed"] for v in diag["categories"].values())},
@@ -488,11 +563,13 @@ class BenchmarkRunner:
             state = "interrupted"  # created but never picked up (e.g. refused for low memory): resumable, not "starting" forever
         keys = ("run_id", "mode", "score_kind", "is_official", "score_label", "created_at", "config", "git", "totals",
                 "error", "sample_id", "dataset_id", "scoring_config", "git_changed_since_creation", "imported",
-                "cancel_requested")
+                "cancel_requested", "completeness")
         return {**{k: run.get(k) for k in keys},
                 "status": state, "phase": progress.get("phase"), "counts": progress.get("counts"),
                 "elapsed_s": progress.get("elapsed_s", 0), "updated_at": progress.get("updated_at"),
-                "resumable": state in ("interrupted", "cancelled", "failed", "created") and run["status"] != "imported",
+                "resumable": (state in ("interrupted", "cancelled", "failed", "created")
+                              or (state == "completed" and run.get("completeness") == "incomplete"))
+                             and run["status"] != "imported",
                 "failures": progress.get("failures", []), "failure_count": progress.get("failure_count", 0)}
 
     @staticmethod

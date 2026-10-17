@@ -83,15 +83,34 @@ def process_single_pdf(
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # olmOCR-bench expects 1-indexed pages: {pdf_stem}_pg{page}_repeat1.md
+        written_pages = 0
         for page_num in range(1, pages + 1):
             page_blocks = [b for b in blocks if getattr(b, "page", 1) == page_num]
             page_md = blocks_to_markdown(page_blocks)
             
-            out_file = target_dir / f"{pdf_stem}_pg{page_num}_repeat1.md"
-            with open(out_file, "w", encoding="utf-8") as f:
-                f.write(page_md)
+            # Atomic file write: only write if non-empty, preventing empty scans from being recorded as valid
+            if page_md.strip():
+                out_file = target_dir / f"{pdf_stem}_pg{page_num}_repeat1.md"
+                tmp_file = target_dir / f"{pdf_stem}_pg{page_num}_repeat1.md.tmp.{os.getpid()}"
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    f.write(page_md)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_file, out_file)
+                written_pages += 1
 
-        result_meta["success"] = True
+        has_errors = bool(doc_resp.errors)
+        if written_pages == pages and not has_errors:
+            result_meta["success"] = True
+        elif written_pages > 0:
+            result_meta["success"] = True
+            result_meta["partial"] = True
+            if has_errors:
+                result_meta["error"] = "; ".join(e.message for e in doc_resp.errors if e.message)
+        else:
+            result_meta["success"] = False
+            err_msg = "; ".join(e.message for e in doc_resp.errors if e.message) if has_errors else "No readable content extracted from page(s)"
+            result_meta["error"] = f"EMPTY_OUTPUT: {err_msg}"
     except Exception as exc:
         result_meta["error"] = f"{type(exc).__name__}: {str(exc)}"
         logger.error(f"Failed processing {pdf_path.name}: {exc}\n{traceback.format_exc()}")
@@ -102,7 +121,7 @@ def process_single_pdf(
 
 
 def has_complete_output(pdf_path: Path, relative_path: Path, output_dir: Path) -> bool:
-    """Return whether candidate Markdown exists for every source PDF page."""
+    """Return whether candidate Markdown exists and is non-empty for every source PDF page."""
     import pymupdf
 
     try:
@@ -113,6 +132,7 @@ def has_complete_output(pdf_path: Path, relative_path: Path, output_dir: Path) -
     target_dir = output_dir / relative_path.parent
     return all(
         (target_dir / f"{pdf_path.stem}_pg{page}_repeat1.md").is_file()
+        and (target_dir / f"{pdf_path.stem}_pg{page}_repeat1.md").stat().st_size > 0
         for page in range(1, page_count + 1)
     )
 

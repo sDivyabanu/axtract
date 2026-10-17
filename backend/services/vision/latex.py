@@ -24,7 +24,7 @@ frac dfrac tfrac cfrac binom dbinom tbinom sqrt root sum prod coprod int iint ii
 bigcap bigvee bigwedge bigoplus bigotimes lim limsup liminf sup inf max min arg det dim exp gcd hom
 ker lg ln log Pr sin cos tan cot sec csc arcsin arccos arctan sinh cosh tanh coth deg mod bmod pmod
 pm mp times div cdot cdots ldots dots vdots ddots circ bullet ast star oplus ominus otimes oslash
-leq le geq ge neq ne approx equiv sim simeq cong propto ll gg prec succ preceq succeq subset supset
+lt gt leq le geq ge neq ne approx equiv sim simeq cong propto ll gg prec succ preceq succeq subset supset
 subseteq supseteq nsubseteq in notin ni cup cap setminus emptyset varnothing forall exists nexists
 neg lnot land lor wedge vee implies iff to rightarrow leftarrow leftrightarrow Rightarrow Leftarrow
 Leftrightarrow mapsto longrightarrow longleftarrow uparrow downarrow infty partial nabla angle
@@ -38,6 +38,11 @@ operatorname displaystyle textstyle scriptstyle limits nolimits
 quad qquad hspace thinspace medspace thickspace negthinspace phantom hphantom vphantom
 begin end hline cr not boxed cancel xcancel color
 space tag label
+therefore because sharp flat natural leqq geqq cdotp dagger ddagger dag ddag xrightarrow xleftarrow
+bf it rm sf tt normalsize small footnotesize large Large LARGE huge Huge tiny scriptsize
+bigl bigr Bigl Bigr biggl biggr Biggl Biggr nleq ngeq nless ngtr lesssim gtrsim lneq gneq square
+triangle varpropto colon lbrack rbrack thicksim thickapprox mathscr varDelta varGamma varTheta
+varLambda varXi varPi varSigma varPhi varOmega mathstrut strut smash rlap llap hat
 """.split()
 )
 _SPACING_SYMBOLS = set(",;:! ")  # \, \; \: \! \<space>
@@ -120,6 +125,12 @@ def validate_latex(latex: str) -> Validation:
         errors.append("empty ^ or _ group")
     if re.search(r"(\^|_)\s*(\^|_)", s):
         errors.append("double ^ or _")
+
+    # TeX dimensions cannot contain token-spaced units. A permissive MathML
+    # converter alone can accept sizes that KaTeX rejects.
+    for match in re.finditer(r"\\hspace\s*\{([^{}]*)\}",s):
+        if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:pt|em|ex|mu|cm|mm|in|pc|px)",match.group(1).strip()):
+            errors.append("invalid hspace dimension")
 
     # 4. final syntax pass with a real parser
     if not errors:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -196,6 +197,41 @@ def prepare(document_id: str, src: Path, file_type: str, persistent: bool = Fals
 # ---------------------------------------------------------------------------
 
 
+def _render_capped_pdfium_page(page, dpi: float):
+    """Keep PDFium's normal pixels, but bound allocation and verify the actual raster.
+
+    All PDFium page-rendering entry points share this guard, including preview PNGs,
+    region fallback and opt-in scanned math. Geometry comes from the renderer itself.
+    """
+    from services.pdf_router import fit_zoom, _MAX_OCR_PIXELS, _MAX_OCR_SIDE
+
+    width, height = page.get_size()
+    if not all(math.isfinite(value) and value > 0 for value in (width, height, dpi)):
+        raise PreviewError("PDF page geometry and render DPI must be finite and positive.")
+    try:
+        zoom = fit_zoom(width, height, base_dpi=dpi)
+        if not math.isfinite(zoom) or zoom <= 0:
+            raise PreviewError("PDF page geometry cannot be rendered at a positive bounded scale.")
+        for _ in range(8):
+            bitmap = page.render(scale=zoom, may_draw_forms=False)
+            try:
+                w, h = bitmap.width, bitmap.height
+                if 0 < min(w, h) and max(w, h) <= _MAX_OCR_SIDE and w * h <= _MAX_OCR_PIXELS:
+                    image = bitmap.to_pil().convert("RGB")
+                    if (0 < min(image.size) and max(image.size) <= _MAX_OCR_SIDE
+                            and image.width * image.height <= _MAX_OCR_PIXELS):
+                        return image
+                    image.close()
+            finally:
+                bitmap.close()
+            zoom *= 0.97
+    except PreviewError:
+        raise
+    except Exception as exc:
+        raise PreviewError(f"The PDF page could not be rendered safely: {exc}") from exc
+    raise PreviewError("The rendered PDF page exceeds the side or pixel-area cap.")
+
+
 def render_pdf_page(pdf_path: Path, page: int, dpi: int = DEFAULT_DPI) -> bytes:
     """Render a 1-based page of a PDF to PNG bytes."""
     with _pdfium_lock:
@@ -206,7 +242,11 @@ def render_pdf_page(pdf_path: Path, page: int, dpi: int = DEFAULT_DPI) -> bytes:
         try:
             if page < 1 or page > len(pdf):
                 raise PreviewError(f"Page {page} does not exist (document has {len(pdf)} pages).")
-            image = pdf[page - 1].render(scale=dpi / 72, may_draw_forms=False).to_pil().convert("RGB")
+            pdf_page = pdf[page - 1]
+            try:
+                image = _render_capped_pdfium_page(pdf_page, dpi)
+            finally:
+                pdf_page.close()
         except pdfium.PdfiumError as exc:
             raise PreviewError(f"Page {page} could not be rendered: {exc}") from exc
         finally:
@@ -216,12 +256,18 @@ def render_pdf_page(pdf_path: Path, page: int, dpi: int = DEFAULT_DPI) -> bytes:
     return buf.getvalue()
 
 
-def render_page_pil(pdf_path: Path, page: int, dpi: int = 200):
+def render_page_pil(pdf_path: Path, page: int, dpi: float = 200):
     """Render a 1-based PDF page to a PIL image (used by the region router)."""
     with _pdfium_lock:
         pdf = pdfium.PdfDocument(str(pdf_path))
         try:
-            return pdf[page - 1].render(scale=dpi / 72, may_draw_forms=False).to_pil().convert("RGB")
+            if page < 1 or page > len(pdf):
+                raise PreviewError(f"Page {page} does not exist (document has {len(pdf)} pages).")
+            pdf_page = pdf[page - 1]
+            try:
+                return _render_capped_pdfium_page(pdf_page, dpi)
+            finally:
+                pdf_page.close()
         finally:
             pdf.close()
 

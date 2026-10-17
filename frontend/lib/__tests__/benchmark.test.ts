@@ -68,6 +68,11 @@ test("progress counts failures as processed and clamps to 100%", () => {
   assert.equal(progressPercent(null), 0);
 });
 
+test("documents with missing pages count as processed but are shown separately", () => {
+  assert.equal(progressPercent({ total: 10, done: 5, failed: 1, partial: 2 }), 80);
+  assert.equal(progressPercent({ total: 4, done: 1, failed: 0 }), 25); // partial is optional (imported runs)
+});
+
 test("refresh recovery prefers the active run, then the newest", () => {
   assert.equal(pickRunToRestore("qk-active", [{ run_id: "qk-old" }]), "qk-active");
   assert.equal(pickRunToRestore(null, [{ run_id: "qk-new" }, { run_id: "qk-old" }]), "qk-new");

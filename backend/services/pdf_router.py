@@ -10,6 +10,7 @@ Pipeline:
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 
 import pymupdf
@@ -21,11 +22,83 @@ from extractors.pymupdf_extractor import PyMuPDFExtractor
 from models.document import BlockType, DocumentBlock
 from models.errors import AppError, DocumentError
 from utils import deadline
+from utils.request_cache import set_cached_image
 
 logger = logging.getLogger(__name__)
 
-# DPI for rendering scanned pages to images for OCR
-_OCR_RENDER_DPI = 200
+# Pre-render pixel budget and adaptive DPI constants
+_BASE_OCR_DPI = 200
+_MAX_OCR_PIXELS = 4_500_000  # Strictly enforced 4.5 Megapixel memory cap
+_MAX_OCR_SIDE = 2500
+_MIN_OCR_DPI_SINGLE = 72
+
+
+def _dims_ok(w_pt: float, h_pt: float, zoom: float, max_pixels: int, max_side: int) -> bool:
+    """Rendered size (rounded UP, as rasters are) obeys both the side and the area cap."""
+    px_w, px_h = math.ceil(w_pt * zoom - 1e-9) + 1, math.ceil(h_pt * zoom - 1e-9) + 1  # +1: pixel straddling
+    return max(px_w, px_h) <= max_side and px_w * px_h <= max_pixels
+
+
+def fit_dpi(w_pt: float, h_pt: float, base_dpi: float = _BASE_OCR_DPI,
+            max_pixels: int = _MAX_OCR_PIXELS, max_side: int = _MAX_OCR_SIDE) -> int:
+    """Largest integer DPI <= base_dpi whose raster (rounded up) obeys BOTH caps; 1 when none does
+    (`fit_zoom` then goes fractional)."""
+    raw_w, raw_h = w_pt * base_dpi / 72.0, h_pt * base_dpi / 72.0
+    scale = 1.0
+    if raw_w * raw_h > max_pixels:
+        scale = min(scale, (max_pixels / (raw_w * raw_h)) ** 0.5)
+    if max(raw_w, raw_h) * scale > max_side:
+        scale = min(scale, max_side / max(raw_w, raw_h))
+    dpi = max(1, int(round(base_dpi * scale)))
+    while dpi > 1 and not _dims_ok(w_pt, h_pt, dpi / 72.0, max_pixels, max_side):
+        dpi -= 1
+    return dpi
+
+
+def fit_zoom(w_pt: float, h_pt: float, base_dpi: float = _BASE_OCR_DPI,
+             max_pixels: int = _MAX_OCR_PIXELS, max_side: int = _MAX_OCR_SIDE) -> float:
+    """Pixels per point obeying both caps. Integer-DPI when one exists (unchanged results), otherwise a fractional
+    zoom, so even an extreme page never needs an exception to the caps."""
+    dpi = fit_dpi(w_pt, h_pt, base_dpi, max_pixels, max_side)
+    if _dims_ok(w_pt, h_pt, dpi / 72.0, max_pixels, max_side):
+        return dpi / 72.0
+    zoom = 0.995 * min((max_pixels / max(1.0, w_pt * h_pt)) ** 0.5, max_side / max(w_pt, h_pt, 1.0))
+    for _ in range(400):
+        if _dims_ok(w_pt, h_pt, zoom, max_pixels, max_side):
+            return zoom
+        zoom *= 0.97
+    raise ValueError(f"a {w_pt:.0f} x {h_pt:.0f} pt region cannot be rendered within the pixel caps")
+
+
+def render_capped(page: pymupdf.Page, clip: pymupdf.Rect | None, w_pt: float, h_pt: float,
+                  base_dpi: float = _BASE_OCR_DPI, max_pixels: int = _MAX_OCR_PIXELS,
+                  max_side: int = _MAX_OCR_SIDE) -> tuple[pymupdf.Pixmap, float]:
+    """Render and VERIFY the raster: returns (pixmap, zoom) with width/height within both caps, else raises."""
+    zoom = fit_zoom(w_pt, h_pt, base_dpi, max_pixels, max_side)
+    for _ in range(8):
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=clip, alpha=False)
+        if max(pix.width, pix.height) <= max_side and pix.width * pix.height <= max_pixels:
+            return pix, zoom
+        zoom *= 0.97
+    raise ValueError("rendered raster exceeds the pixel caps")
+
+
+def ensure_unique_block_ids(blocks: list[DocumentBlock]) -> int:
+    """Safety net: rename later duplicates (`id~2`, `id~3`...). Returns how many were renamed."""
+    seen: dict[str, int] = {}
+    renamed = 0
+    for b in blocks:
+        n = seen.get(b.id, 0) + 1
+        seen[b.id] = n
+        if n > 1:
+            new = f"{b.id}~{n}"
+            while new in seen:
+                n += 1
+                new = f"{b.id}~{n}"
+            seen[new] = 1
+            b.id = new
+            renamed += 1
+    return renamed
 
 
 class PDFRouter:
@@ -61,7 +134,17 @@ class PDFRouter:
             result = ExtractionResult(page_count=doc.page_count)
 
             for page_number, page in enumerate(doc, start=1):
-                deadline.check()
+                try:
+                    deadline.check()
+                except AppError as exc:
+                    if exc.code != "TIMEOUT":
+                        raise
+                    result.errors.append(DocumentError(
+                        code="PAGES_PARTIAL",
+                        message=(f"Time budget reached after {page_number - 1} of {doc.page_count} page(s); "
+                                 "text from the finished pages is kept."),
+                        page=page_number))
+                    break
                 try:
                     analysis = PyMuPDFExtractor.analyze_page(page)
                     route = self._decide_route(analysis)
@@ -74,7 +157,7 @@ class PDFRouter:
 
                     elif route == "scanned":
                         ocr_blocks, ocr_errors = self._ocr_page(
-                            page, page_number
+                            page, page_number, file_path=file_path, analysis=analysis
                         )
                         for b in ocr_blocks:
                             b.metadata["route"] = "scanned"
@@ -92,7 +175,7 @@ class PDFRouter:
                         total_text = sum(len(b.content) for b in digital_blocks)
                         if total_text < 50:
                             ocr_blocks, ocr_errors = self._ocr_page(
-                                page, page_number
+                                page, page_number, file_path=file_path, analysis=analysis
                             )
                             for b in ocr_blocks:
                                 b.metadata["route"] = "mixed-ocr"
@@ -131,6 +214,9 @@ class PDFRouter:
                 if not b.metadata.get("_internal_meta")
             ]
 
+            renamed = ensure_unique_block_ids(result.blocks)
+            if renamed:
+                logger.warning("renamed %d duplicate block id(s)", renamed)
             self._assign_heading_levels(result.blocks)
             return result
 
@@ -160,18 +246,146 @@ class PDFRouter:
         return "digital"  # Empty page, let PyMuPDF handle it
 
     def _ocr_page(
-        self, page: pymupdf.Page, page_number: int
+        self,
+        page: pymupdf.Page,
+        page_number: int,
+        file_path: Path | None = None,
+        analysis: dict | None = None,
     ) -> tuple[list[DocumentBlock], list[DocumentError]]:
-        """Render page to image and run OCR."""
+        """Render page to image within strict pixel budgets and run OCR."""
+        errors: list[DocumentError] = []
         try:
-            # Render page to pixmap
-            mat = pymupdf.Matrix(_OCR_RENDER_DPI / 72, _OCR_RENDER_DPI / 72)
-            pix = page.get_pixmap(matrix=mat, alpha=False)
+            w_pt, h_pt = page.rect.width, page.rect.height
+            target_dpi = fit_dpi(w_pt, h_pt)
 
-            # Convert to PIL Image
+            # Bounded tiling fallback for enormous pages where single-pass DPI drops below 72
+            if target_dpi < _MIN_OCR_DPI_SINGLE and (w_pt > 2000 or h_pt > 2000):
+                cols = 2 if w_pt > 2500 else 1
+                rows = 2 if h_pt > 2500 else 1
+                tile_blocks: list[DocumentBlock] = []
+                tile_w_pt = w_pt / cols
+                tile_h_pt = h_pt / rows
+                pad_x = tile_w_pt * 0.05
+                pad_y = tile_h_pt * 0.05
+                max_tile_pixels = 3_500_000
+
+                total_tiles = rows * cols
+                done_tiles = 0
+                stopped: str | None = None
+                for r in range(rows):
+                    for c in range(cols):
+                        if stopped:
+                            break
+                        try:
+                            deadline.check()
+                        except AppError as exc:
+                            if exc.code != "TIMEOUT":
+                                raise
+                            stopped = "the time budget was reached"
+                            break
+                        x0 = max(0.0, c * tile_w_pt - pad_x)
+                        y0 = max(0.0, r * tile_h_pt - pad_y)
+                        x1 = min(w_pt, (c + 1) * tile_w_pt + pad_x)
+                        y1 = min(h_pt, (r + 1) * tile_h_pt + pad_y)
+                        clip = pymupdf.Rect(x0, y0, x1, y1)
+                        tw_pt = clip.width
+                        th_pt = clip.height
+                        # both the area and the longest-side cap apply to every tile (verified after rendering)
+                        try:
+                            pix, tile_zoom = render_capped(page, clip, tw_pt, th_pt, max_pixels=max_tile_pixels)
+                            tile_dpi = round(tile_zoom * 72.0, 2)
+                            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                            sub_blocks, sub_errors = self._ocr.ocr_pil_image(img, page_number)
+                        except Exception as exc:  # noqa: BLE001 - keep the tiles that already succeeded
+                            errors.append(DocumentError(
+                                code="OCR_TILE_FAILED",
+                                message=f"Page {page_number} tile {r * cols + c + 1}/{total_tiles}: {exc}",
+                                page=page_number))
+                            continue
+                        done_tiles += 1
+                        errors.extend(sub_errors)
+
+                        # Remap coordinates from tile relative to whole page relative
+                        clip_rel_x0 = x0 / w_pt
+                        clip_rel_y0 = y0 / h_pt
+                        clip_rel_w = tw_pt / w_pt
+                        clip_rel_h = th_pt / h_pt
+
+                        for b in sub_blocks:
+                            # OCR numbers its blocks per image: make ids unique across tiles
+                            b.id = f"p{page_number}-r{r}c{c}-{b.id.split('-', 1)[-1]}"
+                            b.metadata["ocr_tile"] = {"row": r, "col": c, "tile_dpi": tile_dpi}
+                            if b.bbox:
+                                bx0, by0, bx1, by1 = b.bbox
+                                remapped_bbox = (
+                                    round(clip_rel_x0 + bx0 * clip_rel_w, 6),
+                                    round(clip_rel_y0 + by0 * clip_rel_h, 6),
+                                    round(clip_rel_x0 + bx1 * clip_rel_w, 6),
+                                    round(clip_rel_y0 + by1 * clip_rel_h, 6),
+                                )
+                                # Overlap deduplication
+                                is_dup = any(
+                                    existing.bbox and abs(existing.bbox[0] - remapped_bbox[0]) < 0.02
+                                    and abs(existing.bbox[1] - remapped_bbox[1]) < 0.02
+                                    and existing.content.strip() == b.content.strip()
+                                    for existing in tile_blocks
+                                )
+                                if not is_dup:
+                                    b.bbox = remapped_bbox
+                                    tile_blocks.append(b)
+                            else:
+                                tile_blocks.append(b)
+
+                if stopped or done_tiles < total_tiles:
+                    errors.append(DocumentError(
+                        code="OCR_TILES_PARTIAL",
+                        message=(f"Page {page_number}: OCR completed {done_tiles} of {total_tiles} tiles"
+                                 + (f" ({stopped})" if stopped else "") + "; text from the finished tiles is kept."),
+                        page=page_number))
+
+                # Cache a preview-sized overview for downstream region routing
+                try:
+                    overview_pix, _ = render_capped(page, None, w_pt, h_pt)
+                    overview_img = Image.frombytes("RGB", (overview_pix.width, overview_pix.height), overview_pix.samples)
+                    if file_path:
+                        set_cached_image(file_path, page_number, overview_img)
+                except Exception as exc:  # noqa: BLE001 - the OCR text of the finished tiles must survive
+                    errors.append(DocumentError(
+                        code="OCR_OVERVIEW_FAILED",
+                        message=f"Page {page_number}: overview image unavailable ({exc}); OCR text from the tiles is kept.",
+                        page=page_number))
+
+                if not tile_blocks and analysis and (analysis.get("has_images") or analysis.get("is_likely_scanned")):
+                    errors.append(
+                        DocumentError(
+                            code="OCR_NO_TEXT_FOUND",
+                            message=f"Scanned page {page_number} yielded no detectable text.",
+                            page=page_number,
+                        )
+                    )
+                return tile_blocks, errors
+
+            # Standard single-pass render (guaranteed <= _MAX_OCR_PIXELS)
+            pix, _ = render_capped(page, None, w_pt, h_pt)
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
-            return self._ocr.ocr_pil_image(img, page_number)
+            # Store in request cache so region_router can reuse it directly without re-rendering
+            if file_path:
+                set_cached_image(file_path, page_number, img)
+
+            blocks, ocr_errors = self._ocr.ocr_pil_image(img, page_number)
+            errors.extend(ocr_errors)
+
+            if not blocks and analysis and (analysis.get("has_images") or analysis.get("is_likely_scanned")):
+                errors.append(
+                    DocumentError(
+                        code="OCR_NO_TEXT_FOUND",
+                        message=f"Scanned page {page_number} yielded no detectable text.",
+                        page=page_number,
+                    )
+                )
+
+            return blocks, errors
         except Exception as exc:
             return [], [
                 DocumentError(
