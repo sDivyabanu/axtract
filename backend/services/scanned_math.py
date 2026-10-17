@@ -43,17 +43,8 @@ def page_size_points(path, page):
 def render_dpi_for(width_pt, height_pt, base=200):
     """Render DPI under the same pixel and side caps the OCR path uses (see pdf_router), so enabling
     scanned math can never reintroduce the unbounded allocations that caused the 60 s timeouts."""
-    from services.pdf_router import _MAX_OCR_PIXELS, _MAX_OCR_SIDE
-    dpi = base
-    pixels = (width_pt * dpi / 72.0) * (height_pt * dpi / 72.0)
-    if pixels > _MAX_OCR_PIXELS:
-        dpi = dpi * (_MAX_OCR_PIXELS / pixels) ** 0.5
-    if max(width_pt, height_pt) * dpi / 72.0 > _MAX_OCR_SIDE:
-        dpi = min(dpi, _MAX_OCR_SIDE * 72.0 / max(width_pt, height_pt))
-    dpi = max(1, int(dpi))
-    while dpi > 1 and (width_pt * dpi / 72.0) * (height_pt * dpi / 72.0) > _MAX_OCR_PIXELS:
-        dpi -= 1
-    return dpi
+    from services.pdf_router import fit_dpi
+    return fit_dpi(width_pt, height_pt, base_dpi=base)
 
 
 def page_image(path, page):

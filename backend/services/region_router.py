@@ -97,6 +97,17 @@ _UNRELIABLE_CHART_FLAGS = frozenset({
 _GENERIC_LABEL = re.compile(r"^(slice|series|category)\s*\d+$", re.I)
 
 
+def looks_like_fabricated_pie(reading) -> bool:
+    """The signature of the old_scans/40 false chart: values estimated from pixel shares AND slice labels that could not
+    be read (so categories fell back to 'Slice N'). No reader should turn that into data on any route."""
+    if reading is None:
+        return False
+    data = reading.data or {}
+    cats = [str(c).strip() for c in (data.get("categories") or [])]
+    unreadable = "some_slice_labels_unreadable" in (reading.flags or []) or any(_GENERIC_LABEL.match(c) for c in cats)
+    return data.get("chart_type") == "pie" and bool(data.get("values_estimated")) and unreadable
+
+
 def scanned_chart_evidence_is_strong(reading, ocr_chars_in_region: int) -> bool:
     """True only for a reading that measured and labelled real data; anything doubtful keeps the original OCR."""
     if reading is None or reading.confidence < _MIN_SCANNED_CHART_CONFIDENCE:
@@ -139,7 +150,7 @@ def _classify(img: Image.Image, hint: str | None = None, layout_class: str | Non
         except Exception:  # noqa: BLE001 - a bad image must not fail the document
             logger.exception("chart reader failed")
             reading = None
-        if reading is not None and has_numeric_values(reading.data):
+        if reading is not None and not looks_like_fabricated_pie(reading) and has_numeric_values(reading.data):
             return "chart", reading
 
     aspect = w / h
@@ -349,7 +360,9 @@ def _route_regions_on_image(result: ExtractionResult, img: Image.Image, page: in
                 reading = read_chart(_crop(img, r.bbox))
             except Exception:  # noqa: BLE001
                 logger.exception("chart reader failed")
-            if reading is not None and has_numeric_values(reading.data):
+            ocr_chars = sum(len("".join(b.content.split())) for b in result.blocks
+                            if b.page == page and b.extractor == "rapidocr" and b.bbox and _center_in(r.bbox, b.bbox))
+            if scanned_chart_evidence_is_strong(reading, ocr_chars):
                 _replace_ocr_inside(result, page, r.bbox)
                 result.blocks.append(make_chart_block(
                     f"p{page}-chart{n_ch}", page, r.bbox, reading.data, reading.confidence, reading.flags,
@@ -427,6 +440,20 @@ def _page_content_crop(doc, pno: int, page_img: Image.Image) -> Image.Image:
     return page_img
 
 
+def _capped_render_dpi(file_path: Path, pno: int) -> int:
+    """RENDER_DPI, lowered so the page raster obeys the OCR side/area caps (ordinary pages are unchanged)."""
+    import pymupdf
+
+    from services.pdf_router import fit_dpi
+
+    try:
+        with pymupdf.open(str(file_path)) as doc:
+            rect = doc[pno - 1].rect
+        return min(RENDER_DPI, fit_dpi(rect.width, rect.height, base_dpi=RENDER_DPI))
+    except Exception:  # noqa: BLE001 - unknown size: fall back to a conservative DPI, never an unbounded one
+        return 72
+
+
 def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
     import pdfplumber
     import pymupdf
@@ -495,7 +522,7 @@ def _route_pdf(result: ExtractionResult, file_path: Path) -> None:
             if cached is not None:
                 page_img[pno] = cached
             else:
-                page_img[pno] = preview_service.render_page_pil(file_path, pno, RENDER_DPI)
+                page_img[pno] = preview_service.render_page_pil(file_path, pno, _capped_render_dpi(file_path, pno))
         return page_img[pno]
 
     analyzed = 0

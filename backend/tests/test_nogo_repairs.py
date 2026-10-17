@@ -253,3 +253,49 @@ def test_early_inventory_failure_reports_the_original_error(monkeypatch, tmp_pat
     path.write_bytes(b"%PDF-1.4")
     inv = inventory_pdf(path)
     assert inv.error == "RuntimeError: cannot open" and inv.timing_ms is not None
+
+
+# --- self-review iteration 2: the same defect classes on the neighbouring paths -----------------------------
+
+def test_fabricated_pie_is_rejected_on_the_digital_figure_path_too(monkeypatch):
+    from PIL import Image
+    monkeypatch.setattr(models, "latex_model_available", lambda: False)
+    monkeypatch.setattr(region_router, "read_chart", lambda *a, **k: FAKE_PIE)
+    assert region_router._classify(Image.new("RGB", (400, 400), "white")) is None
+    strong = ChartReading(data={"chart_type": "pie", "categories": ["A", "B"], "values_estimated": False,
+                                "series": [{"name": "s", "values": [60.0, 40.0]}]}, confidence=0.9, flags=[])
+    monkeypatch.setattr(region_router, "read_chart", lambda *a, **k: strong)
+    kind, reading = region_router._classify(Image.new("RGB", (400, 400), "white"))
+    assert kind == "chart" and reading is strong
+
+
+def test_photo_of_a_page_keeps_its_ocr_when_the_chart_reading_is_weak(monkeypatch):
+    from PIL import Image
+    monkeypatch.setattr(models, "detect_layout", lambda *a, **k: [Region("figure", 0.9, (0.0, 0.0, 1.0, 1.0))])
+    monkeypatch.setattr(region_router, "read_chart", lambda *a, **k: FAKE_PIE)
+    block = DocumentBlock(id="o", type=BlockType.PARAGRAPH, content="a handwritten line", page=1, bbox=(0.1, 0.1, 0.5, 0.2),
+                          confidence=0.9, extractor="rapidocr", metadata={})
+    result = ExtractionResult(page_count=1, blocks=[block])
+    region_router._route_regions_on_image(result, Image.new("RGB", (300, 300), "white"), 1)
+    assert [b.type for b in result.blocks] == [BlockType.PARAGRAPH]
+
+
+def test_fallback_page_render_for_regions_obeys_the_caps(tmp_path):
+    letter = tmp_path / "letter.pdf"
+    huge = tmp_path / "huge.pdf"
+    for path, size in ((letter, (612, 792)), (huge, (6000, 6000))):
+        doc = pymupdf.open()
+        doc.new_page(width=size[0], height=size[1])
+        doc.save(path)
+    assert region_router._capped_render_dpi(letter, 1) == region_router.RENDER_DPI  # ordinary pages unchanged
+    dpi = region_router._capped_render_dpi(huge, 1)
+    assert math.ceil(6000 * dpi / 72) + 1 <= MAX_SIDE
+    assert region_router._capped_render_dpi(tmp_path / "missing.pdf", 1) == 72
+
+
+def test_scanned_math_render_dpi_accounts_for_raster_rounding():
+    from services import scanned_math
+    for w, h in ((2500.4, 100), (612, 792), (6000, 6000), (100, 2499.9)):
+        dpi = scanned_math.render_dpi_for(w, h)
+        assert math.ceil(max(w, h) * dpi / 72) <= MAX_SIDE
+        assert math.ceil(w * dpi / 72) * math.ceil(h * dpi / 72) <= MAX_PIXELS
