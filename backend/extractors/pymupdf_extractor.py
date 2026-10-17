@@ -73,18 +73,40 @@ def _align_word_block_numbers(words: list[tuple], page_dict: dict) -> list[tuple
 
 def _word_lines(words: list[tuple]) -> dict[int, list[tuple[float, float, str]]]:
     """Return each text block's geometrically ordered lines from PyMuPDF words."""
-    grouped: dict[tuple[int, int], list[tuple[float, float, float, int, str]]] = defaultdict(list)
+    grouped: dict[tuple[int, float], list[tuple[float, float, float, float, int, str]]] = defaultdict(list)
     for word in words:
-        x0, y0, _x1, y1, text, block_no, line_no, word_no = word[:8]
-        grouped[(block_no, line_no)].append((x0, y0, y1, word_no, text))
+        x0, y0, x1, y1, text, block_no, line_no, word_no = word[:8]
+        mid_y = (y0 + y1) / 2
+        assigned_key = None
+        for (b, clus_y) in list(grouped.keys()):
+            if b == block_no and abs(mid_y - clus_y) < 3.0:
+                assigned_key = (b, clus_y)
+                break
+        if assigned_key is None:
+            assigned_key = (block_no, mid_y)
+        grouped[assigned_key].append((x0, y0, x1, y1, word_no, text))
+
     result: dict[int, list[tuple[float, float, str]]] = defaultdict(list)
-    for (block_no, _line_no), words in grouped.items():
-        words.sort(key=lambda item: (item[0], item[3]))
-        result[block_no].append((min(w[1] for w in words), max(w[2] for w in words),
-                                 " ".join(w[4] for w in words)))
+    for (block_no, _clus_y), w_list in grouped.items():
+        w_list.sort(key=lambda item: (item[0], item[4]))
+        merged: list[tuple[float, float, float, float, str]] = []
+        for item in w_list:
+            x0, y0, x1, y1, wno, text = item
+            if merged:
+                prev_x0, prev_y0, prev_x1, prev_y1, prev_text = merged[-1]
+                gap = x0 - prev_x1
+                # Sub-character spacing / negative overlap indicates intra-word fragment (syllable split)
+                if gap <= 1.2:
+                    merged[-1] = (prev_x0, prev_y0, max(prev_x1, x1), prev_y1, prev_text + text)
+                    continue
+            merged.append((x0, y0, x1, y1, text))
+        line_str = " ".join(m[4] for m in merged)
+        result[block_no].append((min(m[1] for m in merged), max(m[3] for m in merged), line_str))
+
     for block_no in result:
         result[block_no].sort(key=lambda line: line[0])
     return result
+
 
 
 def _detach_footnote_markers(text: str) -> tuple[str, list[str]]:

@@ -102,17 +102,16 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
             # the router tags with a "route") is classified by position.
             is_page_content = "route" in block.metadata
             if block.bbox is not None and is_page_content:
-                _, y1, _, y2 = block.bbox
+                x0, y1, x1, y2 = block.bbox
                 mid_y = (y1 + y2) / 2
                 position_key = (_normalized_text(block.content), round(mid_y, 1))
                 is_page_number = bool(re.fullmatch(r"(?:page\s*)?\d{1,4}", block.content.strip(), re.I))
                 font_size = block.metadata.get("font_size")
                 body_font_size = block.metadata.get("body_font_size")
+                has_fonts = isinstance(font_size, (int, float)) and isinstance(body_font_size, (int, float)) and body_font_size > 0
+                font_ratio_ok = (font_size <= body_font_size * 0.90) if has_fonts else False
                 small_margin_line = (
-                    isinstance(font_size, (int, float))
-                    and isinstance(body_font_size, (int, float))
-                    and body_font_size > 0
-                    and font_size <= body_font_size * 0.85
+                    font_ratio_ok
                     and len(block.content.split()) <= 40
                     and len(block.content) <= 300
                 )
@@ -135,13 +134,39 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
                                  and 0<font_size<=1.25*body_font_size
                                  and re.search(r"^\d|\d[.)]?$",block.content.strip()))
 
-                if (mid_y < _HEADER_THRESHOLD and (position_key in repeated_regions or small_margin_line)
-                        and block.type == BlockType.PARAGRAPH):
+                # Vertical margin running banner (e.g. bioRxiv/Research Square sidebar banner)
+                is_vertical_margin_banner = (x1 <= 0.055 or x0 >= 0.945) and (y2 - y1 >= 0.25)
+
+                # OCR pages without font sizes in top margin (e.g. journal banner)
+                ocr_margin_header = (block.extractor == "rapidocr" and mid_y < 0.08 and len(block.content.split()) <= 10)
+
+                # Corner margin headers (e.g. form numbering or date at upper right/left)
+                corner_header = (y2 <= 0.11 and (x0 >= 0.70 or x1 <= 0.30) and len(block.content.split()) <= 15 and font_ratio_ok)
+
+                # Bottom margin disclaimers and URLs
+                bottom_url_footer = (y1 >= 0.89 and any(u in block.content.lower() for u in ("www.", "http://", "https://", "doi.org")))
+
+                # Header detection: top margin, page numbers, small running headers, or OCR header
+                is_header_zone = (
+                    (mid_y < _HEADER_THRESHOLD and (position_key in repeated_regions or small_margin_line or is_page_number or ocr_margin_header))
+                    or (mid_y < 0.11 and is_page_number)
+                    or corner_header
+                )
+
+
+                # Footer detection: bottom margin, page numbers, or small disclaimers
+                is_footer_zone = (
+                    ((mid_y > _FOOTER_THRESHOLD or (mid_y > 0.89 and is_page_number)) and (position_key in repeated_regions or is_page_number or small_margin_line))
+                    or extended_small_footer or extreme_folio or (y1 >= 0.91 and font_ratio_ok and len(block.content.split()) <= 150)
+                    or bottom_url_footer
+                )
+
+
+
+                if (is_header_zone or is_vertical_margin_banner) and block.type == BlockType.PARAGRAPH:
                     block.type = BlockType.HEADER
                     header_blocks.append(block)
-                elif (block.type == BlockType.PARAGRAPH and
-                      ((mid_y > _FOOTER_THRESHOLD and (position_key in repeated_regions or is_page_number or small_margin_line))
-                       or extended_small_footer or extreme_folio)):
+                elif is_footer_zone and block.type == BlockType.PARAGRAPH:
                     block.type = BlockType.FOOTER
                     if extended_small_footer or extreme_folio:
                         block.metadata["margin_footer_evidence"] = "compact_detached_bottom_region"
@@ -190,26 +215,20 @@ def _detect_columns(blocks: list[DocumentBlock]) -> list[tuple[float, float]]:
     if len(blocks_with_bbox) < 3:
         return [(0.0, 1.0)]
 
-    # Full-width titles and callouts should not fill the gutter or bias the
-    # column bounds. Most text columns occupy substantially less than 70% of
-    # the page width, even when the two columns have different widths.
-    column_blocks = [b for b in blocks_with_bbox if b.bbox[2] - b.bbox[0] < 0.70]
+    # Exclude blocks that span across the middle 60% of the page
+    column_blocks = [
+        b for b in blocks_with_bbox
+        if b.bbox[2] - b.bbox[0] < 0.65 and not (b.bbox[0] < 0.45 and b.bbox[2] > 0.55)
+    ]
     if len(column_blocks) < 4:
         return [(0.0, 1.0)]
-    paragraphs = [b for b in column_blocks if b.type == BlockType.PARAGRAPH
-                  and len(b.content.split())>=40 and not b.metadata.get("text_layer_math")]
-    if len(paragraphs)>=4:
-        column_blocks = paragraphs  # author/address grids cannot fill a body-text gutter
 
-
-    # Examine possible gutters throughout the middle 70% of the page. A
-    # small normalized threshold admits narrow gutters while the requirement
-    # for multiple blocks on each side avoids splitting an isolated paragraph.
-    min_gap = 0.015
+    # Examine possible gutters throughout the middle 60% of the page.
+    min_gap = 0.012
     candidates: list[tuple[float, float]] = []
     for left in column_blocks:
         cut = left.bbox[2] + min_gap
-        if not 0.15 <= cut <= 0.85:
+        if not 0.20 <= cut <= 0.80:
             continue
         left_side = [b for b in column_blocks if (b.bbox[0] + b.bbox[2]) / 2 < cut]
         right_side = [b for b in column_blocks if (b.bbox[0] + b.bbox[2]) / 2 > cut]
@@ -226,6 +245,7 @@ def _detect_columns(blocks: list[DocumentBlock]) -> list[tuple[float, float]]:
         return [(0.0, split), (split, 1.0)]
 
     return [(0.0, 1.0)]
+
 
 
 def _sort_by_columns(

@@ -428,6 +428,16 @@ def reconstruct_table_from_ocr(
     if strong_cols < 2:
         return None
 
+    # Prose guard: Multi-column dictionary/book text should not be reconstructed as a table.
+    # Tabular rows typically have short entries (labels, numbers, codes). When rows exceed 15
+    # and average cell length exceeds 25 characters, or when long rows dominate, it is multi-column prose.
+    non_empty_cells = [c for r in rows for c in r if c]
+    if non_empty_cells:
+        avg_char_len = sum(len(c) for c in non_empty_cells) / len(non_empty_cells)
+        if len(rows) > 15 and avg_char_len > 25.0:
+            return None
+
+
     # 4. build the block
     consumed = [b for ln, _ in grid for b in ln]
     x0 = min(b.bbox[0] for b in consumed)
