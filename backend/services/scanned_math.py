@@ -225,7 +225,7 @@ def _prose_equations(result,page,image,native_words,stats,budget,started,max_att
         words.sort(key=lambda w:w[0])
         text=" ".join(w[4] for w in words)
         run=prose_math_run([w[4] for w in words])
-        if run is None or not looks_like_prose(text):
+        if run is None or run[1]-run[0]>14:
             continue
         ram=available_memory_bytes()
         available=min(budget-(time.monotonic()-started),deadline.remaining()-6)
