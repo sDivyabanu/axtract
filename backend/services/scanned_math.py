@@ -67,6 +67,15 @@ _MATH_SIGNAL=re.compile(r"[=+*/^_<>\\{}\[\]|\u2264\u2265\u2260\u2248\u00b1\u00d7
 _FUNCTION_WORDS=frozenset("sin cos tan cot sec csc sinh cosh tanh log ln exp lim max min det dim sup inf arg mod gcd lcm".split())
 
 
+_BARE_NUMBER = re.compile(r"^[\s\-–—.,:;()\[\]{}*|•·]*\d{1,4}[\s\-–—.,:;()\[\]{}*|•·]*$")  # decoration only, never an operator or symbol
+
+
+def bare_number_line(text):
+    """A page number, margin line number or equation tag on its own ("36", "- 36 -", "(12)") is not a formula; offering it
+    to the recognizer produced a bogus equation that hid the real page number and disturbed the page's column layout."""
+    return bool(_BARE_NUMBER.match((text or "").strip()))
+
+
 def plain_text_line(text):
     t=(text or "").strip()
     if not t or _MATH_SIGNAL.search(t):
@@ -92,7 +101,7 @@ def candidates(image,blocks,page,*,native_words=None):
         text=" ".join(b.content for b in covered)
         if native_words is not None:
             text=" ".join(w[4] for w in native_words if box[0]<=(w[0]+w[2])/2<=box[2] and box[1]<=(w[1]+w[3])/2<=box[3])
-        if looks_like_prose(text) or plain_text_line(text):
+        if looks_like_prose(text) or plain_text_line(text) or bare_number_line(text):
             continue
         if any(b.page==page and b.bbox and b.type in (BlockType.TABLE,BlockType.CHART,BlockType.EQUATION)
                and not (b.type==BlockType.EQUATION and b.metadata.get("inline"))

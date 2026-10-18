@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from time import perf_counter
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import ClassVar
 
@@ -133,6 +133,33 @@ def _detach_footnote_markers(text: str) -> tuple[str, list[str]]:
 
 
 _SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
+
+
+# First halves that start a real hyphenated compound: the hyphen belongs to the word and must be kept at a line end.
+_COMPOUND_HEADS = frozenset("self non anti pre post semi multi cross half all ex co quasi ultra inter intra sub super well "
+                            "long short high low full part ill".split())
+# Second halves that are whole words (or function words), not word fragments: "pre- and post-", "state- of".
+_WHOLE_WORD_TAILS = frozenset(("of the and or to in on for by at as is a an are was were be but nor so with from into than that this "
+                               "these those it its their his her our your my we you he she they not no if then when while which who "
+                               "what where how why can will would should could may might must shall do does did has have had also "
+                               "only both either each every any some such very more most less like based related type wide free").split())
+
+
+def soft_hyphen_break(head: str, tail: str, word_counts) -> bool:
+    """True when `head-` at a line end and `tail` at the start of the next line are one word split by typesetting.
+
+    A fragment such as "popula-"/"tion" is joined. A compound ("long-term", "data-driven", "pre- and post-") is not: its
+    second half is a word that also stands alone on the page, or a function word, or its first half is a known compound
+    prefix, or the first half is itself a word on the page. `word_counts` counts the page's tokens, so a fragment that
+    occurs only once (as this fragment) is not "a word of its own"."""
+    h, t = head.casefold(), tail.casefold()
+    if not (h.isalpha() and t.isalpha()) or len(h) < 2 or not 2 <= len(t) <= 8:
+        return False
+    if h in _COMPOUND_HEADS or t in _WHOLE_WORD_TAILS:
+        return False
+    if word_counts.get(t, 0) >= 2:
+        return False
+    return not (len(h) >= 4 and word_counts.get(h, 0) >= 1)
 
 
 def strip_superscript_refs(content: str, refs: list[str]) -> str:
@@ -343,7 +370,8 @@ class PyMuPDFExtractor(BaseExtractor):
             "dict", flags=pymupdf.TEXTFLAGS_DICT | pymupdf.TEXT_PRESERVE_WHITESPACE
         )
         raw_words = _align_word_block_numbers(page.get_text("words"), page_dict)
-        source_vocabulary = {str(w[4]).strip(".,;:!?()[]\"\'").casefold() for w in raw_words}
+        source_word_counts = Counter(str(w[4]).strip(".,;:!?()[]\"\'").casefold() for w in raw_words)
+        source_vocabulary = set(source_word_counts)
         word_lines = _word_lines(raw_words)
         spans_by_block: dict[int, list[dict]] = defaultdict(list)
         for index, item in enumerate(page_dict["blocks"]):
@@ -551,8 +579,9 @@ class PyMuPDFExtractor(BaseExtractor):
                 prior_word = re.search(r"([A-Za-z]+)-$", parts[-1]) if parts else None
                 next_word = re.match(r"([a-z]+)", text)
                 joined = prior_word.group(1)+next_word.group(1) if prior_word and next_word else ""
-                if (joined and not native_math and joined.casefold() in source_vocabulary
-                        and y0-lines[i-1][1]<=.5*median_line_height):
+                if (joined and not native_math and y0-lines[i-1][1]<=.5*median_line_height
+                        and (joined.casefold() in source_vocabulary
+                             or soft_hyphen_break(prior_word.group(1), next_word.group(1), source_word_counts))):
                     parts[-1] = parts[-1][:-1]
                     wrap_repairs.append(joined)
                 elif parts and y0 - lines[i - 1][1] > 0.5 * median_line_height:
