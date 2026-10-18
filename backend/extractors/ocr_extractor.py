@@ -169,7 +169,7 @@ class OCRExtractor(BaseExtractor):
             return blocks, errors
 
         for idx, (points, text, conf) in enumerate(result):
-            text = restore_punctuation_spacing(text.strip())
+            text = text.strip()
             if not text:
                 continue
 

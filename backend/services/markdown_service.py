@@ -58,6 +58,11 @@ def _block_to_markdown(block: DocumentBlock) -> str:
     content = block.content.strip()
     if not content and block.type != BlockType.TABLE:
         return ""
+    if block.extractor == "rapidocr" and block.type == BlockType.PARAGRAPH:
+        from extractors.ocr_extractor import restore_punctuation_spacing
+
+        # applied to the written text only, so equation-candidate selection still sees the raw OCR line
+        content = restore_punctuation_spacing(content)
     # A PDF can contain isolated dollar signs as glyphs or OCR noise. Emitting
     # those as Markdown math delimiters can make downstream renderers treat a
     # large span of ordinary text as an equation. The character reference
