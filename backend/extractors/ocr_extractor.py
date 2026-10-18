@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 from pathlib import Path
 from typing import ClassVar
@@ -88,6 +89,17 @@ def _normalize_bbox_from_points(
 _LOW_CONFIDENCE_THRESHOLD = 0.6
 
 
+# Typewritten and tightly kerned scans lose the space after a comma, semicolon, colon or full stop ("received.I", "you,and").
+# Restore it only where the reading is unambiguous: a word of two or more letters, the mark, then a word. Single letters
+# (variables such as "x,y"), digits ("1,000", "3.5"), initials and dotted abbreviations ("U.S.A", "Ph.D") are left alone.
+_COMMA_RUN_ON = re.compile(r"(?<=[A-Za-z]{2})([,;:])(?=[A-Za-z]{2})")
+_STOP_RUN_ON = re.compile(r"(?<=[a-z]{2})(?<!www)\.(?=[A-Z](?:[a-z]| |$))")
+
+
+def restore_punctuation_spacing(text: str) -> str:
+    return _STOP_RUN_ON.sub(". ", _COMMA_RUN_ON.sub(r"\1 ", text))
+
+
 class OCRExtractor(BaseExtractor):
     """Extracts text from images and scanned PDFs using RapidOCR.
 
@@ -157,7 +169,7 @@ class OCRExtractor(BaseExtractor):
             return blocks, errors
 
         for idx, (points, text, conf) in enumerate(result):
-            text = text.strip()
+            text = restore_punctuation_spacing(text.strip())
             if not text:
                 continue
 
