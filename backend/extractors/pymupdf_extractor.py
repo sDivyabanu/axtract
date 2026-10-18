@@ -132,6 +132,30 @@ def _detach_footnote_markers(text: str) -> tuple[str, list[str]]:
     return " ".join(words), refs
 
 
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
+
+
+def strip_superscript_refs(content: str, refs: list[str]) -> str:
+    """Remove detected superscript footnote markers without touching the surrounding punctuation.
+
+    A marker LIST such as ``work1,2`` is removed as one run (its inner comma goes with it), but a comma that follows the
+    last marker belongs to the sentence (``work2, showed`` -> ``work, showed``). Deterministic: markers are matched
+    longest-first from a sorted list, never in set-iteration order."""
+    digits = sorted({r for r in refs if r.isdigit()}, key=lambda r: (-len(r), r))
+    if not digits:
+        return content
+    alt = "|".join(re.escape(r) for r in digits)
+    # A raised digit right after a short unit or variable (m2, cm3, x2) is an exponent: keep it as a real superscript
+    # character (m\u00b2). Footnote markers follow words and punctuation, so they are still removed below.
+    content = re.sub(rf"(?<![A-Za-z])([A-Za-z]{{1,2}})({alt})(?!\w)", lambda m: m.group(1) + m.group(2).translate(_SUPERSCRIPT_DIGITS), content)
+    content = re.sub(rf"(?<=[A-Za-z])(?:{alt})(?:,(?:{alt}))*(?!\w)", "", content)
+    for ref in digits:
+        # a marker glued to punctuation or a closing bracket ("al.2", "(see)3"); a digit set off by white space is a real
+        # number ("3 m", "page 2") and is never deleted just because a footnote with the same digit exists in the block
+        content = re.sub(rf"(?<=[^\w\s]){re.escape(ref)}(?!\w)", "", content)
+    return content
+
+
 def _cell_token_count(cell: object) -> int:
     return len(str(cell).split()) if cell is not None else 0
 
@@ -546,10 +570,7 @@ class PyMuPDFExtractor(BaseExtractor):
             is_bold = any(span.get("flags", 0) & (1 << 4) for span in spans)
             math_font = any(_MATH_FONT.search(span.get("font", "")) for span in spans)
             superscript_refs = self._superscript_refs(spans, median_size)
-            for ref in sorted(set(superscript_refs), key=len, reverse=True):
-                if ref.isdigit():
-                    content = re.sub(rf"(?<=[A-Za-z]){re.escape(ref)},?(?=\b|\s|$)", "", content)
-                    content = re.sub(rf"(?<!\w){re.escape(ref)}(?!\w)", "", content)
+            content = strip_superscript_refs(content, superscript_refs)
             font_sizes.append(max_size)
             raw_blocks.append({"content": content.strip(), "bbox": bbox, "font_size": max_size,
                                "is_bold": is_bold, "math_font": math_font,

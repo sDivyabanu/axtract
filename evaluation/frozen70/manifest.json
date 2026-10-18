@@ -1,0 +1,745 @@
+{
+ "description": "AXTRACT frozen 70-PDF / 430-assertion DIAGNOSTIC sample from olmOCR-bench. NOT the full 1,403-PDF benchmark and not an unbiased accuracy estimate.",
+ "seed": "axtract-dc429391-stratified70-v1",
+ "method": "Per category sort all assertion-bearing PDFs by (non-baseline assertion count, source PDF byte length, PDF identifier). Partition into 5 equal-count quintiles; choose 2 per quintile. Prefer one previously frozen PDF if available, deterministically SHA256(seed|pdf)-ranked; choose second from all remaining by same hash rank. No prior pass/fail outcome used. Round-robin categories; within-category execution order is independent SHA256(seed|run-order|pdf). Difficulty uses assertion count and PDF size as proxies, not verified semantic difficulty.",
+ "assertion_count": 430,
+ "dataset": {
+  "name": "allenai/olmOCR-bench",
+  "revision": "54a96a6fb6a2bd3b297e59869491db4d3625b711",
+  "case_source_sha256": {
+   "arxiv_math.jsonl": "4b0d79ee3a352bb06a1d1797f698b5b720043c65800751e8a1605d3666e1a046",
+   "headers_footers.jsonl": "1ffac38f6a428fbb21c6c0e48b5dd5678c8a411813d0eacc175aab730c498f3e",
+   "long_tiny_text.jsonl": "71ce2b10bdee0737d8aa064242684c790718b4d182ce7a72d11d5c6b022d511b",
+   "multi_column.jsonl": "d390c5b1f7ca4edefa6012d496e21c5ff956cf961104a40f26a7cb56036dc1f8",
+   "old_scans.jsonl": "fff2f4a0caff077e4ea23ab171c591b563273941adfdd309d0709557e2a30729",
+   "old_scans_math.jsonl": "8f630adb9f4b7ae1fb666224463329dbcce78b7430b5fb5924dabb15c1835648",
+   "table_tests.jsonl": "b7ec45bbce0f1b90037f2be1b40ec5901aea2feabdedee2641e66882b10d640d"
+  }
+ },
+ "scorer": {
+  "repository": "https://github.com/allenai/olmocr",
+  "commit": "f7cfe4c22098b154c76b6ec950d1c0a464eecf8d",
+  "tests_py_sha256": "d39d4baabf5fef51aed993d6eebc83fa839f555d111920fbde2a10f21a1b858f",
+  "interpreter": "Python 3.12 + evaluation/frozen70/scorer-requirements.txt (+ playwright chromium)"
+ },
+ "pdfs": {
+  "arxiv_math/2503.05606_pg16.pdf": "9e4a104696c83f23bef08d672dc3d385552a39184d2b5d384005d394e4eec843",
+  "old_scans_math/2_pg238.pdf": "b6f15db7cff4bec5274be949a5370583e553b478db337bbb006ba15a52cf4119",
+  "tables/c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_pg1.pdf": "7af90452b693cfc2293d91923a49bcb6645c183d385705a77a7f571d9ed10ae7",
+  "old_scans/14.pdf": "62ecad3e313a5fed44d2d6b5cf006d5746eb76a057beb1768e0068457ee7b21d",
+  "multi_column/0514f6672af23035c53e13fa9f5d7e17e4a4_page_18_pg1.pdf": "611ea6de83bdf1b8481ececfb2c1a62328a049487f11fa775861cabfccdc30a3",
+  "headers_footers/dc85182643bd0e5312833dc235e3f9423cb3a9c8_page_37.pdf": "6bbe976605bb4b04a3c89c2303fb6e76c82c4939d5916f61839a062136f98955",
+  "long_tiny_text/15b_pg1.pdf": "64ab07e981cabb615d5eb9a304a455fc9fce96a668023b40e945275887a58663",
+  "arxiv_math/2503.04189_pg11.pdf": "f0bc363536874cc75cc0779512d1a3e6217291882711dee3e69f83bbe274945e",
+  "old_scans_math/2_pg39.pdf": "eee1f58f8af93eddf6eb8f281fc46db24f9aef19c2fd3b4c9a67e9b3ef283d5f",
+  "tables/1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_pg1.pdf": "a11e5b451c29949bee58666bd294ff525cd2cb1327a2b6f5ca50094555073239",
+  "old_scans/54.pdf": "90a05317e2454e475e903866fb94074be2b05750b150aaef37f00c875c235c08",
+  "multi_column/027c390510b2fd3364f5a382f2bc304af018_page_2_pg1.pdf": "28d2db9c90c4c873161f5be4e33e78d393f8ec4a0e25f98a37194447680ec562",
+  "headers_footers/11253d83d886378909f8b24d24d8a90412099087_page_4.pdf": "a8a0588abb4a72f15ad41efa8b1ca5a2f617c029904382c8501104da89e5cfe1",
+  "long_tiny_text/13_pg566_pg1.pdf": "4dde41522969f36cd4ea75c696091e9b8a942da2f07e6fc5eb1d6f23e540395a",
+  "arxiv_math/2503.09174_pg2.pdf": "e49e332a668adbe6b9f31b0f6f4fd10544a01f283e1cdf145d232849d1986d40",
+  "old_scans_math/4_pg281.pdf": "696452c1b767f2faf3720ffa2959441696ba107c967e018fd4bbd4108c93f7c2",
+  "tables/11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_pg1.pdf": "3b26a2ab2acc238bdf69d4ad621265a01b0889960a748b87a7dd6ca51760cbb9",
+  "old_scans/1.pdf": "c4f7da14c6d0f97576d6346996ede92d7a190f7c6cf5cd191ab4388fbd8d55f5",
+  "multi_column/01ed6dcc6a3d0237daa88b293d0c0667df1a_page_49_pg1.pdf": "d4245717aacb4a510bb1fc5c9aa5e96c9d66ca62c1eef9bbfdd27fa967896fda",
+  "headers_footers/ba6aebad479086f039aa97daa8208472439af6ec_page_1.pdf": "423dd58f4707748606107e2aeadeff5158d3cce5eb0174ae6c5a7250b9f34e7c",
+  "long_tiny_text/20_pg46_pg1.pdf": "b9b23590b89194d3ec1bbb407ed4ebdf7f1055ec784332a75ae9131c3370047a",
+  "arxiv_math/2503.08494_pg2.pdf": "51a87496d50e09e873370930eea17e4841f991898497986098ede4eb1134ff20",
+  "old_scans_math/1_pg19.pdf": "ce7b17b543cd004773190457a038efbc41e0f98e178f0e1277bd793d16e3b6ee",
+  "tables/c45171e39a77b2b862e0e66a6f25362b199b_pg10.pdf": "5d02b8194a351b4987eb75a52002d65cf2bdf496c559f237358a659ab5c37ad3",
+  "old_scans/74.pdf": "e09c2755f1c7ed57bd286ebde693807a6a7a9d3a50f1d672500cf85a9f20d496",
+  "multi_column/09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1_pg1.pdf": "9ef1f05e6512ccfd8e17848a1a38904c5e05f077024b6233c0e1440815c70357",
+  "headers_footers/fe8c6edb71bea08b67e7f8cdca813a0bbba04e6e_page_3.pdf": "2da3a54c243d40f16bc94775b53b84b8b697d888b7dd35bacb069402c9b653d4",
+  "long_tiny_text/16b_pg1.pdf": "5e87fd6fde5a703147abf5968ef4cf251228422b63bb1912d0b6654857920228",
+  "arxiv_math/2503.05334_pg17.pdf": "4cd26725d514ef188beb7740ee6e767b092b913430b7d9107b8c22532eb71c5a",
+  "old_scans_math/4_pg451.pdf": "bcec1986ccf017965f4f9f89c8b3ff3b7d230274cc3ce4560d7d8e14ae71e3f0",
+  "tables/3c0b540d8dab2598af4386b4034c2021f46b_pg4_pg1.pdf": "4c698854bc44b2da2afb7d4a4b7ccc4414d891301e9887a4722b461f9913e27c",
+  "old_scans/80.pdf": "7a6b52fb24be76011e1eceb2711226b8550759306737ccd53447192eb5722f89",
+  "multi_column/03ccfe8bb1096e76dd5c186c3ae24d5fe8ec_pg1.pdf": "4047b3de746ebc340624d18cb9ffe83401251f8ac9470729070fdcf1a8d5a2b4",
+  "headers_footers/0b8de922246569bf96136cd5bb1d9643b2d269fe_page_10_processed.pdf": "e759c5141c7b3e2490dfd4886513b4eaf93f17d531200ea077b147c54b65efa2",
+  "long_tiny_text/11_pg57_pg1.pdf": "f589806339184f9a39d67df48bcd2c111569dbd65ee832257d4439d164f68a20",
+  "arxiv_math/2503.04245_pg7.pdf": "7b5099d75854bdb742fe4b6ffedfe578d6e0ce5ced887d8303a30adb2a5d342a",
+  "old_scans_math/3_pg270.pdf": "b7fc2b4f608c8126aacc0fe2d7bb2ba48ba89e99b19db8cf7877a7bd2fd2bb40",
+  "tables/58ad80719a0d3473e065a3ead02d758e08b6_pg10_pg1.pdf": "c0dff7b493f5bd51729029458fbdde46a1a0a6951a8cd971ad6fa4d9d6e7318f",
+  "old_scans/10.pdf": "242ef89e604531048eead50adbe2d7dd686576192982b4976b54fa2cc45e966d",
+  "multi_column/02943986dff2d4a84b7c2dd81abfc51fceea_page_21_pg1.pdf": "95ddbe92656e9f9d226838ecbb1db7090ec32507e765e3e9b9a6467bd45e6a9a",
+  "headers_footers/006c33b9244de3ff296633d1cb446a8fb8a5eca1_page_10_processed.pdf": "7ace6a1ed1e239a540f0813d7e0cb5e6e69b15951633af1fc0078aaa47c172fc",
+  "long_tiny_text/10c_pg1.pdf": "9b4477326521fc7cc6ac0b57d06a5320838efab1ebf081064120294b94e4033e",
+  "arxiv_math/2503.09432_pg6.pdf": "5725f014ec72167284a3d8245a601b0a26b666b8073e593a76a9dfa44a154ccf",
+  "old_scans_math/5_pg281.pdf": "e05dbf084c9450481f795cb45335bf847abe505c02fc1bf274a073b1952df6bd",
+  "tables/b45c138c634308a84b8b2e67997bef8aa70b_pg15.pdf": "6576a0316199c5800f968f24f72702246ca1012c0c1f7f2a6dcb84818f837e7d",
+  "old_scans/57.pdf": "da1aa9e6750cf0e11e225741cd4dd42b23447b0c73afa30111fd16e7eb646a7e",
+  "multi_column/00e2c7719d58bb49fd4031cce9dcccdddec2_page_1_pg1.pdf": "7a9b5a4c7fe2960b4e221702b78263908589435e363409c628ca72bf7faf66f8",
+  "headers_footers/af928f5861db3a8592e9cf2cc54ea819bd462606_page_1.pdf": "c63a6a600efee8c65e130131c77e0bf24ce01578633356bb5a65d6e3f1ab7826",
+  "long_tiny_text/11_pg418_pg1.pdf": "e016078659d2cbc39231415295056fe79970762e80c6d6ed50b8486e93bff704",
+  "arxiv_math/2503.05901_pg4.pdf": "8a6119e929347c3d395444e5f3b96e9081abe60dbf84deb4a38b3e42e98d64ff",
+  "old_scans_math/1_pg131.pdf": "86183f4a7f04ae8646cf53acd32bbec5450623c281b9a18087640d322fe99212",
+  "tables/b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4.pdf": "7a509c59f5fabf77b4e1f45b87619dfb76773836b0e0d521d9e495cca1cd4084",
+  "old_scans/40.pdf": "42215fab3a1e037917409267a7a6b0ded890eed318b29295cee8b70eb3c74c50",
+  "multi_column/0005784d0d255f6652180433936fa2998188_page_1_pg1.pdf": "3ab9f78fb3cd0b0f869a919b1157d44ce1073c51852bff4d11068ce1769cd491",
+  "headers_footers/8063d40c50199f37405b48fbc93af2386abe6d09_page_1.pdf": "cdc803d50bcb80cc896d94c9ea135e98fc2a78e8e36b7244340ac496752a64f9",
+  "long_tiny_text/10a_pg1.pdf": "51ce319150dce95866fca4852c8d966bf46530b933a9eed24b6359492adb7b0f",
+  "arxiv_math/2503.09021_pg3.pdf": "d53d7b815a540e74d2616c0ad0603ef5850473308c3ce78f7c7618dcca3b159c",
+  "old_scans_math/3_pg204.pdf": "f98a65a53f46e0727e1c1aa5e1367bc7dc1eb4d31c9f1ba41037a08fbb2c679b",
+  "tables/2d932ac96ad0d8ccf81a56bd105fa18fdcbb_pg7.pdf": "d5d5300941f23311fc0ad5048eac8ed2165b1a4b4ab3b98f5abaa7e1611578b8",
+  "old_scans/8.pdf": "788d6506bb927cdbb3bfda280aa4437abcb68de2a4fc47a7101c84f2439ae1f7",
+  "multi_column/02a3e23da54b82c414d272051b0b5d8f44d8_page_12_pg1.pdf": "b750fae4d75a1c321645916e0d9b7ce28e1c51da0d22d1e3bc856c9e8943aa96",
+  "headers_footers/04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf": "66d3c71f0b438eac7af358a633d20b1bbde1dec8302bf7f4e72b12970ced382a",
+  "long_tiny_text/11_pg145_pg1.pdf": "d41fd588a0134398bbc710967334e9890e5f1c2de48dff33da2413e72d3a861b",
+  "arxiv_math/2503.07696_pg3.pdf": "d7ab28740d7c23bbd473f6b32f0ecf0171d8196597bf2c3b48c0355c23e0e94e",
+  "old_scans_math/3_pg39.pdf": "dca433fd4f8c2af1de2206f36cd352248c05afee3334dc64ab48793a57b92c39",
+  "tables/1c42d782fce429d7796cbac6fc7956e06ec7_pg41_pg1.pdf": "3c54f25c8af6543c5d812b444d0e8b8fe3d22a4c5a79cc3275c9c21cf14c7f1e",
+  "old_scans/30.pdf": "e8b3f839879b9de71608f6db7b6042f29e87830a49ec1004a44279091e93fbb8",
+  "multi_column/0145bc47f7ca5f8c5ff1a10481207670bcd3_page_11_pg1.pdf": "f63d49cad83f3641a3e1b9a19f0972ed86216d358677832ed86d8f0627108aaf",
+  "headers_footers/0805b42e6e18b9c2f2f3d31d8ecf73e1a422f182_page_2_processed.pdf": "564f58e00e3bdd1da67d3abd807f2c769263c72ff1fdb1382ebc2b5584c1f84a",
+  "long_tiny_text/16c_pg1.pdf": "ccc46e9bb7b15abc19837a30b8aeb19de0ee18182f1a9d6f044bd77e92425350"
+ },
+ "cases": {
+  "arxiv_math/2503.09432_pg6.pdf": [
+   "2503.09432_pg6_math_000",
+   "2503.09432_pg6_math_001",
+   "2503.09432_pg6_math_002",
+   "2503.09432_pg6_math_003",
+   "2503.09432_pg6_math_004",
+   "2503.09432_pg6_math_005"
+  ],
+  "arxiv_math/2503.09021_pg3.pdf": [
+   "2503.09021_pg3_math_000",
+   "2503.09021_pg3_math_001",
+   "2503.09021_pg3_math_002"
+  ],
+  "arxiv_math/2503.04189_pg11.pdf": [
+   "2503.04189_pg11_math_000",
+   "2503.04189_pg11_math_001",
+   "2503.04189_pg11_math_002",
+   "2503.04189_pg11_math_003",
+   "2503.04189_pg11_math_004",
+   "2503.04189_pg11_math_005",
+   "2503.04189_pg11_math_006",
+   "2503.04189_pg11_math_007",
+   "2503.04189_pg11_math_008",
+   "2503.04189_pg11_math_009"
+  ],
+  "arxiv_math/2503.05606_pg16.pdf": [
+   "2503.05606_pg16_math_004",
+   "2503.05606_pg16_math_006"
+  ],
+  "arxiv_math/2503.09174_pg2.pdf": [
+   "2503.09174_pg2_math_000"
+  ],
+  "arxiv_math/2503.07696_pg3.pdf": [
+   "2503.07696_pg3_math_000",
+   "2503.07696_pg3_math_001",
+   "2503.07696_pg3_math_002",
+   "2503.07696_pg3_math_003"
+  ],
+  "arxiv_math/2503.08494_pg2.pdf": [
+   "2503.08494_pg2_math_000",
+   "2503.08494_pg2_math_001",
+   "2503.08494_pg2_math_002",
+   "2503.08494_pg2_math_003",
+   "2503.08494_pg2_math_004",
+   "2503.08494_pg2_math_005",
+   "2503.08494_pg2_math_007",
+   "2503.08494_pg2_math_009",
+   "2503.08494_pg2_math_010"
+  ],
+  "arxiv_math/2503.04245_pg7.pdf": [
+   "2503.04245_pg7_math_000",
+   "2503.04245_pg7_math_001",
+   "2503.04245_pg7_math_002",
+   "2503.04245_pg7_math_003",
+   "2503.04245_pg7_math_004"
+  ],
+  "arxiv_math/2503.05901_pg4.pdf": [
+   "2503.05901_pg4_math_000",
+   "2503.05901_pg4_math_001",
+   "2503.05901_pg4_math_002",
+   "2503.05901_pg4_math_003",
+   "2503.05901_pg4_math_004",
+   "2503.05901_pg4_math_005",
+   "2503.05901_pg4_math_006",
+   "2503.05901_pg4_math_007",
+   "2503.05901_pg4_math_008",
+   "2503.05901_pg4_math_009"
+  ],
+  "arxiv_math/2503.05334_pg17.pdf": [
+   "2503.05334_pg17_math_002",
+   "2503.05334_pg17_math_003",
+   "2503.05334_pg17_math_004",
+   "2503.05334_pg17_math_005",
+   "2503.05334_pg17_math_006",
+   "2503.05334_pg17_math_007",
+   "2503.05334_pg17_math_008",
+   "2503.05334_pg17_math_009",
+   "2503.05334_pg17_math_010",
+   "2503.05334_pg17_math_011"
+  ],
+  "headers_footers/006c33b9244de3ff296633d1cb446a8fb8a5eca1_page_10_processed.pdf": [
+   "006c33b9244de3ff296633d1cb446a8fb8a5eca1_page_10_processed_pg1_header_00",
+   "006c33b9244de3ff296633d1cb446a8fb8a5eca1_page_10_processed_pg1_header_01",
+   "006c33b9244de3ff296633d1cb446a8fb8a5eca1_page_10_processed_pg1_header_02"
+  ],
+  "headers_footers/04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf": [
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed_pg1_header_00",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed_pg1_header_01",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed_pg1_header_02",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed_pg1_header_03",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_01",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_02",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_06",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_08",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_09",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_10",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_11",
+   "04cea54b5e3d95140c36cfa315a41be27b2434f9_page_1_processed.pdf_manual_12"
+  ],
+  "headers_footers/0805b42e6e18b9c2f2f3d31d8ecf73e1a422f182_page_2_processed.pdf": [
+   "0805b42e6e18b9c2f2f3d31d8ecf73e1a422f182_page_2_processed_pg1_header_00",
+   "0805b42e6e18b9c2f2f3d31d8ecf73e1a422f182_page_2_processed.pdf_manual_00",
+   "0805b42e6e18b9c2f2f3d31d8ecf73e1a422f182_page_2_processed.pdf_manual_01"
+  ],
+  "headers_footers/0b8de922246569bf96136cd5bb1d9643b2d269fe_page_10_processed.pdf": [
+   "0b8de922246569bf96136cd5bb1d9643b2d269fe_page_10_processed.pdf_manual_00"
+  ],
+  "headers_footers/af928f5861db3a8592e9cf2cc54ea819bd462606_page_1.pdf": [
+   "af928f5861db3a8592e9cf2cc54ea819bd462606_page_1_header_00",
+   "af928f5861db3a8592e9cf2cc54ea819bd462606_page_1_header_01",
+   "af928f5861db3a8592e9cf2cc54ea819bd462606_page_1.pdf_manual_00"
+  ],
+  "headers_footers/dc85182643bd0e5312833dc235e3f9423cb3a9c8_page_37.pdf": [
+   "dc85182643bd0e5312833dc235e3f9423cb3a9c8_page_37_header_00",
+   "dc85182643bd0e5312833dc235e3f9423cb3a9c8_page_37.pdf_manual_00"
+  ],
+  "headers_footers/11253d83d886378909f8b24d24d8a90412099087_page_4.pdf": [
+   "11253d83d886378909f8b24d24d8a90412099087_page_4_header_00",
+   "11253d83d886378909f8b24d24d8a90412099087_page_4.pdf_manual_00"
+  ],
+  "headers_footers/fe8c6edb71bea08b67e7f8cdca813a0bbba04e6e_page_3.pdf": [
+   "fe8c6edb71bea08b67e7f8cdca813a0bbba04e6e_page_3_header_00"
+  ],
+  "headers_footers/ba6aebad479086f039aa97daa8208472439af6ec_page_1.pdf": [
+   "ba6aebad479086f039aa97daa8208472439af6ec_page_1_header_00",
+   "ba6aebad479086f039aa97daa8208472439af6ec_page_1.pdf_manual_00"
+  ],
+  "headers_footers/8063d40c50199f37405b48fbc93af2386abe6d09_page_1.pdf": [
+   "8063d40c50199f37405b48fbc93af2386abe6d09_page_1_header_00",
+   "8063d40c50199f37405b48fbc93af2386abe6d09_page_1_header_01",
+   "8063d40c50199f37405b48fbc93af2386abe6d09_page_1_header_02",
+   "8063d40c50199f37405b48fbc93af2386abe6d09_page_1.pdf_manual_00"
+  ],
+  "long_tiny_text/13_pg566_pg1.pdf": [
+   "13_pg566_pg1_text_00",
+   "13_pg566_pg1_text_01",
+   "13_pg566_pg1_text_02",
+   "13_pg566_pg1_text_03",
+   "13_pg566_pg1_text_04"
+  ],
+  "long_tiny_text/11_pg418_pg1.pdf": [
+   "11_pg418_pg1_text_01",
+   "11_pg418_pg1_text_03",
+   "11_pg418_pg1_text_06"
+  ],
+  "long_tiny_text/15b_pg1.pdf": [
+   "15b_pg1_text_00",
+   "15b_pg1_text_01",
+   "15b_pg1_text_02",
+   "15b_pg1_text_03"
+  ],
+  "long_tiny_text/11_pg145_pg1.pdf": [
+   "11_pg145_pg1_text_00",
+   "11_pg145_pg1_text_01"
+  ],
+  "long_tiny_text/10c_pg1.pdf": [
+   "10c_pg1_text_00",
+   "10c_pg1_text_01",
+   "10c_pg1_text_28",
+   "10c_pg1_text_29",
+   "10c_pg1_text_30",
+   "10c_pg1_text_38"
+  ],
+  "long_tiny_text/20_pg46_pg1.pdf": [
+   "20_pg46_pg1_text_00",
+   "20_pg46_pg1_text_01",
+   "20_pg46_pg1_text_02",
+   "20_pg46_pg1_text_03",
+   "20_pg46_pg1_text_04",
+   "20_pg46_pg1_text_05",
+   "20_pg46_pg1_text_06",
+   "20_pg46_pg1_text_08",
+   "20_pg46_pg1_text_09"
+  ],
+  "long_tiny_text/10a_pg1.pdf": [
+   "10a_pg1_text_00",
+   "10a_pg1_text_01",
+   "10a_pg1_text_02",
+   "10a_pg1_text_05",
+   "10a_pg1_text_06",
+   "10a_pg1_text_07",
+   "10a_pg1_text_08",
+   "10a_pg1_text_09",
+   "10a_pg1_text_10",
+   "10a_pg1_text_11",
+   "10a_pg1_text_12",
+   "10a_pg1_text_13"
+  ],
+  "long_tiny_text/16c_pg1.pdf": [
+   "16c_pg1_text_02",
+   "16c_pg1_text_03",
+   "16c_pg1_text_04",
+   "16c_pg1_text_05",
+   "16c_pg1_text_06",
+   "16c_pg1_text_07",
+   "16c_pg1_text_08",
+   "16c_pg1_text_09"
+  ],
+  "long_tiny_text/11_pg57_pg1.pdf": [
+   "11_pg57_pg1_text_00",
+   "11_pg57_pg1_text_01",
+   "11_pg57_pg1_text_02",
+   "11_pg57_pg1_text_03",
+   "11_pg57_pg1_text_04",
+   "11_pg57_pg1_text_05",
+   "11_pg57_pg1_text_06"
+  ],
+  "long_tiny_text/16b_pg1.pdf": [
+   "16b_pg1_text_00",
+   "16b_pg1_text_01",
+   "16b_pg1_text_02",
+   "16b_pg1_text_03",
+   "16b_pg1_text_05",
+   "16b_pg1_text_07",
+   "16b_pg1_text_08"
+  ],
+  "multi_column/0145bc47f7ca5f8c5ff1a10481207670bcd3_page_11_pg1.pdf": [
+   "0145bc47f7ca5f8c5ff1a10481207670bcd3_page_11.pdf_order_3ce50e3b",
+   "0145bc47f7ca5f8c5ff1a10481207670bcd3_page_11.pdf_order_08aa4bf1",
+   "0145bc47f7ca5f8c5ff1a10481207670bcd3_page_11.pdf_order_2ba09682",
+   "0145bc47f7ca5f8c5ff1a10481207670bcd3_page_11.pdf_order_8fe7d058"
+  ],
+  "multi_column/09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1_pg1.pdf": [
+   "09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1.pdf_order_0fde6cc6",
+   "09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1.pdf_order_2ff776a5",
+   "09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1.pdf_order_1565380e",
+   "09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1.pdf_order_25b38a95",
+   "09f90a8fad0997f7cf454cbcbe79cab3bc0f_page_1.pdf_order_43f3630f"
+  ],
+  "multi_column/02943986dff2d4a84b7c2dd81abfc51fceea_page_21_pg1.pdf": [
+   "02943986dff2d4a84b7c2dd81abfc51fceea_page_21.pdf_order_2147dcef",
+   "02943986dff2d4a84b7c2dd81abfc51fceea_page_21.pdf_order_f860ffc5",
+   "02943986dff2d4a84b7c2dd81abfc51fceea_page_21.pdf_order_11cb4563"
+  ],
+  "multi_column/01ed6dcc6a3d0237daa88b293d0c0667df1a_page_49_pg1.pdf": [
+   "01ed6dcc6a3d0237daa88b293d0c0667df1a_page_49.pdf_order_e4a5ac92",
+   "01ed6dcc6a3d0237daa88b293d0c0667df1a_page_49.pdf_order_08f9b77e",
+   "01ed6dcc6a3d0237daa88b293d0c0667df1a_page_49.pdf_order_dd834802",
+   "01ed6dcc6a3d0237daa88b293d0c0667df1a_page_49.pdf_order_afe36f79"
+  ],
+  "multi_column/0005784d0d255f6652180433936fa2998188_page_1_pg1.pdf": [
+   "0005784d0d255f6652180433936fa2998188_page_1.pdf_order_f1ef17b2",
+   "0005784d0d255f6652180433936fa2998188_page_1.pdf_order_617b0ab3",
+   "0005784d0d255f6652180433936fa2998188_page_1.pdf_order_9145bc9b",
+   "0005784d0d255f6652180433936fa2998188_page_1.pdf_order_0c99e823",
+   "0005784d0d255f6652180433936fa2998188_page_1.pdf_order_67e1c2bc"
+  ],
+  "multi_column/027c390510b2fd3364f5a382f2bc304af018_page_2_pg1.pdf": [
+   "027c390510b2fd3364f5a382f2bc304af018_page_2.pdf_order_c48119cc",
+   "027c390510b2fd3364f5a382f2bc304af018_page_2.pdf_order_31912397",
+   "027c390510b2fd3364f5a382f2bc304af018_page_2.pdf_order_cfbf2378",
+   "027c390510b2fd3364f5a382f2bc304af018_page_2.pdf_order_4612618d",
+   "027c390510b2fd3364f5a382f2bc304af018_page_2.pdf_order_29bf4787"
+  ],
+  "multi_column/03ccfe8bb1096e76dd5c186c3ae24d5fe8ec_pg1.pdf": [
+   "03ccfe8bb1096e76dd5c186c3ae24d5fe8ec.pdf_order_2b8999c1",
+   "03ccfe8bb1096e76dd5c186c3ae24d5fe8ec.pdf_order_880935cf",
+   "03ccfe8bb1096e76dd5c186c3ae24d5fe8ec.pdf_order_12cdeef2"
+  ],
+  "multi_column/00e2c7719d58bb49fd4031cce9dcccdddec2_page_1_pg1.pdf": [
+   "00e2c7719d58bb49fd4031cce9dcccdddec2_page_1.pdf_order_85be1097",
+   "00e2c7719d58bb49fd4031cce9dcccdddec2_page_1.pdf_order_b903400b"
+  ],
+  "multi_column/02a3e23da54b82c414d272051b0b5d8f44d8_page_12_pg1.pdf": [
+   "02a3e23da54b82c414d272051b0b5d8f44d8_page_12.pdf_order_29e9ce7e",
+   "02a3e23da54b82c414d272051b0b5d8f44d8_page_12.pdf_order_55823ac0",
+   "02a3e23da54b82c414d272051b0b5d8f44d8_page_12.pdf_order_b9f4fa82",
+   "02a3e23da54b82c414d272051b0b5d8f44d8_page_12.pdf_order_6e8a0319"
+  ],
+  "multi_column/0514f6672af23035c53e13fa9f5d7e17e4a4_page_18_pg1.pdf": [
+   "0514f6672af23035c53e13fa9f5d7e17e4a4_page_18.pdf_order_3cc0ff34",
+   "0514f6672af23035c53e13fa9f5d7e17e4a4_page_18.pdf_order_d1b2df9c",
+   "0514f6672af23035c53e13fa9f5d7e17e4a4_page_18.pdf_order_b3170ed9",
+   "0514f6672af23035c53e13fa9f5d7e17e4a4_page_18.pdf_order_dfe28954"
+  ],
+  "old_scans/1.pdf": [
+   "1_680487",
+   "1_126739",
+   "1_36225",
+   "1_787572",
+   "1_298389"
+  ],
+  "old_scans/8.pdf": [
+   "8_16814",
+   "8_805667",
+   "8_854962",
+   "8_177414"
+  ],
+  "old_scans/10.pdf": [
+   "10_742052",
+   "10_453143",
+   "10_366778",
+   "10_301369",
+   "10_173032",
+   "10_235772",
+   "10_810581"
+  ],
+  "old_scans/14.pdf": [
+   "14_140889",
+   "14_977096",
+   "14_406922",
+   "14_92627",
+   "14_588856"
+  ],
+  "old_scans/30.pdf": [
+   "30_339963",
+   "30_232955",
+   "30_697277",
+   "30_533481",
+   "30_424850",
+   "30_937657",
+   "30_968972",
+   "30_684079"
+  ],
+  "old_scans/40.pdf": [
+   "40_937767",
+   "40_573054",
+   "40_797352"
+  ],
+  "old_scans/57.pdf": [
+   "57_563306",
+   "57_924812",
+   "57_646059",
+   "57_453692",
+   "57_232086"
+  ],
+  "old_scans/74.pdf": [
+   "74_913189",
+   "74_907546",
+   "74_587057",
+   "74_112664",
+   "74_63045",
+   "74_693823",
+   "74_576847",
+   "74_886638"
+  ],
+  "old_scans/80.pdf": [
+   "80_740429",
+   "80_775990",
+   "80_831414",
+   "80_592765",
+   "80_704022",
+   "80_763305"
+  ],
+  "old_scans/54.pdf": [
+   "54_705613",
+   "54_118618",
+   "54_994539"
+  ],
+  "old_scans_math/1_pg19.pdf": [
+   "1_pg19_equation_00",
+   "1_pg19_equation_01",
+   "1_pg19_equation_02",
+   "1_pg19_equation_03",
+   "1_pg19_equation_04",
+   "1_pg19_equation_05",
+   "1_pg19_equation_06",
+   "1_pg19_equation_07",
+   "1_pg19_equation_08",
+   "1_pg19_equation_09",
+   "1_pg19_equation_10",
+   "1_pg19_equation_11",
+   "1_pg19_equation_12",
+   "1_pg19_equation_13"
+  ],
+  "old_scans_math/1_pg131.pdf": [
+   "1_pg131_equation_00",
+   "1_pg131_equation_01",
+   "1_pg131_equation_02",
+   "1_pg131_equation_03",
+   "1_pg131_equation_04",
+   "1_pg131_equation_05",
+   "1_pg131_equation_06",
+   "1_pg131_equation_07",
+   "1_pg131_equation_08",
+   "1_pg131_equation_09",
+   "1_pg131_equation_10"
+  ],
+  "old_scans_math/3_pg39.pdf": [
+   "3_pg39_equation_00",
+   "3_pg39_equation_01",
+   "3_pg39_equation_02",
+   "3_pg39_equation_03",
+   "3_pg39_equation_04",
+   "3_pg39_equation_05",
+   "3_pg39_equation_06",
+   "3_pg39_equation_07",
+   "3_pg39_equation_08",
+   "3_pg39_equation_09",
+   "3_pg39_equation_10",
+   "3_pg39_equation_11",
+   "3_pg39_equation_12",
+   "3_pg39_equation_13",
+   "3_pg39_equation_14",
+   "3_pg39_equation_15",
+   "3_pg39_equation_16",
+   "3_pg39_equation_17",
+   "3_pg39_equation_18",
+   "3_pg39_equation_19",
+   "3_pg39_equation_20",
+   "3_pg39_equation_21",
+   "3_pg39_equation_22",
+   "3_pg39_equation_23",
+   "3_pg39_equation_24",
+   "3_pg39_equation_25"
+  ],
+  "old_scans_math/3_pg204.pdf": [
+   "3_pg204_equation_00",
+   "3_pg204_equation_01",
+   "3_pg204_equation_02",
+   "3_pg204_equation_03",
+   "3_pg204_equation_04",
+   "3_pg204_equation_05",
+   "3_pg204_equation_06",
+   "3_pg204_equation_07",
+   "3_pg204_equation_10",
+   "3_pg204_equation_11",
+   "3_pg204_equation_12",
+   "3_pg204_equation_13"
+  ],
+  "old_scans_math/3_pg270.pdf": [
+   "3_pg270_equation_00",
+   "3_pg270_equation_01",
+   "3_pg270_equation_02",
+   "3_pg270_equation_03"
+  ],
+  "old_scans_math/2_pg39.pdf": [
+   "2_pg39_equation_00",
+   "2_pg39_equation_01",
+   "2_pg39_equation_02",
+   "2_pg39_equation_03",
+   "2_pg39_equation_04",
+   "2_pg39_equation_05",
+   "2_pg39_equation_06",
+   "2_pg39_equation_07",
+   "2_pg39_equation_08",
+   "2_pg39_equation_09",
+   "2_pg39_equation_10",
+   "2_pg39_equation_11",
+   "2_pg39_equation_12",
+   "2_pg39_equation_13",
+   "2_pg39_equation_14",
+   "2_pg39_equation_15",
+   "2_pg39_equation_16"
+  ],
+  "old_scans_math/2_pg238.pdf": [
+   "2_pg238_equation_00",
+   "2_pg238_equation_01",
+   "2_pg238_equation_02",
+   "2_pg238_equation_03",
+   "2_pg238_equation_05",
+   "2_pg238_equation_07",
+   "2_pg238_equation_08",
+   "2_pg238_equation_09",
+   "2_pg238_equation_10",
+   "2_pg238_equation_11",
+   "2_pg238_equation_12",
+   "2_pg238_equation_13",
+   "2_pg238_equation_14",
+   "2_pg238_equation_15",
+   "2_pg238_equation_17",
+   "2_pg238_equation_18"
+  ],
+  "old_scans_math/4_pg451.pdf": [
+   "4_pg451_equation_00",
+   "4_pg451_equation_01",
+   "4_pg451_equation_02",
+   "4_pg451_equation_03",
+   "4_pg451_equation_04",
+   "4_pg451_equation_05",
+   "4_pg451_equation_06",
+   "4_pg451_equation_07",
+   "4_pg451_equation_08",
+   "4_pg451_equation_09"
+  ],
+  "old_scans_math/4_pg281.pdf": [
+   "4_pg281_equation_00",
+   "4_pg281_equation_01",
+   "4_pg281_equation_02",
+   "4_pg281_equation_03",
+   "4_pg281_equation_04",
+   "4_pg281_equation_05"
+  ],
+  "old_scans_math/5_pg281.pdf": [
+   "5_pg281_equation_00",
+   "5_pg281_equation_01",
+   "5_pg281_equation_02",
+   "5_pg281_equation_03",
+   "5_pg281_equation_04"
+  ],
+  "tables/b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4.pdf": [
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_02",
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_03",
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_05",
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_06",
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_07",
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_08",
+   "b5c5b8661b5a272e7a175cdb20d49e67ba0d_pg4_table_09"
+  ],
+  "tables/c45171e39a77b2b862e0e66a6f25362b199b_pg10.pdf": [
+   "c45171e39a77b2b862e0e66a6f25362b199b_pg10_table_00",
+   "c45171e39a77b2b862e0e66a6f25362b199b_pg10_table_01",
+   "c45171e39a77b2b862e0e66a6f25362b199b_pg10_table_02",
+   "c45171e39a77b2b862e0e66a6f25362b199b_pg10_table_03",
+   "c45171e39a77b2b862e0e66a6f25362b199b_pg10_table_04"
+  ],
+  "tables/2d932ac96ad0d8ccf81a56bd105fa18fdcbb_pg7.pdf": [
+   "2d932ac96ad0d8ccf81a56bd105fa18fdcbb_pg7_table_00"
+  ],
+  "tables/b45c138c634308a84b8b2e67997bef8aa70b_pg15.pdf": [
+   "b45c138c634308a84b8b2e67997bef8aa70b_pg15_table_00",
+   "b45c138c634308a84b8b2e67997bef8aa70b_pg15_table_01",
+   "b45c138c634308a84b8b2e67997bef8aa70b_pg15_table_02",
+   "b45c138c634308a84b8b2e67997bef8aa70b_pg15_table_03",
+   "b45c138c634308a84b8b2e67997bef8aa70b_pg15_table_04"
+  ],
+  "tables/3c0b540d8dab2598af4386b4034c2021f46b_pg4_pg1.pdf": [
+   "3c0b540d8dab2598af4386b4034c2021f46b_pg4_table_00",
+   "3c0b540d8dab2598af4386b4034c2021f46b_pg4_table_01",
+   "3c0b540d8dab2598af4386b4034c2021f46b_pg4_table_02",
+   "3c0b540d8dab2598af4386b4034c2021f46b_pg4_table_03",
+   "3c0b540d8dab2598af4386b4034c2021f46b_pg4_table_04"
+  ],
+  "tables/11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_pg1.pdf": [
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_00",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_02",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_03",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_04",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_05",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_06",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_08",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_09",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_11",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_12",
+   "11e12a3ddca3b1743f6ec1c22a52cdbf9ffe_pg8_table_13"
+  ],
+  "tables/58ad80719a0d3473e065a3ead02d758e08b6_pg10_pg1.pdf": [
+   "58ad80719a0d3473e065a3ead02d758e08b6_pg10_table_00",
+   "58ad80719a0d3473e065a3ead02d758e08b6_pg10_table_01",
+   "58ad80719a0d3473e065a3ead02d758e08b6_pg10_table_02",
+   "58ad80719a0d3473e065a3ead02d758e08b6_pg10_table_03",
+   "58ad80719a0d3473e065a3ead02d758e08b6_pg10_table_04"
+  ],
+  "tables/1c42d782fce429d7796cbac6fc7956e06ec7_pg41_pg1.pdf": [
+   "1c42d782fce429d7796cbac6fc7956e06ec7_pg41_table_00",
+   "1c42d782fce429d7796cbac6fc7956e06ec7_pg41_table_01",
+   "1c42d782fce429d7796cbac6fc7956e06ec7_pg41_table_02",
+   "1c42d782fce429d7796cbac6fc7956e06ec7_pg41_table_03"
+  ],
+  "tables/1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_pg1.pdf": [
+   "1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_table_00",
+   "1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_table_01",
+   "1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_table_03",
+   "1a67d1114deeff1a4ad4a6bee9422afebbb1_pg1_table_04"
+  ],
+  "tables/c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_pg1.pdf": [
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_00",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_01",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_03",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_04",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_05",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_06",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_07",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_08",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_09",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_10",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_12",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_13",
+   "c8c858692b4b469c2af1fc55edcf6292f6ed_pg4_table_14"
+  ]
+ },
+ "reference": {
+  "note": "Pass counts per category as [min, max]. Scanned math is time-capped, so old_scans_math varies with machine load (observed 28-35 across runs of the same code); every other category must match exactly.",
+  "assertions_per_category": {
+   "arxiv_math": 60,
+   "headers_footers": 33,
+   "long_tiny_text": 63,
+   "multi_column": 39,
+   "old_scans": 54,
+   "old_scans_math": 121,
+   "tables": 60
+  },
+  "scanned_math_off": {
+   "categories": {
+    "arxiv_math": [
+     39,
+     39
+    ],
+    "headers_footers": [
+     20,
+     20
+    ],
+    "long_tiny_text": [
+     24,
+     24
+    ],
+    "multi_column": [
+     15,
+     15
+    ],
+    "old_scans": [
+     7,
+     7
+    ],
+    "old_scans_math": [
+     0,
+     0
+    ],
+    "tables": [
+     49,
+     49
+    ]
+   }
+  },
+  "scanned_math_on": {
+   "categories": {
+    "arxiv_math": [
+     39,
+     39
+    ],
+    "headers_footers": [
+     20,
+     20
+    ],
+    "long_tiny_text": [
+     24,
+     24
+    ],
+    "multi_column": [
+     15,
+     15
+    ],
+    "old_scans": [
+     7,
+     7
+    ],
+    "old_scans_math": [
+     28,
+     35
+    ],
+    "tables": [
+     49,
+     49
+    ]
+   }
+  }
+ }
+}

@@ -85,13 +85,17 @@ def safe_cell_value(value: Any) -> str:
     return s
 
 
+RAW_TAG_OPENER_RE = re.compile(r'<(?=[A-Za-z/!?])')
+
+
 def sanitise_block_text(text: str) -> str:
     """
     Sanitise extracted text for Markdown output without changing ordinary text.
 
-    The result is still safe to pass through a Markdown renderer: raw HTML
-    brackets are encoded, while ampersands and quotes remain literal so text
-    such as ``&amp;`` and ``&#x27;`` is not rewritten in the Markdown source.
+    The result is still safe to pass through a Markdown renderer: only a ``<`` that could open an HTML
+    tag, closing tag, comment or declaration (``<`` followed by a letter, ``/``, ``!`` or ``?``) is encoded.
+    Comparisons and ranges such as ``<25`` or ``x < y``, a lone ``>``, ampersands and quotes stay literal, so
+    text such as ``(<25 kg/m2)``, ``&amp;`` and ``&#x27;`` is not rewritten in the Markdown source.
     """
     if not text:
         return text
@@ -104,7 +108,7 @@ def sanitise_block_text(text: str) -> str:
     # Encode raw HTML tags without HTML-escaping normal Markdown text. Escaping
     # ampersands and quotes here changes the extracted text (and leaks entities
     # into downstream Markdown consumers such as the benchmark scorer).
-    t = t.replace('<', '&lt;').replace('>', '&gt;')
+    t = RAW_TAG_OPENER_RE.sub('&lt;', t)
     return t
 # REPLACE sanitise_markdown in security/output_safety.py
 

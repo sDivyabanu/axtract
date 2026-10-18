@@ -446,6 +446,18 @@ def reconstruct_table_from_ocr(
     y1 = max(b.bbox[3] for b in consumed)
     conf = min(b.confidence or 0.0 for b in consumed) or None
 
+    # A real table owns the text inside its box. When most of the page's other OCR text sits between the rows that
+    # were picked up (a page of prose and display equations whose few aligned fragments looked like columns), the
+    # "table" is only a bounding box around a whole page: keep the OCR blocks instead of inventing a table.
+    consumed_ids = {id(b) for b in consumed}
+    interior = [
+        b for b in ocr
+        if id(b) not in consumed_ids
+        and x0 <= (b.bbox[0] + b.bbox[2]) / 2 <= x1 and y0 <= yc(b) <= y1
+    ]
+    if len(interior) >= 4 and len(interior) >= 0.5 * len(consumed):
+        return None
+
     content = "\n".join(" | ".join(r) for r in rows)
     block = DocumentBlock(
         id=f"p{page}-ocr-table",

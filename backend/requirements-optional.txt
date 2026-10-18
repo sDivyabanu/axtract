@@ -1,0 +1,6 @@
+# Optional / legacy packages, deliberately kept out of requirements.txt (not part of the measured environment).
+# Install with:  pip install -r requirements-optional.txt   (needs Python < 3.13 for rapid-latex-ocr)
+
+rapid-latex-ocr    # Apache-2.0: image -> LaTeX; weights fetched once by scripts/fetch_models.py
+fastembed          # Apache-2.0: ONNX embeddings (bge-small, MIT) + cross-encoder reranker (MiniLM, Apache-2.0)
+pypdf              # BSD-3: deliberately naive baseline pipeline
