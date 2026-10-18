@@ -27,6 +27,37 @@ class LineCrop:
     ocr_text: str = ""
 
 
+def _without_scan_artifacts(ink: np.ndarray) -> np.ndarray:
+    """Drop vertical scan artefacts (binding shadow, page-edge streaks, long rules) from the ink mask.
+
+    Such a streak is dark on a large share of the rows, so the row profile never reaches a gap and every text line above and
+    below it fuses into one tall band that the equation recogniser then rejects. Two cases are removed: any column inked over
+    most of the page height (a long rule), and a narrow dark strip that starts at the page edge (shadow of the binding or of
+    the scanner lid), measured inward while the columns stay inked."""
+    h, w = ink.shape
+    share = ink.mean(axis=0)
+    streak = share > 0.60
+    reach = max(3, int(0.05 * w))
+    for edge_columns in (range(w - 1, w - 1 - reach, -1), range(0, reach)):
+        run = []
+        for x in edge_columns:
+            if share[x] <= 0.06:
+                break
+            run.append(x)
+        outer = abs(edge_columns[0] - run[0]) if run else reach
+        if run and outer <= max(2, int(0.02 * w)) and max(share[x] for x in run) >= 0.15 and len(run) < reach:
+            streak[run] = True
+    if not streak.any():
+        return ink
+    grown = streak.copy()
+    for shift in (1, 2, 3):
+        grown[shift:] |= streak[:-shift]
+        grown[:-shift] |= streak[shift:]
+    cleaned = ink.copy()
+    cleaned[:, grown] = False
+    return cleaned
+
+
 def segment_lines(img: Image.Image, gap_frac: float = 0.30, min_h: int = 14, min_w: int = 25) -> list[tuple[int, int, int, int]]:
     """Text-line bands of a page image by horizontal ink projection."""
     g = np.asarray(img.convert("L"), dtype=np.float32)
@@ -34,6 +65,7 @@ def segment_lines(img: Image.Image, gap_frac: float = 0.30, min_h: int = 14, min
         return []
     ink = g < (np.percentile(g, 60) - 55)  # paper tone varies on old scans: threshold relative to it
     h, w = ink.shape
+    ink = _without_scan_artifacts(ink)
     rows = ink.sum(axis=1) > max(2, 0.002 * w)
     bands: list[list[int]] = []
     start = None

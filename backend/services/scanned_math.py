@@ -76,6 +76,40 @@ def bare_number_line(text):
     return bool(_BARE_NUMBER.match((text or "").strip()))
 
 
+def running_head_line(text):
+    """Page headers such as "AFFINE TRANSFORMATIONS 29" or "56 SIMPLE AREAS AND VOLUMES": capitals only, never a formula."""
+    words=re.findall(r"[A-Za-z]+",text or "")
+    if len(words)<2 or not all(w.isupper() for w in words) or max(len(w) for w in words)<4:
+        return False
+    return not re.search(r"[=+^_<>\|]",text)
+
+
+def salvage_complete_rows(latex):
+    """Keep the finished rows of an array/aligned block whose decoding was cut off (token or time limit).
+
+    A tall block of equations is decoded row by row, so everything before the last row break is complete. The cut-off row is
+    dropped and the environment is closed; anything that is not such a block, or does not stay brace-balanced, is not salvaged."""
+    match=re.match(r"\s*\\begin\{(array|aligned|cases|align)\}",latex)
+    if not match:
+        return ""
+    cut=latex.rfind("\\\\")
+    if cut<=match.end():
+        return ""
+    body=latex[:cut].rstrip()
+    if body.count("{")!=body.count("}"):
+        return ""
+    return body+" \\\\ \\end{"+match.group(1)+"}"
+
+
+def math_priority(text,box):
+    """Higher first: lines that look like display equations get the page's recognition budget before ordinary lines do."""
+    t=text or ""
+    signal=len(re.findall(r"[=+^_/<>\|≤≥≠∫∑√]",t))+0.4*len(re.findall(r"\d",t))
+    narrow=1.0 if (box[2]-box[0])<0.75 else 0.0   # a display equation does not span the full measure
+    centred=1.0 if box[0]>0.12 and (box[2]-box[0])<0.75 else 0.0
+    return signal/max(10,len(t))*4+narrow*0.5+centred*0.5
+
+
 def plain_text_line(text):
     t=(text or "").strip()
     if not t or _MATH_SIGNAL.search(t):
@@ -101,7 +135,7 @@ def candidates(image,blocks,page,*,native_words=None):
         text=" ".join(b.content for b in covered)
         if native_words is not None:
             text=" ".join(w[4] for w in native_words if box[0]<=(w[0]+w[2])/2<=box[2] and box[1]<=(w[1]+w[3])/2<=box[3])
-        if looks_like_prose(text) or plain_text_line(text) or bare_number_line(text):
+        if looks_like_prose(text) or plain_text_line(text) or bare_number_line(text) or running_head_line(text):
             continue
         if any(b.page==page and b.bbox and b.type in (BlockType.TABLE,BlockType.CHART,BlockType.EQUATION)
                and not (b.type==BlockType.EQUATION and b.metadata.get("inline"))
@@ -177,14 +211,15 @@ def route_scanned_math(result,path: Path):
         ram=available_memory_bytes()
         if ram is not None and ram<650*1024**2:
             stats["stop_reason"]="low_memory";continue
-        budget=min(max(0,float(os.environ.get("AXTRACT_MFR_PAGE_SECONDS","20"))),deadline.remaining()-6)
+        budget=min(max(0,float(os.environ.get("AXTRACT_MFR_PAGE_SECONDS","28"))),deadline.remaining()-6)
         limit=max(0,min(64,int(os.environ.get("AXTRACT_MFR_MAX_LINES","24"))))
         if budget<=0 or limit==0:
             stats["stop_reason"]="budget";continue
         started=time.monotonic()
         try:
             image=page_image(path,page)
-            for box,ocr,covered in candidates(image,originals,page,native_words=native.get(page)):
+            ordered=sorted(candidates(image,originals,page,native_words=native.get(page)),key=lambda item:-math_priority(item[1],item[0]))
+            for box,ocr,covered in ordered:
                 ram=available_memory_bytes()
                 if ram is not None and ram<300*1024**2:
                     stats["stop_reason"]="low_memory";break
@@ -198,7 +233,12 @@ def route_scanned_math(result,path: Path):
                 crop=image.crop((int(box[0]*width),int(box[1]*height),int(box[2]*width),int(box[3]*height)))
                 prediction=pix2text_mfr.recognize(crop,max_seconds=min(5,available))
                 latex=tidy_latex(prediction.latex,preserve_semantics=True)
-                if not prediction.completed or not validate_latex(latex).ok or not math_structure(latex):
+                salvaged=False
+                if not prediction.completed:
+                    kept=salvage_complete_rows(latex)
+                    if kept and validate_latex(kept).ok and math_structure(kept):
+                        latex,salvaged=kept,True
+                if (not prediction.completed and not salvaged) or not validate_latex(latex).ok or not math_structure(latex):
                     stats["rejected"].append({"bbox":box,"reason":prediction.stop_reason if not prediction.completed else "validation_or_not_math"})
                     continue
                 if any(b.page==page and b.type==BlockType.EQUATION and b.bbox and not b.metadata.get("inline") and _overlap(box,b.bbox)>.5 for b in result.blocks):
@@ -208,7 +248,7 @@ def route_scanned_math(result,path: Path):
                     ["unverified_by_independent_math_reader"],extractor="pix2text_mfr_onnx",
                     extra_metadata={"route":"scanned","crop_ref":{"page":page,"bbox":list(box)},
                         "source_ocr_blocks":[b.id for b in covered],"source_ocr_text":ocr,
-                        "model_stop_reason":prediction.stop_reason,"model_tokens":prediction.tokens,
+                        "model_stop_reason":prediction.stop_reason,"truncated_rows_dropped":salvaged,"model_tokens":prediction.tokens,
                         "recognition_seconds":prediction.seconds,"confidence_source":"model_prediction_requires_review"})
                 result.blocks.append(equation);stats["accepted"]+=1
                 # Hide only fully covered OCR fragments from Markdown. Their exact
