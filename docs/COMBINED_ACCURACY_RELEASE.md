@@ -29,7 +29,15 @@ the new measurements.
 ## Convert a folder of PDFs to Markdown
     backend\.venv\Scripts\python.exe scripts\axtract_batch.py .\input-pdfs .\markdown-output
 
-## Full 1,403-PDF official benchmark
-Not run by this branch. See `docs/FROZEN70_REPRODUCTION.md` for the scorer setup; the adapter is
-`scripts/benchmark_axtract_olmocr.py`. At the measured 70-PDF rate (about 9 s per PDF, scanned math on) expect roughly 3.5 hours
-for extraction plus scoring time.
+## Full 1,403-PDF official benchmark (not run here)
+Set `$data` to the olmOCR-bench `bench_data` folder (it holds `pdfs/` and the `*.jsonl` files), from this repository's venv:
+
+    $env:AXTRACT_SCANNED_MATH="require"; $env:AXTRACT_VERIFY="0"
+    .venv\Scripts\python scripts\benchmark_axtract_olmocr.py --bench-dir $data --output-dir runs\full\candidate --report-dir runs\full\report --no-verify --workers 2
+
+Then score with the unchanged official scorer under its own Python 3.12 environment (flags as in the scorer's `--help`):
+
+    scorer-python -m olmocr.bench.benchmark --dir $data --candidate <path to runs\full\candidate>
+
+Estimate: the 70-PDF run took about 10 minutes with scanned math on (618 s of document time), roughly 9 s per PDF, so about 3.5 hours
+for extraction at that rate, plus scoring. No full-benchmark score has been measured for this branch.
