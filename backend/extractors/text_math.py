@@ -548,8 +548,11 @@ def _rows(toks: list[Tok], body: float) -> list[list[Tok]]:
             continue
         b, s = _row_metrics(ts)
         mathy = all(t.math or not t.letters for t in ts)
+        # Full-size glyphs only: stacked sub/superscripts of one base can sit on two PyMuPDF lines that overlap in x,
+        # which must not be mistaken for two columns.
+        core = [t for t in ts if t.size >= 0.86 * s and not t.big_op] or ts
         info[k] = (min(t.x0 for t in ts), max(t.x1 for t in ts), b, s, mathy,
-                   min(t.y0 for t in ts), max(t.y1 for t in ts))
+                   min(t.y0 for t in ts), max(t.y1 for t in ts), min(t.x0 for t in core), max(t.x1 for t in core))
     parent = {k: k for k in keys}
 
     def find(k):
@@ -561,9 +564,9 @@ def _rows(toks: list[Tok], body: float) -> list[list[Tok]]:
     live = [k for k in keys if info[k] is not None]
     live.sort(key=lambda k: info[k][2])
     for i, a in enumerate(live):
-        ax0, ax1, ab, as_, am, ay0, ay1 = info[a]
+        ax0, ax1, ab, as_, am, ay0, ay1, acx0, acx1 = info[a]
         for b in live[i + 1:]:
-            bx0, bx1, bb, bs, bm, by0, by1 = info[b]
+            bx0, bx1, bb, bs, bm, by0, by1, bcx0, bcx1 = info[b]
             if bb - ab > 1.2 * max(as_, bs, body):
                 break
             big, small = (info[a], info[b]) if as_ >= bs else (info[b], info[a])
@@ -574,7 +577,7 @@ def _rows(toks: list[Tok], body: float) -> list[list[Tok]]:
             limit = 2.2 * body if (am and bm) else 0.6 * body
             if gap > limit:
                 continue
-            if gap < -0.5 and abs(d) < 0.12 * big[3] and min(ax1, bx1) - max(ax0, bx0) > 2.0 and as_ == bs:
+            if gap < -0.5 and abs(d) < 0.12 * big[3] and min(acx1, bcx1) - max(acx0, bcx0) > 2.0 and as_ == bs:
                 continue  # same baseline but overlapping in x: two separate text lines (e.g. columns)
             parent[find(a)] = find(b)
     groups: dict = {}

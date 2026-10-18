@@ -75,3 +75,17 @@ def test_a_real_compound_hyphen_is_preserved_in_extracted_text():
     page = page_with_lines(["This is a long-", "term plan and a self-", "consistent one."])
     text = " ".join(paragraphs(page))
     assert "long-" in text and "self-" in text and "longterm" not in text and "selfconsistent" not in text
+
+
+# --- stacked sub/superscripts of one base are one script group, not two columns ----------------------------------------
+
+BENCH_PDF = Path("C:/Users/sdivy/wdev/Projects/axtract/benchmarks/olmOCR-bench/bench_data/pdfs/arxiv_math/2503.09432_pg6.pdf")
+
+
+@pytest.mark.skipif(not BENCH_PDF.exists(), reason="olmOCR-bench PDFs not available")
+def test_stacked_subscript_and_superscript_stay_on_one_base():
+    from extractors import text_math
+    page = pymupdf.open(str(BENCH_PDF))[0]
+    toks, body = text_math._tokens(page.get_text("rawdict"))
+    latex = " ".join(text_math.build_latex(r) for r in text_math._rows(toks, body))
+    assert "Fr_{q}^{s}" in latex
