@@ -33,7 +33,7 @@ def counts(*words):
 
 
 @pytest.mark.parametrize("head,tail", [("In", "dian"), ("glob", "ally"), ("meta", "bolic"), ("popula", "tion"), ("govern", "ment"),
-                                       ("epidemiolog", "ical"), ("Indo", "nesia")])
+                                       ("epidemiolog", "ical"), ("Indo", "nesia"), ("strength", "ened"), ("partici", "pants"), ("informa", "tion")])
 def test_word_fragments_are_rejoined(head, tail):
     assert soft_hyphen_break(head, tail, counts(head + "-", tail))
 
@@ -45,6 +45,7 @@ def test_word_fragments_are_rejoined(head, tail):
     ("x", "ray", ()), ("co", "operate", ()), ("anti", "inflammatory", ()),
     ("COVID", "19", ()),                                  # tail has to be letters
     ("run", "supercalifragilistic", ()),                  # implausibly long second half
+    ("resource", "limited", ()), ("inversion", "eversion", ()),   # two long halves are two words (audited false joins)
 ])
 def test_compounds_and_ambiguous_breaks_keep_their_hyphen(head, tail, page_words):
     assert not soft_hyphen_break(head, tail, counts(head + "-", tail, *page_words))

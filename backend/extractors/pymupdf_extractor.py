@@ -159,6 +159,8 @@ def soft_hyphen_break(head: str, tail: str, word_counts) -> bool:
         return False
     if word_counts.get(t, 0) >= 2:
         return False
+    if len(h) >= 6 and len(t) >= 6:  # two long halves are two words ("resource-limited"); syllable breaks leave a short half
+        return False
     return not (len(h) >= 4 and word_counts.get(h, 0) >= 1)
 
 
