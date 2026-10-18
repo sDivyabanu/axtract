@@ -138,3 +138,22 @@ def test_a_dropped_th_ligature_is_repaired_only_on_an_english_page():
     english = ["the"] * 4
     assert repair_dropped_th_ligature("Te assay. Tese cells.", english) == "The assay. These cells."
     assert repair_dropped_th_ligature("Te quiero mucho", ["de", "la", "que"]) == "Te quiero mucho"
+
+
+# --- digital math: formulas the page broke across lines, slashed relations, ellipses --------------------------------
+
+def test_an_inline_formula_split_by_a_line_break_is_one_formula():
+    from extractors.text_math import join_split_math
+    assert join_split_math(r"holds for $\dot{x}(t)=$ $N_{t}(x)$ and $a$, $b$ stay") == r"holds for $\dot{x}(t)= N_{t}(x)$ and $a$, $b$ stay"
+
+
+def test_displays_join_only_across_an_open_relation_or_operator():
+    from extractors.text_math import join_split_math
+    assert join_split_math("$$x_{i}=$$\n" + r"$$\mathrm{col}(x)$$") == r"$$x_{i}= \mathrm{col}(x)$$"
+    assert join_split_math("$$a=1$$\n$$b=2$$") == "$$a=1$$\n$$b=2$$"
+    assert join_split_math("$$a$$\n$$+b$$") == "$$a +b$$"
+
+
+def test_combining_slash_over_equals_becomes_not_equal_and_primes_stay_primes():
+    from extractors.text_math import _negate_relations
+    assert _negate_relations(r"\lambda^{'" + "\u0338" + r"}=\rho'") == r"\lambda'\ne\rho'"

@@ -383,7 +383,19 @@ def build_latex(toks: list[Tok]) -> str:
                 tail += "^{" + build_latex(sups) + "}"
         parts[-1] = parts[-1] + tail
         i = j
-    return _join(parts)
+    return _negate_relations(_join(parts))
+
+
+# A "not equal" is typeset as a combining slash (U+0338) laid over "=" and extracted as a separate, often raised, glyph.
+_COMBINING_SLASH = "̸"
+_SLASHED = re.compile(r"(\^\{[^{}]*?)?" + _COMBINING_SLASH + r"(\})?(\s*)=")
+
+
+def _negate_relations(latex: str) -> str:
+    if _COMBINING_SLASH not in latex:
+        return latex
+    latex = _SLASHED.sub(lambda m: (m.group(1) + "}" if m.group(1) else "") + r"\ne", latex)
+    return re.sub(r"\^\{('+)\}", r"\1", latex)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -699,8 +711,8 @@ def _render_row(row: list[Tok], body: float) -> tuple[str, int, int, bool]:
     prose_words = [c for c in classes if c == "prose"]
     if not prose_words:
         toks = [t for w in words for t in w]
-        latex = build_latex(toks).strip()
-        latex = re.sub(r"(?<![.])\.\.\.(?=[^.])", r"\\ldots ", latex)
+        latex = build_latex(toks).strip().replace(_COMBINING_SLASH, "")
+        latex = re.sub(r"(?<![.])\.\.\.(?![.])", r"\\ldots ", latex)
         # sentence punctuation after a display equation is part of the equation in TeX source
         text = f"$${latex}$$" + (f" {eqno}" if eqno else "")
         return text, 0, 1, True
@@ -737,16 +749,18 @@ def _render_row(row: list[Tok], body: float) -> tuple[str, int, int, bool]:
         # trailing sentence punctuation stays outside the math
         trail = ""
         toks.sort(key=lambda t: t.x0)
-        while toks and toks[-1].text in ".,;:" and not toks[-1].math and _script_kind(toks[-1], base, size) == "base":
+        ellipsis = "".join(t.text for t in toks[-3:] if not t.space) == "..."
+        while (toks and not ellipsis and toks[-1].text in ".,;:" and not toks[-1].math
+               and _script_kind(toks[-1], base, size) == "base"):
             trail = toks[-1].text + trail
             toks.pop()
         lead = ""
         while toks and toks[0].text in "([" and not toks[0].math and not _balanced_open(toks):
             lead += toks[0].text
             toks.pop(0)
-        latex = build_latex(toks).strip()
+        latex = build_latex(toks).strip().replace(_COMBINING_SLASH, "")
         # three consecutive periods → \ldots  (common in TeX PDFs)
-        latex = re.sub(r"(?<![.])\.\.\.(?=[^.])", r"\\ldots ", latex)
+        latex = re.sub(r"(?<![.])\.\.\.(?![.])", r"\\ldots ", latex)
         if latex:
             out.append(f"{lead}${latex}${trail}")
             inline += 1
@@ -766,6 +780,30 @@ def _attachable(w: list[Tok]) -> bool:
 def _balanced_open(toks: list[Tok]) -> bool:
     s = "".join(t.text for t in toks)
     return s.count("(") <= s.count(")") and s.count("[") <= s.count("]")
+
+
+_INLINE_SPLIT = re.compile(r"(?<!\$)\$([^$\n]*[^$\s])\$[ \t]+\$([^$\s][^$\n]*)\$(?!\$)")
+_DISPLAY_SPLIT = re.compile(r"\$\$([^$]*?)\$\$\n\$\$([^$]*?)\$\$")
+_OPEN_RELATION = re.compile(r"(?:=|<|>|\\(?:leq?|geq?|ne|neq|approx|equiv|sim|to|rightarrow|in|subset|subseteq|cdot|times|pm|mp)|[+\-])\s*$")
+_CONTINUING_START = re.compile(r"^\s*(?:=|<|>|\\(?:leq?|geq?|ne|neq|approx|equiv|sim|cdot|times|pm|mp)(?![A-Za-z])|[+\-])")
+
+
+def join_split_math(content: str) -> str:
+    """One formula that the page broke across lines is one formula: `$a=$ $b$` -> `$a= b$`, and two displays where the first
+    ends on an operator or relation (or the second starts with one) -> one display."""
+
+    def display(m):
+        first, second = m.group(1), m.group(2)
+        if _OPEN_RELATION.search(first) or _CONTINUING_START.search(second):
+            return f"$${first.rstrip()} {second.lstrip()}$$"
+        return m.group(0)
+
+    previous = None
+    while previous != content:
+        previous = content
+        content = _INLINE_SPLIT.sub(lambda m: f"${m.group(1)} {m.group(2)}$", content)
+        content = _DISPLAY_SPLIT.sub(display, content)
+    return content
 
 
 def rebuild_page(raw: dict, drawings: list[dict], page_width: float, *,
@@ -836,5 +874,5 @@ def rebuild_page(raw: dict, drawings: list[dict], page_width: float, *,
         content = " ".join(parts)
         content = re.sub(r"[ \t]*\n[ \t]*", "\n", content)
         content = re.sub(r"\n{2,}", "\n", content).strip()
-        result.blocks[b] = content
+        result.blocks[b] = join_split_math(content)
     return result
