@@ -89,3 +89,52 @@ def test_stacked_subscript_and_superscript_stay_on_one_base():
     toks, body = text_math._tokens(page.get_text("rawdict"))
     latex = " ".join(text_math.build_latex(r) for r in text_math._rows(toks, body))
     assert "Fr_{q}^{s}" in latex
+
+
+# --- paragraph reconstruction from one-line blocks ---------------------------------------------------------------------
+
+def line_block(text, y, x0=50.0, x1=300.0, size=10.0):
+    return {"content": text, "bbox": (x0, y, x1, y + 11.0), "font_size": size, "is_bold": False, "math_font": False,
+            "footnote_refs": [], "superscript_spans": [], "single_line": True, "line_wrap_repairs": []}
+
+
+def merged(blocks, words=()):
+    from extractors.pymupdf_extractor import merge_line_blocks
+    counts = Counter(w.casefold() for w in words)
+    return [b["content"] for b in merge_line_blocks(blocks, set(counts), counts)]
+
+
+def test_one_line_blocks_of_a_paragraph_become_one_paragraph_with_the_hyphen_rejoined():
+    out = merged([line_block("Question Answer-", 100), line_block("ing aims at the answer of a", 111),
+                  line_block("question in large collections.", 122, x1=210)])
+    assert out == ["Question Answering aims at the answer of a question in large collections."]
+
+
+def test_a_short_last_line_and_an_indented_line_start_new_paragraphs():
+    out = merged([line_block("The first paragraph runs across the whole column", 100), line_block("and ends here.", 111, x1=120),
+                  line_block("Second paragraph starts and is long enough.", 122), line_block("Indented new paragraph begins", 133, x0=64.0)])
+    assert out == ["The first paragraph runs across the whole column and ends here.",
+                   "Second paragraph starts and is long enough.", "Indented new paragraph begins"]
+
+
+def test_lines_in_different_columns_or_sizes_are_not_merged():
+    out = merged([line_block("left column text", 100, x0=50, x1=150), line_block("right column text", 111, x0=300, x1=400),
+                  line_block("A big heading", 140, size=18.0)])
+    assert len(out) == 3
+
+
+def test_a_compound_broken_at_its_own_hyphen_is_joined_without_a_space():
+    out = merged([line_block("a fast add-mix and no-", 100), line_block("wash protocol that runs fast", 111)], words=("wash", "wash"))
+    assert "no-wash" in out[0]
+
+
+def test_inflection_endings_are_rejoined_even_when_the_stem_is_a_word():
+    assert soft_hyphen_break("Answer", "ing", counts("answer-", "ing", "answer"))
+    assert soft_hyphen_break("incre", "mentally", Counter({"incre-": 2, "mentally": 2}))
+
+
+def test_a_dropped_th_ligature_is_repaired_only_on_an_english_page():
+    from extractors.pymupdf_extractor import repair_dropped_th_ligature
+    english = ["the"] * 4
+    assert repair_dropped_th_ligature("Te assay. Tese cells.", english) == "The assay. These cells."
+    assert repair_dropped_th_ligature("Te quiero mucho", ["de", "la", "que"]) == "Te quiero mucho"
