@@ -92,7 +92,7 @@ evaluation/
 
 ## Prerequisites
 
-- Python 3.11+ (tested with 3.14)
+- Python 3.11+ (all measurements and pinned requirements are from 3.14.6; the official scorer runs separately on 3.12)
 - Node.js 20+ and npm (tested with Node 22)
 - Git
 
@@ -241,6 +241,26 @@ backend\.venv\Scripts\python.exe scripts\axtract_batch.py .\input-pdfs .\markdow
 The default is one worker for predictable CPU and model memory use. Add `--workers 2` to
 process multiple PDFs concurrently on a machine with adequate resources.
 
+## Scanned math (optional) and reproducing the frozen diagnostic
+
+Scanned-page equation recognition (Pix2Text-MFR, MIT licence, CPU-only, offline) is **off by default**. It needs the pinned
+packages in `backend/requirements.txt` and the 8 model files, which you place on the machine yourself (nothing is downloaded at
+runtime). Set up and verify it in a clean virtual environment:
+
+```powershell
+py -3.14 -m venv .venv
+.venv\Scripts\python -m pip install -r backend\requirements.txt          # pinned; backend\requirements.lock.txt is the tested full lock
+.venv\Scripts\python scripts\scanned_math_assets.py install --from <folder with the 8 Pix2Text-MFR files>
+.venv\Scripts\python scripts\scanned_math_assets.py check                # must print: OK: Pix2Text-MFR loads from ...
+$env:AXTRACT_SCANNED_MATH = "1"                                          # "1" warns and continues if assets are missing; "require" fails loudly
+.venv\Scripts\python scripts\axtract_batch.py .\input-pdfs .\markdown-output
+```
+
+To reproduce the 70-PDF / 430-assertion diagnostic (a sample, **not** full-corpus accuracy) with the unchanged official scorer, follow
+[docs/FROZEN70_REPRODUCTION.md](docs/FROZEN70_REPRODUCTION.md); the short form is
+`python scripts/frozen70_benchmark.py extract|score|report ... --scanned-math require`. Asset layout, versions, hashes and licences:
+[docs/SCANNED_MATH_SETUP.md](docs/SCANNED_MATH_SETUP.md).
+
 ## Evaluation & Benchmarking
 
 See [evaluation/README.md](evaluation/README.md) for detailed metrics documentation.
@@ -313,7 +333,7 @@ The route and service do not need to change.
 **Setup (one time)**
 
 ```bash
-cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cd backend && python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cd .. && backend/.venv/bin/python scripts/fetch_models.py   # formula weights, checksummed
 # LibreOffice is needed only to preview DOCX/PPTX/XLSX (and EMF/WMF pictures):
 #   macOS: download from libreoffice.org, or put `soffice` on PATH

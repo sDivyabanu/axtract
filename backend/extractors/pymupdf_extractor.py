@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from time import perf_counter
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import ClassVar
 
@@ -73,34 +73,135 @@ def _align_word_block_numbers(words: list[tuple], page_dict: dict) -> list[tuple
 
 def _word_lines(words: list[tuple]) -> dict[int, list[tuple[float, float, str]]]:
     """Return each text block's geometrically ordered lines from PyMuPDF words."""
-    grouped: dict[tuple[int, int], list[tuple[float, float, float, int, str]]] = defaultdict(list)
+    grouped: dict[tuple[int, float], list[tuple[float, float, float, float, int, str]]] = defaultdict(list)
     for word in words:
-        x0, y0, _x1, y1, text, block_no, line_no, word_no = word[:8]
-        grouped[(block_no, line_no)].append((x0, y0, y1, word_no, text))
+        x0, y0, x1, y1, text, block_no, line_no, word_no = word[:8]
+        mid_y = (y0 + y1) / 2
+        assigned_key = None
+        for (b, clus_y) in list(grouped.keys()):
+            if b == block_no and abs(mid_y - clus_y) < 3.0:
+                assigned_key = (b, clus_y)
+                break
+        if assigned_key is None:
+            assigned_key = (block_no, mid_y)
+        grouped[assigned_key].append((x0, y0, x1, y1, word_no, text))
+
     result: dict[int, list[tuple[float, float, str]]] = defaultdict(list)
-    for (block_no, _line_no), words in grouped.items():
-        words.sort(key=lambda item: (item[0], item[3]))
-        result[block_no].append((min(w[1] for w in words), max(w[2] for w in words),
-                                 " ".join(w[4] for w in words)))
+    for (block_no, _clus_y), w_list in grouped.items():
+        w_list.sort(key=lambda item: (item[0], item[4]))
+        merged: list[tuple[float, float, float, float, str]] = []
+        for item in w_list:
+            x0, y0, x1, y1, wno, text = item
+            if merged:
+                prev_x0, prev_y0, prev_x1, prev_y1, prev_text = merged[-1]
+                gap = x0 - prev_x1
+                # Sub-character spacing / negative overlap indicates intra-word fragment (syllable split)
+                h = max(1.0, y1 - y0, prev_y1 - prev_y0)
+                if gap <= min(0.12 * h, 0.85):
+                    merged[-1] = (prev_x0, prev_y0, max(prev_x1, x1), prev_y1, prev_text + text)
+                    continue
+            merged.append((x0, y0, x1, y1, text))
+        line_str = " ".join(m[4] for m in merged)
+        result[block_no].append((min(m[1] for m in merged), max(m[3] for m in merged), line_str))
+
     for block_no in result:
         result[block_no].sort(key=lambda line: line[0])
     return result
 
 
+
 def _detach_footnote_markers(text: str) -> tuple[str, list[str]]:
     """Detach parenthesized references anywhere in a line, including fused suffixes."""
     refs: list[str] = []
+    tokens = text.split()
     words: list[str] = []
-    for word in text.split():
-        if _FOOTNOTE.fullmatch(word):
-            refs.append(word[1:-1])
+    for idx, token in enumerate(tokens):
+        if _FOOTNOTE.fullmatch(token):
+            # Preserve leading list enumerators like (i), (v), (1), (a) at start of line
+            # or immediately following terminal punctuation (. : ;)
+            if idx == 0 or (words and words[-1].endswith((".", ":", ";"))):
+                words.append(token)
+                continue
+            refs.append(token[1:-1])
             continue
-        while match := re.search(r"\(([a-z]|\d{1,2})\)$", word, re.IGNORECASE):
+        while match := re.search(r"\(([a-z]|\d{1,2})\)$", token, re.IGNORECASE):
             refs.append(match.group(1))
-            word = word[:match.start()]
-        if word:
-            words.append(word)
+            token = token[:match.start()]
+        if token:
+            words.append(token)
     return " ".join(words), refs
+
+
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
+
+
+# First halves that start a real hyphenated compound: the hyphen belongs to the word and must be kept at a line end.
+_COMPOUND_HEADS = frozenset("self non anti pre post semi multi cross half all ex co quasi ultra inter intra sub super well "
+                            "long short high low full part ill".split())
+# Second halves that are whole words (or function words), not word fragments: "pre- and post-", "state- of".
+_WHOLE_WORD_TAILS = frozenset(("of the and or to in on for by at as is a an are was were be but nor so with from into than that this "
+                               "these those it its their his her our your my we you he she they not no if then when while which who "
+                               "what where how why can will would should could may might must shall do does did has have had also "
+                               "only both either each every any some such very more most less like based related type wide free").split())
+
+
+# Some fonts draw "Th" as one ligature glyph that carries no text, so "The" is extracted as "Te". The closed set below holds
+# only forms that are not English words, and is repaired only on a page that is evidently English (it spells out "the"
+# several times), because "Te" is a real word in other languages.
+_DROPPED_TH = re.compile(r"(?<![A-Za-z])T(e|is|ese|ose|ey|ere|us)(?![A-Za-z])")
+
+
+def repair_dropped_th_ligature(text: str, page_words: list[str]) -> str:
+    if sum(1 for w in page_words if w == "the") < 3 or not _DROPPED_TH.search(text):
+        return text
+    return _DROPPED_TH.sub(lambda m: "Th" + m.group(1), text)
+
+
+# Second halves that are inflectional or derivational endings: "answer-"/"ing" is one word even though "answer" also occurs alone.
+_SUFFIX_TAILS = frozenset(("ing ings ed er ers es est ly ment ments ness tion tions sion sions ity ities ous ive ives able ible al ally "
+                           "ize ized izing ise ised ising ation ations ance ence ant ent ism ist ists ical").split())
+
+
+def soft_hyphen_break(head: str, tail: str, word_counts) -> bool:
+    """True when `head-` at a line end and `tail` at the start of the next line are one word split by typesetting.
+
+    A fragment such as "popula-"/"tion" is joined. A compound ("long-term", "data-driven", "pre- and post-") is not: its
+    second half is a word that also stands alone on the page, or a function word, or its first half is a known compound
+    prefix, or the first half is itself a word on the page. `word_counts` counts the page's tokens, so a fragment that
+    occurs only once (as this fragment) is not "a word of its own"."""
+    h, t = head.casefold(), tail.casefold()
+    if not (h.isalpha() and t.isalpha()) or len(h) < 2 or not 2 <= len(t) <= 8:
+        return False
+    if h in _COMPOUND_HEADS or t in _WHOLE_WORD_TAILS:
+        return False
+    if t in _SUFFIX_TAILS and len(h) >= 3:
+        return True
+    if word_counts.get(t, 0) >= 2 and word_counts.get(t, 0) > word_counts.get(h + "-", 0):
+        return False                 # (a tail seen only as often as this very break is a fragment, not a word of its own)
+    if len(h) >= 6 and len(t) >= 6:  # two long halves are two words ("resource-limited"); syllable breaks leave a short half
+        return False
+    return not (len(h) >= 4 and word_counts.get(h, 0) >= 1)
+
+
+def strip_superscript_refs(content: str, refs: list[str]) -> str:
+    """Remove detected superscript footnote markers without touching the surrounding punctuation.
+
+    A marker LIST such as ``work1,2`` is removed as one run (its inner comma goes with it), but a comma that follows the
+    last marker belongs to the sentence (``work2, showed`` -> ``work, showed``). Deterministic: markers are matched
+    longest-first from a sorted list, never in set-iteration order."""
+    digits = sorted({r for r in refs if r.isdigit()}, key=lambda r: (-len(r), r))
+    if not digits:
+        return content
+    alt = "|".join(re.escape(r) for r in digits)
+    # A raised digit right after a short unit or variable (m2, cm3, x2) is an exponent: keep it as a real superscript
+    # character (m\u00b2). Footnote markers follow words and punctuation, so they are still removed below.
+    content = re.sub(rf"(?<![A-Za-z])([A-Za-z]{{1,2}})({alt})(?!\w)", lambda m: m.group(1) + m.group(2).translate(_SUPERSCRIPT_DIGITS), content)
+    content = re.sub(rf"(?<=[A-Za-z])(?:{alt})(?:,(?:{alt}))*(?!\w)", "", content)
+    for ref in digits:
+        # a marker glued to punctuation or a closing bracket ("al.2", "(see)3"); a digit set off by white space is a real
+        # number ("3 m", "page 2") and is never deleted just because a footnote with the same digit exists in the block
+        content = re.sub(rf"(?<=[^\w\s]){re.escape(ref)}(?!\w)", "", content)
+    return content
 
 
 def _cell_token_count(cell: object) -> int:
@@ -254,6 +355,82 @@ def _has_aligned_text_columns(words: list[tuple]) -> bool:
     return any(len({line for _, line in cluster}) >= 3 for cluster in clusters)
 
 
+def merge_line_blocks(raw_blocks: list[dict], vocabulary, word_counts) -> list[dict]:
+    """Join the lines of one paragraph that the PDF stored as one text block each.
+
+    Some producers (older PostScript/Distiller output, scanned-then-OCR layers) emit every line as its own block, which
+    otherwise becomes one paragraph per line with line-end hyphens left in place. Consecutive single-line blocks are
+    one paragraph when they share a column (same left edge or strong horizontal overlap), a font size and weight, sit one
+    line apart, and the earlier one is not the short last line of a paragraph or the next one an indented new paragraph."""
+    out: list[dict] = []
+    run_right = 0.0
+    for raw in raw_blocks:
+        prev = out[-1] if out else None
+        if prev is not None and _continues_paragraph(prev, raw, run_right):
+            prev_text, next_text = prev["content"], raw["content"]
+            hyphen = re.search(r"([A-Za-z]+)-$", prev_text)
+            head = re.match(r"([a-z]+)", next_text)
+            if hyphen and head and ((hyphen.group(1) + head.group(1)).casefold() in vocabulary
+                                    or soft_hyphen_break(hyphen.group(1), head.group(1), word_counts)):
+                prev["content"] = prev_text[:-1] + next_text
+                prev["line_wrap_repairs"] = list(prev.get("line_wrap_repairs", [])) + [hyphen.group(1) + head.group(1)]
+            elif hyphen and head:
+                prev["content"] = prev_text + next_text
+            else:
+                prev["content"] = prev_text + " " + next_text
+            prev["bbox"] = (min(prev["bbox"][0], raw["bbox"][0]), min(prev["bbox"][1], raw["bbox"][1]),
+                            max(prev["bbox"][2], raw["bbox"][2]), max(prev["bbox"][3], raw["bbox"][3]))
+            prev["footnote_refs"] = list(prev["footnote_refs"]) + list(raw["footnote_refs"])
+            prev["superscript_spans"] = list(prev["superscript_spans"]) + list(raw["superscript_spans"])
+            prev["single_line"] = raw["single_line"]
+            prev["line_bbox"] = _last_line_box(raw)
+            run_right = max(run_right, raw["bbox"][2])
+            continue
+        raw = dict(raw)
+        raw["line_bbox"] = _last_line_box(raw)
+        out.append(raw)
+        run_right = raw["bbox"][2]
+    return out
+
+
+def _last_line_box(raw: dict) -> tuple[float, float, float, float]:
+    x0, y0, x1, y1 = raw["bbox"]
+    if raw.get("single_line"):
+        return x0, y0, x1, y1
+    return x0, y1 - 1.2 * raw["font_size"], x1, y1
+
+
+def _continues_paragraph(prev: dict, raw: dict, run_right: float) -> bool:
+    if prev.get("text_layer_math") or raw.get("text_layer_math"):
+        return False
+    if not (prev.get("single_line") and raw.get("single_line")):
+        # A whole multi-line block next to a stray line: only bridge a break in the middle of a sentence.
+        tail = prev["content"].rstrip()[-1:]
+        if tail in ".!?:;\"”)" or not (tail == "-" or raw["content"][:1].islower()):
+            return False
+    if prev.get("math_font") or raw.get("math_font"):
+        return False
+    size = prev["font_size"]
+    if size <= 0 or abs(size - raw["font_size"]) > 0.6 or prev["is_bold"] != raw["is_bold"]:
+        return False
+    lx0, ly0, lx1, ly1 = prev["line_bbox"]
+    x0, y0, x1, y1 = raw["bbox"]
+    height = max(1.0, ly1 - ly0)
+    gap = y0 - ly1
+    if gap > 0.55 * height or gap < -0.6 * height:
+        return False
+    if x0 > lx0 + 0.8 * size and prev["content"].rstrip()[-1:] in ".!?:;\"”)":
+        return False                # indented after a finished sentence: a new paragraph
+    overlap = min(lx1, x1) - max(lx0, x0)
+    if overlap <= 0.5 * min(lx1 - lx0, x1 - x0):
+        return False
+    text = prev["content"].rstrip()
+    # the short last line of a paragraph (ends a sentence well before the column edge) does not run on
+    if text[-1:] in ".!?:;" and lx1 < run_right - 2.5 * size:
+        return False
+    return True
+
+
 class PyMuPDFExtractor(BaseExtractor):
     """Extract text, tables and figure candidates from digital PDFs."""
 
@@ -290,7 +467,8 @@ class PyMuPDFExtractor(BaseExtractor):
             "dict", flags=pymupdf.TEXTFLAGS_DICT | pymupdf.TEXT_PRESERVE_WHITESPACE
         )
         raw_words = _align_word_block_numbers(page.get_text("words"), page_dict)
-        source_vocabulary = {str(w[4]).strip(".,;:!?()[]\"\'").casefold() for w in raw_words}
+        source_word_counts = Counter(str(w[4]).strip(".,;:!?()[]\"\'").casefold() for w in raw_words)
+        source_vocabulary = set(source_word_counts)
         word_lines = _word_lines(raw_words)
         spans_by_block: dict[int, list[dict]] = defaultdict(list)
         for index, item in enumerate(page_dict["blocks"]):
@@ -498,12 +676,15 @@ class PyMuPDFExtractor(BaseExtractor):
                 prior_word = re.search(r"([A-Za-z]+)-$", parts[-1]) if parts else None
                 next_word = re.match(r"([a-z]+)", text)
                 joined = prior_word.group(1)+next_word.group(1) if prior_word and next_word else ""
-                if (joined and not native_math and joined.casefold() in source_vocabulary
-                        and y0-lines[i-1][1]<=.5*median_line_height):
+                if (joined and not native_math and y0-lines[i-1][1]<=.5*median_line_height
+                        and (joined.casefold() in source_vocabulary
+                             or soft_hyphen_break(prior_word.group(1), next_word.group(1), source_word_counts))):
                     parts[-1] = parts[-1][:-1]
                     wrap_repairs.append(joined)
                 elif parts and y0 - lines[i - 1][1] > 0.5 * median_line_height:
                     parts.append("\n")
+                elif parts and prior_word and next_word:
+                    pass                    # a compound broken at its own hyphen ("no-" / "wash"): keep it, no space
                 elif parts:
                     parts.append(" ")
                 text, refs = _detach_footnote_markers(text)
@@ -517,14 +698,11 @@ class PyMuPDFExtractor(BaseExtractor):
             is_bold = any(span.get("flags", 0) & (1 << 4) for span in spans)
             math_font = any(_MATH_FONT.search(span.get("font", "")) for span in spans)
             superscript_refs = self._superscript_refs(spans, median_size)
-            for ref in sorted(set(superscript_refs), key=len, reverse=True):
-                if ref.isdigit():
-                    content = re.sub(rf"(?<=[A-Za-z]){re.escape(ref)},?(?=\b|\s|$)", "", content)
-                    content = re.sub(rf"(?<!\w){re.escape(ref)}(?!\w)", "", content)
+            content = strip_superscript_refs(content, superscript_refs)
             font_sizes.append(max_size)
             raw_blocks.append({"content": content.strip(), "bbox": bbox, "font_size": max_size,
                                "is_bold": is_bold, "math_font": math_font,
-                               "footnote_refs": block_refs,
+                               "footnote_refs": block_refs, "single_line": len(lines) == 1,
                                "superscript_spans": superscript_refs, "line_wrap_repairs": wrap_repairs})
 
         if chart_signal:
@@ -569,6 +747,11 @@ class PyMuPDFExtractor(BaseExtractor):
                 figure.metadata["crop_bbox"] = crop
             raw_blocks = retained
 
+        raw_blocks = merge_line_blocks(raw_blocks, source_vocabulary, source_word_counts)
+        page_tokens = [str(w[4]).strip(".,;:!?()[]\"'") for w in raw_words]
+        for raw in raw_blocks:
+            if not raw.get("text_layer_math"):
+                raw["content"] = repair_dropped_th_ligature(raw["content"], page_tokens)
         page_median = sorted(font_sizes)[len(font_sizes) // 2] if font_sizes else median_size
         for raw in raw_blocks:
             content = raw["content"]

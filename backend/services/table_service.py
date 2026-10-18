@@ -428,6 +428,16 @@ def reconstruct_table_from_ocr(
     if strong_cols < 2:
         return None
 
+    # Prose guard: Multi-column dictionary/book text should not be reconstructed as a table.
+    # Tabular rows typically have short entries (labels, numbers, codes). When rows exceed 15
+    # and average cell length exceeds 25 characters, or when long rows dominate, it is multi-column prose.
+    non_empty_cells = [c for r in rows for c in r if c]
+    if non_empty_cells:
+        avg_char_len = sum(len(c) for c in non_empty_cells) / len(non_empty_cells)
+        if len(rows) > 15 and avg_char_len > 25.0:
+            return None
+
+
     # 4. build the block
     consumed = [b for ln, _ in grid for b in ln]
     x0 = min(b.bbox[0] for b in consumed)
@@ -435,6 +445,18 @@ def reconstruct_table_from_ocr(
     x1 = max(b.bbox[2] for b in consumed)
     y1 = max(b.bbox[3] for b in consumed)
     conf = min(b.confidence or 0.0 for b in consumed) or None
+
+    # A real table owns the text inside its box. When most of the page's other OCR text sits between the rows that
+    # were picked up (a page of prose and display equations whose few aligned fragments looked like columns), the
+    # "table" is only a bounding box around a whole page: keep the OCR blocks instead of inventing a table.
+    consumed_ids = {id(b) for b in consumed}
+    interior = [
+        b for b in ocr
+        if id(b) not in consumed_ids
+        and x0 <= (b.bbox[0] + b.bbox[2]) / 2 <= x1 and y0 <= yc(b) <= y1
+    ]
+    if len(interior) >= 4 and len(interior) >= 0.5 * len(consumed):
+        return None
 
     content = "\n".join(" | ".join(r) for r in rows)
     block = DocumentBlock(

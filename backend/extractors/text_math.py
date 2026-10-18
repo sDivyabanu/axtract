@@ -383,7 +383,19 @@ def build_latex(toks: list[Tok]) -> str:
                 tail += "^{" + build_latex(sups) + "}"
         parts[-1] = parts[-1] + tail
         i = j
-    return _join(parts)
+    return _negate_relations(_join(parts))
+
+
+# A "not equal" is typeset as a combining slash (U+0338) laid over "=" and extracted as a separate, often raised, glyph.
+_COMBINING_SLASH = "̸"
+_SLASHED = re.compile(r"(\^\{[^{}]*?)?" + _COMBINING_SLASH + r"(\})?(\s*)=")
+
+
+def _negate_relations(latex: str) -> str:
+    if _COMBINING_SLASH not in latex:
+        return latex
+    latex = _SLASHED.sub(lambda m: (m.group(1) + "}" if m.group(1) else "") + r"\ne", latex)
+    return re.sub(r"\^\{('+)\}", r"\1", latex)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -548,8 +560,11 @@ def _rows(toks: list[Tok], body: float) -> list[list[Tok]]:
             continue
         b, s = _row_metrics(ts)
         mathy = all(t.math or not t.letters for t in ts)
+        # Full-size glyphs only: stacked sub/superscripts of one base can sit on two PyMuPDF lines that overlap in x,
+        # which must not be mistaken for two columns.
+        core = [t for t in ts if t.size >= 0.86 * s and not t.big_op] or ts
         info[k] = (min(t.x0 for t in ts), max(t.x1 for t in ts), b, s, mathy,
-                   min(t.y0 for t in ts), max(t.y1 for t in ts))
+                   min(t.y0 for t in ts), max(t.y1 for t in ts), min(t.x0 for t in core), max(t.x1 for t in core))
     parent = {k: k for k in keys}
 
     def find(k):
@@ -561,9 +576,9 @@ def _rows(toks: list[Tok], body: float) -> list[list[Tok]]:
     live = [k for k in keys if info[k] is not None]
     live.sort(key=lambda k: info[k][2])
     for i, a in enumerate(live):
-        ax0, ax1, ab, as_, am, ay0, ay1 = info[a]
+        ax0, ax1, ab, as_, am, ay0, ay1, acx0, acx1 = info[a]
         for b in live[i + 1:]:
-            bx0, bx1, bb, bs, bm, by0, by1 = info[b]
+            bx0, bx1, bb, bs, bm, by0, by1, bcx0, bcx1 = info[b]
             if bb - ab > 1.2 * max(as_, bs, body):
                 break
             big, small = (info[a], info[b]) if as_ >= bs else (info[b], info[a])
@@ -574,7 +589,7 @@ def _rows(toks: list[Tok], body: float) -> list[list[Tok]]:
             limit = 2.2 * body if (am and bm) else 0.6 * body
             if gap > limit:
                 continue
-            if gap < -0.5 and abs(d) < 0.12 * big[3] and min(ax1, bx1) - max(ax0, bx0) > 2.0 and as_ == bs:
+            if gap < -0.5 and abs(d) < 0.12 * big[3] and min(acx1, bcx1) - max(acx0, bcx0) > 2.0 and as_ == bs:
                 continue  # same baseline but overlapping in x: two separate text lines (e.g. columns)
             parent[find(a)] = find(b)
     groups: dict = {}
@@ -696,8 +711,8 @@ def _render_row(row: list[Tok], body: float) -> tuple[str, int, int, bool]:
     prose_words = [c for c in classes if c == "prose"]
     if not prose_words:
         toks = [t for w in words for t in w]
-        latex = build_latex(toks).strip()
-        latex = re.sub(r"(?<![.])\.\.\.(?=[^.])", r"\\ldots ", latex)
+        latex = build_latex(toks).strip().replace(_COMBINING_SLASH, "")
+        latex = re.sub(r"(?<![.])\.\.\.(?![.])", r"\\ldots ", latex)
         # sentence punctuation after a display equation is part of the equation in TeX source
         text = f"$${latex}$$" + (f" {eqno}" if eqno else "")
         return text, 0, 1, True
@@ -734,16 +749,18 @@ def _render_row(row: list[Tok], body: float) -> tuple[str, int, int, bool]:
         # trailing sentence punctuation stays outside the math
         trail = ""
         toks.sort(key=lambda t: t.x0)
-        while toks and toks[-1].text in ".,;:" and not toks[-1].math and _script_kind(toks[-1], base, size) == "base":
+        ellipsis = "".join(t.text for t in toks[-3:] if not t.space) == "..."
+        while (toks and not ellipsis and toks[-1].text in ".,;:" and not toks[-1].math
+               and _script_kind(toks[-1], base, size) == "base"):
             trail = toks[-1].text + trail
             toks.pop()
         lead = ""
         while toks and toks[0].text in "([" and not toks[0].math and not _balanced_open(toks):
             lead += toks[0].text
             toks.pop(0)
-        latex = build_latex(toks).strip()
+        latex = build_latex(toks).strip().replace(_COMBINING_SLASH, "")
         # three consecutive periods → \ldots  (common in TeX PDFs)
-        latex = re.sub(r"(?<![.])\.\.\.(?=[^.])", r"\\ldots ", latex)
+        latex = re.sub(r"(?<![.])\.\.\.(?![.])", r"\\ldots ", latex)
         if latex:
             out.append(f"{lead}${latex}${trail}")
             inline += 1
@@ -763,6 +780,30 @@ def _attachable(w: list[Tok]) -> bool:
 def _balanced_open(toks: list[Tok]) -> bool:
     s = "".join(t.text for t in toks)
     return s.count("(") <= s.count(")") and s.count("[") <= s.count("]")
+
+
+_INLINE_SPLIT = re.compile(r"(?<!\$)\$([^$\n]*[^$\s])\$[ \t]+\$([^$\s][^$\n]*)\$(?!\$)")
+_DISPLAY_SPLIT = re.compile(r"\$\$([^$]*?)\$\$\n\$\$([^$]*?)\$\$")
+_OPEN_RELATION = re.compile(r"(?:=|<|>|\\(?:leq?|geq?|ne|neq|approx|equiv|sim|to|rightarrow|in|subset|subseteq|cdot|times|pm|mp)|[+\-])\s*$")
+_CONTINUING_START = re.compile(r"^\s*(?:=|<|>|\\(?:leq?|geq?|ne|neq|approx|equiv|sim|cdot|times|pm|mp)(?![A-Za-z])|[+\-])")
+
+
+def join_split_math(content: str) -> str:
+    """One formula that the page broke across lines is one formula: `$a=$ $b$` -> `$a= b$`, and two displays where the first
+    ends on an operator or relation (or the second starts with one) -> one display."""
+
+    def display(m):
+        first, second = m.group(1), m.group(2)
+        if _OPEN_RELATION.search(first) or _CONTINUING_START.search(second):
+            return f"$${first.rstrip()} {second.lstrip()}$$"
+        return m.group(0)
+
+    previous = None
+    while previous != content:
+        previous = content
+        content = _INLINE_SPLIT.sub(lambda m: f"${m.group(1)} {m.group(2)}$", content)
+        content = _DISPLAY_SPLIT.sub(display, content)
+    return content
 
 
 def rebuild_page(raw: dict, drawings: list[dict], page_width: float, *,
@@ -833,5 +874,5 @@ def rebuild_page(raw: dict, drawings: list[dict], page_width: float, *,
         content = " ".join(parts)
         content = re.sub(r"[ \t]*\n[ \t]*", "\n", content)
         content = re.sub(r"\n{2,}", "\n", content).strip()
-        result.blocks[b] = content
+        result.blocks[b] = join_split_math(content)
     return result
