@@ -53,14 +53,29 @@ the new measurements.
     backend\.venv\Scripts\python.exe scripts\axtract_batch.py .\input-pdfs .\markdown-output
 
 ## Full 1,403-PDF official benchmark (not run here)
-Set `$data` to the olmOCR-bench `bench_data` folder (it holds `pdfs/` and the `*.jsonl` files), from this repository's venv:
+`scripts/full_benchmark.py` runs the whole benchmark and scores it with the unchanged official scorer. Inputs you provision once
+(nothing is downloaded): the olmOCR-bench `bench_data` folder (`pdfs/` and the `*.jsonl` files; the six assertion files must match the
+dataset revision recorded in `evaluation/frozen70/manifest.json`), the allenai/olmocr scorer checkout at the recorded commit, and a
+Python 3.12 scorer interpreter with Playwright (`docs/FROZEN70_REPRODUCTION.md`).
 
-    $env:AXTRACT_SCANNED_MATH="require"; $env:AXTRACT_VERIFY="0"
-    .venv\Scripts\python scripts\benchmark_axtract_olmocr.py --bench-dir $data --output-dir runs\full\candidate --report-dir runs\full\report --no-verify --workers 2
+    $data = "C:\path\to\olmOCR-bench\bench_data"
+    # 1. extraction: one isolated process per PDF (75 s hard limit, 60 s pipeline deadline, 2 GiB cap, free-RAM guard); resumable
+    .venv\Scripts\python scripts\full_benchmark.py extract --data-root $data --candidate-name axtract_v2 --scanned-math require
+    #    interrupted? continue with the same command plus --resume (finished documents are kept)
+    # 2. official scoring (olmocr.bench.benchmark --force --skip_baseline)
+    .venv\Scripts\python scripts\full_benchmark.py score --data-root $data --candidate-name axtract_v2 `
+        --scorer-python <scorer python 3.12> --scorer <allenai/olmocr checkout> --scorer-packages <scorer site-packages>
 
-Then score with the unchanged official scorer under its own Python 3.12 environment (flags as in the scorer's `--help`):
+Output goes to `$data\axtract_v2\<category>\<pdf>_pg1_repeat1.md` (where the official scorer looks) and the run record to
+`runs\full_axtract_v2\` (`documents.jsonl`, `run.json`, `official_score.txt`, `failed_tests.jsonl`).
 
-    scorer-python -m olmocr.bench.benchmark --dir $data --candidate <path to runs\full\candidate>
+Two properties of the official scorer that the runner handles without editing the scorer:
+- If any assertion page has no Markdown file the scorer prints "FAILED (errors)" and 0% for the whole candidate, even with `--force`.
+  The runner records a page that produced no text (or whose document hit the hard limit) as an empty file, lists those pages in
+  `run.json`, and refuses to score an incomplete candidate unless `--fill-missing` is given. Those assertions then fail honestly.
+- On Windows the scorer matches `category\name.pdf` against `category/name.pdf` and finds nothing. `scripts/official_scorer_shim.py`
+  makes `os.path.relpath` return forward slashes and then runs the scorer's own `main()`; no scorer file, test or threshold changes.
 
-Estimate: the 70-PDF run took about 12 minutes with scanned math on (654 s of document time), roughly 9 s per PDF, so about 3.5 hours
-for extraction at that rate, plus scoring. No full-benchmark score has been measured for this branch.
+Checked on a 4-PDF candidate (the other pages filled with empty files): the official scorer evaluates it and prints its per-file
+summary. Estimate: the 70-PDF run took about 12 minutes with scanned math on (654 s of document time), roughly 9 s per PDF, so about
+3.5 hours for extraction, plus scoring (several minutes for 7,019 assertions). No full-benchmark score has been measured for this branch.
