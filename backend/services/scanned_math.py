@@ -183,6 +183,77 @@ def _warn_unavailable_once(status):
                    "backend/requirements.txt and run `python scripts/scanned_math_assets.py verify`; see docs/SCANNED_MATH_SETUP.md.",status)
 
 
+_MATHY_TOKEN=re.compile(r"^[\(\[]*[A-Za-z]?[\d.,^\-+*/=<>()\[\]|−—–±²³½]*[A-Za-z]{0,2}[\d,.;:)\]]*$")
+_FUNCTION_TOKENS=frozenset(("sin","cos","tan","cot","sec","csc","log","ln","exp"))
+
+
+def prose_math_run(tokens):
+    """(first, last) token index of the longest run of formula-like tokens around an "=" in a line of text, or None.
+
+    A prose line such as "revolving about the line y = x the part of" is read as words, so the equation inside it never reaches
+    the formula recognizer. Tokens of a formula are short, made of one or two letters, digits and operators; ordinary words
+    (three or more letters, other than function names) end the run."""
+    def formula_like(token):
+        bare=token.strip(".,;:()")
+        if bare.lower() in _FUNCTION_TOKENS:
+            return True
+        return bool(_MATHY_TOKEN.match(token)) and not re.fullmatch(r"[A-Za-z]{3,}",bare)
+    best=None
+    for i,token in enumerate(tokens):
+        if "=" not in token:
+            continue
+        lo=hi=i
+        while lo>0 and formula_like(tokens[lo-1]):
+            lo-=1
+        while hi+1<len(tokens) and formula_like(tokens[hi+1]):
+            hi+=1
+        if best is None or hi-lo>best[1]-best[0]:
+            best=(lo,hi)
+    return best
+
+
+def _prose_equations(result,page,image,native_words,stats,budget,started,max_attempts=10):
+    """Read formulas embedded in prose lines (located by the scan's own word boxes) with the same recognizer and checks.
+
+    The prose line itself is left untouched; the recognised formula is added as an equation block beside it."""
+    lines={}
+    for word in native_words:
+        lines.setdefault((word[5],word[6]),[]).append(word)
+    width,height=image.size
+    attempts=0
+    for _,words in sorted(lines.items(),key=lambda item:(min(w[1] for w in item[1]),min(w[0] for w in item[1]))):
+        words.sort(key=lambda w:w[0])
+        text=" ".join(w[4] for w in words)
+        run=prose_math_run([w[4] for w in words])
+        if run is None or not looks_like_prose(text):
+            continue
+        ram=available_memory_bytes()
+        available=min(budget-(time.monotonic()-started),deadline.remaining()-6)
+        if (ram is not None and ram<300*1024**2) or available<=0 or attempts>=max_attempts:
+            stats["stop_reason"]="budget_or_line_limit" if attempts>=max_attempts or available<=0 else "low_memory"
+            return
+        chosen=words[run[0]:run[1]+1]
+        box=(max(0,min(w[0] for w in chosen)-.006),max(0,min(w[1] for w in words)-.004),
+             min(1,max(w[2] for w in chosen)+.006),min(1,max(w[3] for w in words)+.004))
+        if any(b.page==page and b.type==BlockType.EQUATION and b.bbox and _overlap(box,b.bbox)>.5 for b in result.blocks):
+            continue
+        attempts+=1;stats["attempted"]+=1
+        crop=image.crop((int(box[0]*width),int(box[1]*height),int(box[2]*width),int(box[3]*height)))
+        prediction=pix2text_mfr.recognize(crop,max_seconds=min(5,available))
+        latex=tidy_latex(prediction.latex,preserve_semantics=True)
+        if not prediction.completed or not validate_latex(latex).ok or not math_structure(latex):
+            stats["rejected"].append({"bbox":box,"reason":"prose_line_"+(prediction.stop_reason if not prediction.completed else "validation_or_not_math")})
+            continue
+        equation_id=f"p{page}-mfr{stats['accepted']}"
+        result.blocks.append(make_equation_block(equation_id,page,box,latex,"pix2text_mfr_onnx",.45,
+            ["unverified_by_independent_math_reader"],extractor="pix2text_mfr_onnx",
+            extra_metadata={"route":"scanned","prose_line_formula":True,"crop_ref":{"page":page,"bbox":list(box)},
+                "source_ocr_text":" ".join(w[4] for w in chosen),"model_stop_reason":prediction.stop_reason,
+                "model_tokens":prediction.tokens,"recognition_seconds":prediction.seconds,
+                "confidence_source":"model_prediction_requires_review"}))
+        stats["accepted"]+=1
+
+
 def route_scanned_math(result,path: Path):
     mode=os.environ.get("AXTRACT_SCANNED_MATH","0").strip().lower()
     if mode not in ("1","true","on","require"):
@@ -260,6 +331,8 @@ def route_scanned_math(result,path: Path):
                         block.metadata["math_replaced_in_markdown"]=[equation_id]
                         if page in native:
                             block.metadata["invisible_ocr_source"]=True
+            if page in native and not stats.get("stop_reason"):
+                _prose_equations(result,page,image,native[page],stats,budget,started)
         except Exception as exc:
             stats["stop_reason"]=f"safe_fallback:{type(exc).__name__}"
             logger.warning("Scanned math fallback on page %s: %s",page,exc)
