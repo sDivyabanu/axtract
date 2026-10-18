@@ -92,7 +92,7 @@ evaluation/
 
 ## Prerequisites
 
-- Python 3.11+ (tested with 3.14)
+- Python 3.11+ (all measurements and pinned requirements are from 3.14.6; the official scorer runs separately on 3.12)
 - Node.js 20+ and npm (tested with Node 22)
 - Git
 
@@ -333,7 +333,7 @@ The route and service do not need to change.
 **Setup (one time)**
 
 ```bash
-cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cd backend && python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cd .. && backend/.venv/bin/python scripts/fetch_models.py   # formula weights, checksummed
 # LibreOffice is needed only to preview DOCX/PPTX/XLSX (and EMF/WMF pictures):
 #   macOS: download from libreoffice.org, or put `soffice` on PATH
