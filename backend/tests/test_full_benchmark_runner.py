@@ -43,3 +43,21 @@ def test_missing_pages_are_recorded_as_empty_files_and_real_output_is_kept(tmp_p
     assert (cand / "old_scans" / "s_pg1_repeat1.md").read_text(encoding="utf8") == ""
     assert real.read_text(encoding="utf8") == "kept"
     assert fb.missing_pages(data, cand) == []
+
+
+def test_shards_are_disjoint_and_cover_the_list():
+    pdfs = [f"arxiv_math/{i:03}.pdf" for i in range(522)]
+    for n in (1, 2, 3, 7):
+        parts = [fb.shard(pdfs, f"{k}/{n}") for k in range(n)]
+        assert sorted(p for part in parts for p in part) == pdfs
+        assert sum(len(part) for part in parts) == len(pdfs)
+    assert fb.shard(pdfs, None) == pdfs
+
+
+def test_cloud_usage_reads_cost_and_tokens_from_block_metadata():
+    blocks = [{"metadata": {"reserved_or_reported_usd": 0.0125, "requests": [{}, {}],
+                            "usage": {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}}},
+              {"metadata": {"cloud_page_block": True}}]
+    assert fb.cloud_usage(blocks) == {"azure_usd": 0.0125, "azure_requests": 2,
+                                      "azure_usage": {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}}
+    assert fb.cloud_usage(None)["azure_usd"] is None

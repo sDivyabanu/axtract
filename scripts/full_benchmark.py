@@ -40,6 +40,25 @@ def assertion_pdfs(data: Path, category: str | None) -> list[str]:
     return [p for p in ordered if category is None or p.startswith(category + "/")]
 
 
+def shard(pdfs: list[str], spec: str | None) -> list[str]:
+    """`K/N` keeps every N-th PDF starting at K, so N shards are disjoint and together cover the list."""
+    if not spec:
+        return pdfs
+    k, n = (int(x) for x in spec.split("/"))
+    if not 0 <= k < n:
+        raise SystemExit(f"ERROR: --shard {spec} needs 0 <= K < N.")
+    return pdfs[k::n]
+
+
+def cloud_usage(blocks: list[dict]) -> dict:
+    """Azure cost, tokens and requests from the page blocks' metadata (kept in the ledger; the block dump itself is dropped)."""
+    metas = [b.get("metadata") or {} for b in blocks or []]
+    metas = [m for m in metas if "reserved_or_reported_usd" in m]
+    usage = {k: sum((m.get("usage") or {}).get(k, 0) or 0 for m in metas) for k in ("input_tokens", "output_tokens", "total_tokens")}
+    return {"azure_usd": round(sum(m["reserved_or_reported_usd"] for m in metas), 6) if metas else None,
+            "azure_usage": usage, "azure_requests": sum(len(m.get("requests") or []) for m in metas)}
+
+
 def assertion_pages(data: Path) -> set[tuple[str, int]]:
     pages: set[tuple[str, int]] = set()
     for jsonl in sorted(data.glob("*.jsonl")):
@@ -111,6 +130,7 @@ def cmd_extract(args) -> int:
     pdfs = assertion_pdfs(data, args.category)
     if args.limit:
         pdfs = pdfs[: args.limit]
+    pdfs = shard(pdfs, args.shard)
     ledger = run / "documents.jsonl"
     done = {}
     if ledger.exists():
@@ -157,6 +177,8 @@ def cmd_extract(args) -> int:
         md = cand / Path(pdf).parent / (Path(pdf).stem + "_pg1_repeat1.md")
         row = json.loads(res.read_text(encoding="utf8")) if res.exists() else {"pdf": pdf, "errors": [stop or f"worker_exit_{proc.returncode}"]}
         rec = {k: v for k, v in row.items() if k not in ("blocks", "validation", "stages", "source_sha256")}
+        if cloud:
+            rec.update(cloud_usage(row.get("blocks")))
         rec.update(pdf=pdf, wall_seconds=round(time.perf_counter() - t0, 2), stop_reason=stop, exit_code=proc.returncode,
                    completed=md.is_file() and md.stat().st_size > 0, min_free_ram_bytes=frozen.free_ram())
         with ledger.open("a", encoding="utf8") as fh:
@@ -226,6 +248,7 @@ def main() -> int:
     e.add_argument("--resume", action="store_true")
     e.add_argument("--limit", type=int)
     e.add_argument("--category")
+    e.add_argument("--shard", help="K/N: run only every N-th selected PDF starting at K (parallel shards share one candidate)")
     e.add_argument("--allow-asset-overrides", action="store_true")
     e.add_argument("--allow-dataset-mismatch", action="store_true")
     e.add_argument("--vlm", choices=["off", "scanned", "all"], default="off", help="VLM OCR engine mode (AXTRACT_VLM_OCR)")

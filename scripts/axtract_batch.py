@@ -63,6 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("output_dir", type=Path, help="Directory for Markdown output")
     parser.add_argument("--workers", type=int, default=1, help="Concurrent PDF workers (default: 1)")
     args = parser.parse_args(argv)
+    # Same configuration source as the API server; variables already set in the shell take precedence.
+    from dotenv import load_dotenv
+    load_dotenv(REPO_ROOT / "backend" / ".env", override=False)
 
     try:
         summary = run_batch(args.input_dir, args.output_dir, args.workers)
