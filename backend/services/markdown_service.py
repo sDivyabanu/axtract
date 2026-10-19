@@ -58,6 +58,13 @@ def _block_to_markdown(block: DocumentBlock) -> str:
     content = block.content.strip()
     if not content and block.type != BlockType.TABLE:
         return ""
+    if block.metadata.get("markdown_verbatim"):
+        # VLM blocks already hold Markdown (LaTeX math, HTML tables); headers/footers stay out of the body.
+        if block.type in (BlockType.HEADER, BlockType.FOOTER):
+            return ""
+        if block.type == BlockType.HEADING:
+            return f"{'#' * max(1, min(6, block.metadata.get('heading_level', 2)))} {content}"
+        return content
     if block.extractor == "rapidocr" and block.type == BlockType.PARAGRAPH:
         from extractors.ocr_extractor import restore_punctuation_spacing
 
@@ -174,14 +181,17 @@ def _table_to_markdown(block: DocumentBlock) -> str:
 
     # HTML is standard Markdown content and expresses real spans and literal
     # pipes without inventing suffixes such as <colspan:2> in the cell value.
-    if spans or any("|" in cell for row in rows for cell in row):
+    # Leading header rows: 1 unless the extractor reported more (multi-row headers from an HTML source).
+    header_rows = block.metadata.get("header_rows")
+    header_rows = header_rows if isinstance(header_rows, int) and 1 <= header_rows < len(rows) else 1
+    if spans or header_rows > 1 or any("|" in cell for row in rows for cell in row):
         lines = ["<table>"]
         for r, row in enumerate(rows):
             cells = []
             for c, cell in enumerate(row):
                 if (r, c) in covered:
                     continue
-                tag = "th" if r == 0 or c == 0 else "td"
+                tag = "th" if r < header_rows or c == 0 else "td"
                 rs, cs = spans.get((r, c), (1, 1))
                 attrs = (f' rowspan="{rs}"' if rs > 1 else "") + (f' colspan="{cs}"' if cs > 1 else "")
                 cells.append(f"<{tag}{attrs}>{escape(cell)}</{tag}>")

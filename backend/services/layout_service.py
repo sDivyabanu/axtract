@@ -91,6 +91,17 @@ def assign_reading_order(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
     for page_num in sorted(pages.keys()):
         page_blocks = pages[page_num]
 
+        if all(b.metadata.get("route") == "vlm" or b.metadata.get("cloud_page_block") for b in page_blocks):
+            # A VLM/cloud page already comes in the model's reading order with its page furniture labelled; keep both.
+            vlm_sorted = sorted(page_blocks, key=lambda b: (
+                0 if b.type == BlockType.HEADER else 2 if b.type == BlockType.FOOTER else 1,
+                b.metadata.get("vlm_index", b.metadata.get("cloud_index", 0))))
+            for block in vlm_sorted:
+                block.reading_order = reading_idx
+                ordered.append(block)
+                reading_idx += 1
+            continue
+
         # Classify headers and footers by position
         body_blocks: list[DocumentBlock] = []
         header_blocks: list[DocumentBlock] = []

@@ -67,6 +67,25 @@ def environment(scanned_math: str, allow_overrides: bool) -> dict:
     return env
 
 
+def apply_vlm(env: dict, mode: str) -> None:
+    """Opt into the VLM OCR engine for a benchmark run: set its mode, give each document a longer hard limit, and stop
+    before the first document if the model server is not answering (otherwise every page would silently fall back)."""
+    global HARD_TIMEOUT_S
+    env["AXTRACT_VLM_OCR"] = mode
+    if mode == "off":
+        return
+    HARD_TIMEOUT_S = int(env.get("AXTRACT_VLM_HARD_SECONDS", "900"))
+    url = env.get("AXTRACT_VLM_URL", "http://127.0.0.1:8090").rstrip("/")
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url + "/health", timeout=10) as r:
+            ok = r.status == 200
+    except OSError:
+        ok = False
+    if not ok:
+        raise SystemExit(f"ERROR: --vlm {mode} but no llama-server answers at {url}/health. Start it first (docs/VLM_OCR.md).")
+
+
 def load_cases(data_root: Path, man: dict) -> list[dict]:
     for name, want in man["dataset"]["case_source_sha256"].items():
         got = sha256(data_root / name)
@@ -100,6 +119,7 @@ def cmd_extract(args) -> int:
                              f"{man['dataset']['revision']}).")
     cases = load_cases(data, man)
     env = environment(args.scanned_math, args.allow_asset_overrides)
+    apply_vlm(env, args.vlm)
     if args.scanned_math == "require":  # fail loudly before any document if the recognizer cannot load
         check = subprocess.run([py, "-B", str(ROOT / "scripts" / "scanned_math_assets.py"), "check"], env=env, cwd=ROOT,
                                capture_output=True, text=True)
@@ -134,7 +154,7 @@ def cmd_extract(args) -> int:
         docs.append(rec)
         print(f"{i + 1}/{len(man['pdfs'])} {pdf}: completed={rec['completed']} {rec['wall_seconds']}s {stop or ''}", flush=True)
     (out / "performance.json").write_text(json.dumps({
-        "source_head": head, "tree_dirty": dirty, "scanned_math": args.scanned_math, "python": py,
+        "source_head": head, "tree_dirty": dirty, "scanned_math": args.scanned_math, "vlm": args.vlm, "python": py,
         "documents": docs, "wall_seconds": round(time.perf_counter() - started, 1)}, indent=1), encoding="utf8")
     print(f"extraction finished: {sum(d['completed'] for d in docs)}/{len(docs)} outputs, "
           f"{sum(1 for d in docs if d['stop_reason'])} hard timeouts -> {out}")
@@ -231,6 +251,7 @@ def main() -> int:
     e = sub.add_parser("extract"); e.add_argument("--data-root", required=True); e.add_argument("--out", required=True)
     e.add_argument("--scanned-math", choices=["require", "off"], default="require"); e.add_argument("--python")
     e.add_argument("--allow-asset-overrides", action="store_true")
+    e.add_argument("--vlm", choices=["off", "scanned", "all"], default="off", help="VLM OCR engine mode (AXTRACT_VLM_OCR)")
     s = sub.add_parser("score"); s.add_argument("--data-root"); s.add_argument("--out", required=True)
     s.add_argument("--scorer-python", required=True); s.add_argument("--scorer", required=True); s.add_argument("--scorer-packages")
     r = sub.add_parser("report"); r.add_argument("--out", required=True); r.add_argument("--scanned-math", choices=["require", "off"], default="require")

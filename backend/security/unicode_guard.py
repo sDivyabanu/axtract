@@ -113,6 +113,24 @@ def scan_injection(text: str, block_id: str = "") -> Optional[dict]:
     return None
 
 
+_KEEP_DECOMPOSITIONS = ("<super>", "<sub>", "<fraction>")
+
+
+def _nfkc_keep_scripts(text: str) -> str:
+    if text.isascii():
+        return text
+    out, run = [], []
+    for ch in text:
+        if unicodedata.decomposition(ch).startswith(_KEEP_DECOMPOSITIONS):
+            out.append(unicodedata.normalize("NFKC", "".join(run)))
+            out.append(ch)
+            run = []
+        else:
+            run.append(ch)
+    out.append(unicodedata.normalize("NFKC", "".join(run)))
+    return "".join(out)
+
+
 # ── main cleaner ──────────────────────────────────────────────────────────────
 
 def clean_and_flag(text: str, block_id: str = "") -> dict:
@@ -140,7 +158,9 @@ def clean_and_flag(text: str, block_id: str = "") -> dict:
     t = text
 
     # ── 1. NFKC normalise ────────────────────────────────────────────────────
-    t_norm = unicodedata.normalize("NFKC", t)
+    # Superscripts, subscripts and vulgar fractions are kept: they are content (m², H₂O, ½), not spoofing, and NFKC
+    # would silently turn them into ordinary digits (m2, H2O, 1⁄2).
+    t_norm = _nfkc_keep_scripts(t)
     if t_norm != t:
         changes.append("nfkc_normalised")
     t = t_norm

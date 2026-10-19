@@ -200,9 +200,19 @@ def route_regions(result: ExtractionResult, file_path: Path, file_type: str) -> 
     """Mutates result.blocks (and result.errors)."""
     try:
         if file_type == "pdf":
+            # Pages transcribed by the VLM engine already carry their charts, equations and tables; the region readers
+            # must not add a second copy of them.
+            vlm_pages = {b.page for b in result.blocks if b.metadata.get("route") == "vlm"}
+            if vlm_pages:
+                _recover_tables_in_vlm_pictures(result, file_path, vlm_pages)
+            if vlm_pages and vlm_pages >= {b.page for b in result.blocks}:
+                return
+            before = {id(b) for b in result.blocks}
             _route_pdf(result, file_path)
             from services.scanned_math import route_scanned_math
             route_scanned_math(result, file_path)
+            if vlm_pages:
+                result.blocks = [b for b in result.blocks if id(b) in before or b.page not in vlm_pages]
         elif file_type in ("docx", "pptx"):
             _route_office_pictures(result)
         elif file_type in ("jpg", "jpeg", "png"):
@@ -452,6 +462,44 @@ def _capped_render_dpi(file_path: Path, pno: int) -> float:
         return min(RENDER_DPI, 72.0 * fit_zoom(rect.width, rect.height, base_dpi=RENDER_DPI))
     except Exception:  # noqa: BLE001 - PDFium rechecks its own geometry and raster before returning an image
         return 72
+
+
+def _recover_tables_in_vlm_pictures(result: ExtractionResult, file_path: Path, pages: set[int]) -> None:
+    """Region-level hybrid for VLM pages: a table printed inside a picture (a figure panel, a chart with a metrics box)
+    is often transcribed by the model as a picture or as chart values. AXTRACT's ruled-table recovery reads such regions
+    from the pixels and the PDF's own words, so it is run inside the model's picture/chart boxes. An accepted table is
+    placed right after the picture in the model's reading order; failures leave the page as the model produced it."""
+    import pymupdf
+
+    from services.raster_table_service import recover_page_tables
+
+    with pymupdf.open(str(file_path)) as doc:
+        for pno in sorted(pages):
+            page_blocks = [b for b in result.blocks if b.page == pno]
+            pictures = [b for b in page_blocks if b.type in (BlockType.FIGURE, BlockType.CHART) and b.bbox
+                        and b.metadata.get("route") == "vlm"]
+            if not pictures or deadline.remaining() <= _MIN_BUDGET:
+                continue
+            try:
+                img = preview_service.render_page_pil(file_path, pno, _capped_render_dpi(file_path, pno))
+                native_page = doc[pno - 1]
+                sx, sy = img.width / native_page.rect.width, img.height / native_page.rect.height
+                words = [(w[0] * sx, w[1] * sy, w[2] * sx, w[3] * sy, *w[4:]) for w in native_page.get_text("words")]
+                work = [b for b in page_blocks if b.type != BlockType.CHART]  # chart readings are estimates, not tables
+                before = set(map(id, work))
+                recover_page_tables(img, pno, work, [], [b.bbox for b in pictures], words)
+            except Exception:  # noqa: BLE001 - recovery is optional; the model's page stays as it is
+                logger.exception("table recovery inside VLM pictures failed on page %s", pno)
+                continue
+            added = [b for b in work if id(b) not in before]
+            if not added:
+                continue
+            removed = {id(b) for b in page_blocks if b.type != BlockType.CHART and b not in work}
+            for table in added:
+                host = max(pictures, key=lambda p: _iou(p.bbox, table.bbox))
+                table.metadata.update(route="vlm", vlm_index=host.metadata.get("vlm_index", 0) + 0.5,
+                                      recovered_from="vlm_picture_region", host_block_id=host.id)
+            result.blocks = [b for b in result.blocks if id(b) not in removed] + added
 
 
 def _route_pdf(result: ExtractionResult, file_path: Path) -> None:

@@ -58,5 +58,9 @@ _BY_EXTENSION: dict[str, Extractable] = {
 
 def get_extractor(extension: str) -> Extractable | None:
     """Return the extractor for a lowercase extension without the dot, or None if unsupported."""
+    if extension in {"pdf", "jpg", "jpeg", "png"}:
+        from extractors.azure_ocr_extractor import AzureOCRExtractor, provider
+        if provider() == "azure":
+            return AzureOCRExtractor()
     extractor = _BY_EXTENSION.get(extension)
     return type(extractor)() if isinstance(extractor, (DocxExtractor, PptxExtractor, XlsxExtractor)) else extractor

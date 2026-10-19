@@ -21,6 +21,7 @@ from extractors.ocr_extractor import OCRExtractor
 from extractors.pymupdf_extractor import PyMuPDFExtractor
 from models.document import BlockType, DocumentBlock
 from models.errors import AppError, DocumentError
+from services import vlm_engine
 from utils import deadline
 from utils.request_cache import set_cached_image
 
@@ -149,7 +150,12 @@ class PDFRouter:
                     analysis = PyMuPDFExtractor.analyze_page(page)
                     route = self._decide_route(analysis)
 
-                    if route == "digital":
+                    vlm_blocks = (self._vlm_page(file_path, page_number, route, result, vlm_engine.profile_for(route, analysis))
+                                  if vlm_engine.enabled_for(route, analysis) else None)
+                    if vlm_blocks is not None:
+                        result.blocks.extend(vlm_blocks)
+                        route = "vlm"
+                    elif route == "digital":
                         page_blocks = self._pymupdf._extract_page(page, page_number)
                         for b in page_blocks:
                             b.metadata["route"] = "digital"
@@ -219,6 +225,26 @@ class PDFRouter:
                 logger.warning("renamed %d duplicate block id(s)", renamed)
             self._assign_heading_levels(result.blocks)
             return result
+
+    @staticmethod
+    def _vlm_page(file_path: Path, page_number: int, route: str, result: ExtractionResult,
+                  profile: str = "general") -> list[DocumentBlock] | None:
+        """Transcribe the page with the VLM engine; None (with a recorded error) means use the standard extractors."""
+        try:
+            blocks, info = vlm_engine.page_blocks(file_path, page_number, profile)
+        except vlm_engine.VLMError as exc:
+            result.errors.append(DocumentError(code=exc.code, message=f"{exc} (page used the standard extractors)",
+                                               page=page_number))
+            return None
+        for b in blocks:
+            b.metadata["routed_from"] = route
+        if blocks:
+            blocks[0].metadata["vlm_page"] = info
+        if info["finish"] == "length" or info["repetition_trimmed"]:
+            result.errors.append(DocumentError(code="VLM_OUTPUT_TRUNCATED", page=page_number,
+                                               message="The VLM transcription hit its length limit or repeated itself; "
+                                                       "this page's blocks are marked for review."))
+        return blocks
 
     @staticmethod
     def _assign_heading_levels(blocks: list[DocumentBlock]) -> None:

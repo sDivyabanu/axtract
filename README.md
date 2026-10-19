@@ -4,7 +4,107 @@
 them into structured JSON and clean Markdown, preserving headings, paragraphs, lists, tables,
 figures, page context, bounding boxes, extractor provenance, and real confidence scores.
 
+## Azure cloud OCR
+
+The Azure path is independent of the existing LightOnOCR implementation. Keep
+`AXTRACT_OCR_PROVIDER=azure` and `AXTRACT_VLM_OCR=off`; `AXTRACT_OCR_PROVIDER=local`
+restores the existing local router without changing its code or defaults.
+
+Put the Azure resource endpoint, API key and deployment name in `backend/.env`.
+The resource URL, `/openai/v1/` base, and full `/openai/v1/responses` URL are accepted.
+Never place the key in frontend environment files. The underlying model identifier
+in `AXTRACT_AZURE_MODEL` may differ from your Azure deployment name. Mini and nano
+Global Standard list rates are built into the spending estimator; override the
+input/output prices for another pricing tier. See `backend/.env.example` for settings.
+
+The quality path renders ordinary pages at 220 DPI and dense/scanned pages at up to
+300 DPI, capped before raster allocation at 4096 pixels per side and 12 megapixels.
+It sends `detail=original` and asks for faithful transcription, complete equations,
+Markdown tables and natural column order. These settings are configurable.
+
+`AXTRACT_AZURE_MODE=hybrid` reuses native text only for clean, simple digital prose.
+Math, tables, multiple columns, figures, tiny fonts and image-covered/hidden-text
+pages stay on the cloud path. Visible native text can be supplied as a bounded,
+untrusted reference for difficult digital pages; hidden OCR layers are excluded.
+`AXTRACT_AZURE_MODE=cloud` sends every page to vision for controlled comparisons.
+
+Automatic detail crops are sent with the overview in the SAME request only when a
+dense page would lose detail to image-size limits. Crops overlap and the prompt asks
+for one transcription without duplicate passages. Turn crops off for an ablation.
+Coverage, repetition and LaTeX delimiter checks can trigger one bounded reread;
+these are review signals, not confidence scores or a guarantee of correctness.
+A failed reread never discards an already completed transcription.
+
+An optional `AZURE_OPENAI_FALLBACK_DEPLOYMENT` can handle transient failures,
+incomplete output, quality rereads, or dense pages when policy is `dense`.
+No stronger model is called unless configured. Each page shares one request cap
+across primary attempts, retries, fallback and rereads. Cloud errors distinguish
+timeouts, transient HTTP/transport failures, refusals, incomplete output and caps.
+
+Cloud output has page-level Markdown, null word coordinates/confidence, and review
+enabled. Native reuse retains existing native blocks. Existing verification and
+output sanitization remain enabled. No local recognition models are used by cloud
+page transcription. Cloud processing sends images/text to Azure and incurs charges.
+
+Cloud documents have an explicit configurable deadline (180 seconds by default).
+Local/VLM deadline code is unchanged. Restart the backend after editing environment
+settings. The legacy frozen70 runner retains its old worker deadline; use the new
+cloud-specific evaluator for the longer cloud deadline and budget reservations.
+
+### Cloud evaluation
+
+`scripts/azure_benchmark.py run` evaluates a deterministic 14-page sample (two pages
+per category), or the fixed 70-page diagnostic with `--scope 70`. It keeps outputs
+inside the selected worktree and uses fresh bounded worker processes. Supply the
+pinned scorer interpreter/checkout/packages to score the unchanged official
+assertions. A diagnostic score is not full-corpus accuracy.
+
+```powershell
+python scripts/azure_benchmark.py run --data-root <bench_data> --out runs/azure_quality14 --scope 14 --workers 2 --max-usd 0.50 --page-cap-usd 0.025 --scorer-python <python312.exe> --scorer <olmocr_checkout> --scorer-packages <site-packages>
+```
+
+`azure_profile.json` records settings/code hashes without credentials;
+`documents.jsonl` records each document's time, process RAM, requests, usage and
+reserved/reported cost; `summary.json` records category scores and scorer exceptions.
+The earlier nano diagnostic is preserved under `runs/azure_nano_frozen70_20261019`.
+
+`score` can evaluate already-saved outputs without making more API requests.
+The scorer executable and pinned test hash are checked before a paid `run` starts.
+`recover` copies a first pass into a NEW output directory, selects only extraction
+failures (not failed assertions), and makes one bounded attempt per failed page.
+Its current recovery policy uses a 150-second request timeout, 8192 output tokens,
+a 240-second document deadline, and an explicit recovery page reservation. The
+combined first-pass plus recovery reservation must fit `--max-usd` before dispatch.
+The first-pass candidate, costs, source snapshot and score remain available.
+
+```powershell
+python scripts/azure_benchmark.py recover --data-root <bench_data> --source runs/azure_quality70 --out runs/azure_quality70_recovered --workers 2 --max-usd 1.50 --page-cap-usd 0.075 --scorer-python <python312.exe> --scorer <olmocr_checkout> --scorer-packages <site-packages>
+```
+
+Measured on the fixed 70-page diagnostic, the improved mini configuration scored
+62.02 percent on the first pass (66 completed pages) and 65.92 percent after the
+four failed pages recovered (301/430 assertions, 70 completed pages, zero scorer
+exceptions). This is below the 80 percent target. Combined cost was approximately
+USD 0.87 at the configured rates, including conservative timeout reservations;
+the diagnostic extrapolation of USD 12.44/1000 pages is above the stated budget.
+See `runs/azure_mini_quality70_recovered_20261019/comparison.json` for scope and limits.
+
+The spending guard reserves estimated maximum request cost before dispatch and
+reduces the output allowance if necessary. Failed/unknown attempts retain their
+reservation. A run stops dispatching documents when its USD reservation allowance
+is exhausted. This is an application estimate using configured rates, not an
+Azure-enforced billing limit. Taxes and pricing-tier differences are not included.
+A per-page cap permits expensive pages; it does not establish the average cost for
+1000 pages. Measure the pilot's average before a full run. Request caps may produce
+incomplete-output errors; those pages must remain failures in reported scores.
+
+The full runner (`scripts/full_benchmark.py`) also records the expanded cloud
+profile, rejects mismatched resumes, and uses a cloud-only hard worker timeout.
+Use a fresh candidate/run directory for each changed model or input configuration.
+
 ## Supported Formats
+
+The following table describes `AXTRACT_OCR_PROVIDER=local`.
 
 | Format | Extractor | Capabilities |
 |--------|-----------|-------------|

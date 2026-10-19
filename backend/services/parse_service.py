@@ -64,6 +64,8 @@ def parse_upload(upload: UploadFile | None) -> DocumentResponse:
     if get_extractor(file_type) is None:
         raise AppError("UNSUPPORTED_FORMAT", "This file type is not supported yet.", status_code=415)
 
+    _cloud_deadline(file_type)
+
     temp_path: Path | None = None
     try:
         temp_path = save_upload_to_temp(upload, file_type)
@@ -95,7 +97,16 @@ def parse_path(
     file_type = get_extension(filename)
     if get_extractor(file_type) is None:
         raise AppError("UNSUPPORTED_FORMAT", "This file type is not supported yet.", status_code=415)
+    if budget_seconds is None:
+        _cloud_deadline(file_type)
     return _parse_file(path, filename, file_type, document_id or uuid4().hex, persistent_preview)
+
+
+def _cloud_deadline(file_type: str) -> None:
+    """Cloud-only budget. Existing local and LightOnOCR deadlines stay independent."""
+    if file_type in {"pdf", "png", "jpg", "jpeg"} and os.getenv("AXTRACT_OCR_PROVIDER", "local").strip().lower() == "azure":
+        from extractors.azure_ocr_options import configuration
+        deadline.start(configuration()["doc_seconds"])
 
 
 def _parse_file(
@@ -136,7 +147,9 @@ def _parse_file(
     _report_security(security_findings)  # the security stage now also covers the extracted text
 
     # 4a. Charts, equations and figures: route every region to its reader
-    if deadline.remaining() > 4.0:
+    if getattr(extractor, "handles_page_layout", False):
+        pass  # Cloud page transcription already includes tables, equations and layout.
+    elif deadline.remaining() > 4.0:
         try:
             route_regions(result, temp_path, file_type)
         except AppError as exc:

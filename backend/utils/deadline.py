@@ -11,9 +11,16 @@ from contextvars import ContextVar
 
 from models.errors import AppError
 
+import os
+
 HARD_LIMIT_SECONDS = 60
 # Leave headroom so the structured TIMEOUT error itself is returned inside the limit.
 _BUDGET_SECONDS = 55
+# The opt-in VLM OCR engine (services/vlm_engine.py) needs tens of seconds per page on a laptop, so a deployment that enables
+# it sets its own per-file limit; the 60 s contract applies whenever the engine is off.
+if os.environ.get("AXTRACT_VLM_OCR", "off").strip().lower() in ("scanned", "all"):
+    HARD_LIMIT_SECONDS = max(60, int(os.environ.get("AXTRACT_VLM_DOC_SECONDS", "1800")))
+    _BUDGET_SECONDS = HARD_LIMIT_SECONDS - 5
 
 _deadline: ContextVar[float | None] = ContextVar("parse_deadline", default=None)
 

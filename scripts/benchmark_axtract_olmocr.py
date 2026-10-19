@@ -22,6 +22,9 @@ from typing import Any, Dict, List, Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
+from dotenv import load_dotenv
+load_dotenv(REPO_ROOT / "backend" / ".env", override=False)
+
 from services.parse_service import parse_path
 from services.markdown_service import blocks_to_markdown
 import tracemalloc
@@ -63,11 +66,22 @@ def process_single_pdf(
 
     try:
         t0 = time.perf_counter()
-        doc_resp = parse_path(pdf_path, pdf_path.name, persistent_preview=False)
+        budget = {}
+        if os.getenv("AXTRACT_OCR_PROVIDER", "local").strip().lower() == "azure":
+            from extractors.azure_ocr_options import configuration
+            budget["budget_seconds"] = configuration()["doc_seconds"]
+        doc_resp = parse_path(pdf_path, pdf_path.name, persistent_preview=False, **budget)
         t_parse = time.perf_counter()
         
         pages = doc_resp.page_count or 1
         blocks = doc_resp.blocks or []
+        from extractors.azure_ocr_extractor import provider
+        result_meta["ocr_provider"] = provider()
+        result_meta["cloud_pages"] = [
+            {"page": b.page, "deployment": b.metadata.get("deployment"), "usage": b.metadata.get("usage", {})}
+            for b in blocks if b.metadata.get("cloud_transcription")
+        ]
+        result_meta["native_reused_pages"] = len({b.page for b in blocks if b.metadata.get("azure_native_reuse")})
         result_meta["pages"] = pages
         result_meta["blocks"] = len(blocks)
         result_meta["duration_ms"] = (t_parse - t0) * 1000.0
@@ -115,6 +129,10 @@ def process_single_pdf(
         result_meta["error"] = f"{type(exc).__name__}: {str(exc)}"
         logger.error(f"Failed processing {pdf_path.name}: {exc}\n{traceback.format_exc()}")
 
+    if os.getenv("AXTRACT_OCR_PROVIDER", "local").strip().lower() == "azure":
+        from extractors.azure_ocr_extractor import last_trace
+        result_meta["cloud_requests"] = last_trace()
+        result_meta["reserved_or_reported_usd"] = round(sum(p["reserved_or_reported_usd"] for p in last_trace()), 6)
     total_time = (time.perf_counter() - start_time) * 1000.0
     result_meta["total_elapsed_ms"] = total_time
     return result_meta
@@ -300,8 +318,15 @@ def run_benchmark(
             "verify_pct_of_total": round((mean_verify_ms / mean_latency * 100), 2) if mean_latency > 0 else 0.0,
         },
         "memory": {
+            "measurement": "Python tracemalloc allocations only; excludes native allocations and is not process RAM",
             "peak_mb": round(peak_mem / (1024 * 1024), 2),
             "current_mb": round(current_mem / (1024 * 1024), 2),
+        },
+        "ocr_provider": os.getenv("AXTRACT_OCR_PROVIDER", "local"),
+        "azure_deployment": os.getenv("AZURE_OPENAI_DEPLOYMENT") if os.getenv("AXTRACT_OCR_PROVIDER") == "azure" else None,
+        "cloud_usage": {
+            key: sum(page.get("usage", {}).get(key, 0) for row in results for page in row.get("cloud_pages", []))
+            for key in ("input_tokens", "output_tokens", "total_tokens")
         },
         "category_breakdown": category_stats,
         "failures": [
@@ -369,6 +394,9 @@ def main():
     )
 
     args = parser.parse_args()
+    from extractors.azure_ocr_extractor import configuration, provider
+    if provider() == "azure":
+        configuration()  # reject missing credentials before starting a run
     summary = run_benchmark(
         bench_dir=args.bench_dir,
         output_dir=args.output_dir,

@@ -80,10 +80,22 @@ def check_dataset(data: Path, allow_mismatch: bool) -> None:
 
 
 def cmd_extract(args) -> int:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / "backend" / ".env", override=False)
+    sys.path.insert(0, str(ROOT / "backend"))
+    from extractors.azure_ocr_extractor import configuration, provider
+    cloud = provider() == "azure"
+    cloud_config = configuration() if cloud else None
+    if cloud:
+        args.scanned_math = "off"
+        args.vlm = "off"
+        os.environ["AXTRACT_VLM_OCR"] = "off"
     data = Path(args.data_root).resolve()
     check_dataset(data, args.allow_dataset_mismatch)
     py = args.python or sys.executable
     env = frozen.environment(args.scanned_math, args.allow_asset_overrides)
+    frozen.apply_vlm(env, args.vlm)
+    hard_timeout = cloud_config["doc_seconds"] + 30 if cloud else frozen.HARD_TIMEOUT_S
     if args.scanned_math == "require":
         check = subprocess.run([py, "-B", str(ROOT / "scripts" / "scanned_math_assets.py"), "check"], env=env, cwd=ROOT,
                                capture_output=True, text=True)
@@ -106,6 +118,18 @@ def cmd_extract(args) -> int:
             if line.strip():
                 row = json.loads(line)
                 done[row["pdf"]] = row
+    from extractors.azure_ocr_options import public_profile
+    profile = {"provider": provider(), "azure": public_profile(cloud_config) if cloud_config else None}
+    if cloud:
+        import hashlib
+        profile["azure_code_sha256"] = hashlib.sha256((ROOT / "backend/extractors/azure_ocr_extractor.py").read_bytes()).hexdigest()
+    profile_path = run / "ocr_profile.json"
+    if profile_path.exists():
+        if json.loads(profile_path.read_text(encoding="utf8")) != profile:
+            raise SystemExit("ERROR: OCR configuration differs from the existing run. Choose a new candidate and run directory.")
+    elif cloud and done:
+        raise SystemExit("ERROR: Cannot resume existing outputs without an OCR profile as a cloud run. Choose a new candidate and run directory.")
+    profile_path.write_text(json.dumps(profile, indent=2), encoding="utf8")
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     meta = run / "run.json"
@@ -125,11 +149,11 @@ def cmd_extract(args) -> int:
         with logfile.open("w", encoding="utf8") as log:
             proc = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=log, stderr=log)
             try:
-                proc.wait(timeout=frozen.HARD_TIMEOUT_S)
+                proc.wait(timeout=hard_timeout)
             except subprocess.TimeoutExpired:
                 frozen.kill_tree(proc)
                 proc.wait()
-                stop = f"hard_timeout_{frozen.HARD_TIMEOUT_S}s"
+                stop = f"hard_timeout_{hard_timeout}s"
         md = cand / Path(pdf).parent / (Path(pdf).stem + "_pg1_repeat1.md")
         row = json.loads(res.read_text(encoding="utf8")) if res.exists() else {"pdf": pdf, "errors": [stop or f"worker_exit_{proc.returncode}"]}
         rec = {k: v for k, v in row.items() if k not in ("blocks", "validation", "stages", "source_sha256")}
@@ -147,7 +171,9 @@ def cmd_extract(args) -> int:
         if placeholders:
             print(f"{len(placeholders)} page(s) produced no Markdown and were recorded as empty files (see run.json).")
     meta.write_text(json.dumps({"empty_placeholders": placeholders,
-        "source_head": head, "tree_dirty": dirty, "scanned_math": args.scanned_math, "python": py, "candidate": str(cand),
+        "source_head": head, "tree_dirty": dirty, "scanned_math": args.scanned_math, "vlm": args.vlm,
+        "vlm_model": env.get("AXTRACT_VLM_MODEL_ID", "LightOnOCR-3-0.8B-Q8_0") if args.vlm != "off" else None, "python": py, "candidate": str(cand),
+        "ocr_provider": provider(), "azure_deployment": cloud_config["deployment"] if cloud_config else None,
         "dataset_revision": frozen.manifest()["dataset"]["revision"], "documents": len(rows),
         "completed": sum(r["completed"] for r in rows), "hard_timeouts": sum(1 for r in rows if r.get("stop_reason")),
         "sum_document_seconds": round(sum(r.get("seconds", r["wall_seconds"]) for r in rows), 1),
@@ -202,6 +228,7 @@ def main() -> int:
     e.add_argument("--category")
     e.add_argument("--allow-asset-overrides", action="store_true")
     e.add_argument("--allow-dataset-mismatch", action="store_true")
+    e.add_argument("--vlm", choices=["off", "scanned", "all"], default="off", help="VLM OCR engine mode (AXTRACT_VLM_OCR)")
     s = sub.add_parser("score")
     s.add_argument("--data-root", required=True)
     s.add_argument("--candidate-name", default="axtract_v2")
