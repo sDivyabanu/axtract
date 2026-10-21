@@ -1,590 +1,228 @@
 # AXTRACT
 
-**Universal document ingestion engine.** Accepts documents in multiple formats and converts
-them into structured JSON and clean Markdown, preserving headings, paragraphs, lists, tables,
-figures, page context, bounding boxes, extractor provenance, and real confidence scores.
+AXTRACT converts documents (PDF, DOCX, PPTX, XLSX, JPG, PNG) into structured JSON blocks and clean Markdown. Each block keeps its
+type, page, normalized bounding box, reading order, the extractor that produced it, and a confidence value only when the
+underlying engine reports one. Results are checked by an independent verification layer, and documents saved through the web
+UI are stored encrypted on the local machine.
 
-## Azure cloud OCR
+On top of the parser, **DealLens** provides question answering over a set of documents (a "data room") with citations,
+computed numeric answers and a grounding check.
 
-The Azure path is independent of the existing LightOnOCR implementation. Keep
-`AXTRACT_OCR_PROVIDER=azure` and `AXTRACT_VLM_OCR=off`; `AXTRACT_OCR_PROVIDER=local`
-restores the existing local router without changing its code or defaults.
+AXTRACT is a local-only application: the backend and frontend bind to loopback addresses and there is no account system.
 
-Put the Azure resource endpoint, API key and deployment name in `backend/.env`.
-The resource URL, `/openai/v1/` base, and full `/openai/v1/responses` URL are accepted.
-Never place the key in frontend environment files. The underlying model identifier
-in `AXTRACT_AZURE_MODEL` may differ from your Azure deployment name. Mini and nano
-Global Standard list rates are built into the spending estimator; override the
-input/output prices for another pricing tier. See `backend/.env.example` for settings.
+## Key Features
 
-The quality path renders ordinary pages at 220 DPI and dense/scanned pages at up to
-300 DPI, capped before raster allocation at 4096 pixels per side and 12 megapixels.
-It sends `detail=original` and asks for faithful transcription, complete equations,
-Markdown tables and natural column order. These settings are configurable.
+- **Multi-format extraction**: PDF (digital, scanned and mixed), DOCX, PPTX, XLSX, JPG and PNG.
+- **Adaptive PDF routing**: each page is analysed and sent to native text extraction, OCR or a vision model as needed.
+- **Layout reconstruction**: heading detection, multi-column reading order, header/footer separation, tables (including merged
+  cells), figure and chart regions, and equations as LaTeX.
+- **Three PDF/image engines**: native AXTRACT (PyMuPDF + RapidOCR), Azure OpenAI `gpt-5.4-mini`, and local LightOnOCR models
+  served by llama.cpp.
+- **AXTRACT Verify**: an independent pass that checks completeness, content, structure and reading order and attaches a validation
+  report without changing the extraction.
+- **Security scanning**: active PDF content, Office macros/OLE/DDE, hidden text, Unicode tricks and dangerous links are reported
+  separately from the document body.
+- **Encrypted local storage**: documents saved through the web UI are stored with AES-256-GCM envelope encryption; metadata and
+  history live in SQLite.
+- **DealLens RAG**: hybrid retrieval, cited answers, table calculations done by code, prompt-injection quarantine, contradiction
+  detection and diligence packs.
+- **Batch CLI**: one command converts a folder of PDFs into one Markdown file per PDF.
+- **Web UI**: upload and extraction progress, Blocks/Markdown/JSON views with source highlighting, document history, DealLens
+  workspaces and a benchmark runner.
 
-`AXTRACT_AZURE_MODE=hybrid` reuses native text only for clean, simple digital prose.
-Math, tables, multiple columns, figures, tiny fonts and image-covered/hidden-text
-pages stay on the cloud path. Visible native text can be supplied as a bounded,
-untrusted reference for difficult digital pages; hidden OCR layers are excluded.
-`AXTRACT_AZURE_MODE=cloud` sends every page to vision for controlled comparisons.
+## System Architecture
 
-Automatic detail crops are sent with the overview in the SAME request only when a
-dense page would lose detail to image-size limits. Crops overlap and the prompt asks
-for one transcription without duplicate passages. Turn crops off for an ablation.
-Coverage, repetition and LaTeX delimiter checks can trigger one bounded reread;
-these are review signals, not confidence scores or a guarantee of correctness.
-A failed reread never discards an already completed transcription.
+```
+Upload ─► validation (extension, magic bytes, size) ─► security pre-scan
+        ─► extractor registry
+             PDF/image: native router │ Azure gpt-5.4-mini │ LightOnOCR (local)
+             DOCX / PPTX / XLSX: format-specific extractors
+        ─► common DocumentBlock model
+        ─► tables, charts, equations ─► reading order & layout
+        ─► output sanitization ─► Markdown
+        ─► AXTRACT Verify (validation report)
+        ─► JSON + Markdown response
+             (documents saved through the web UI: encrypted original + SQLite record)
+```
 
-An optional `AZURE_OPENAI_FALLBACK_DEPLOYMENT` can handle transient failures,
-incomplete output, quality rereads, or dense pages when policy is `dense`.
-No stronger model is called unless configured. Each page shares one request cap
-across primary attempts, retries, fallback and rereads. Cloud errors distinguish
-timeouts, transient HTTP/transport failures, refusals, incomplete output and caps.
+- **Backend** (`backend/`): FastAPI. `services/parse_service.py` orchestrates the pipeline; `extractors/registry.py` selects the
+  extractor for each file type and OCR provider.
+- **Frontend** (`frontend/`): Next.js app that talks to the backend API.
+- **Verification** (`backend/verify/`): integrity, source inventory, completeness, content, structure and reading-order checks,
+  combined into one report. It never raises and never modifies the extraction.
+- **Security** (`backend/security/`): detects PDF JavaScript/auto-actions, Office VBA/OLE/DDE, Excel formula overrides, hidden PDF
+  text, hidden sheets/rows/columns, off-slide text, zero-width and bidirectional Unicode, and `javascript:`/`data:` links. Findings
+  are returned in `security_findings[]` and `hidden_content[]`, never mixed into the body.
+- **Storage** (`backend/db/`, `backend/crypto/`): SQLite metadata under `backend/data/local-no-auth/`; each original is encrypted
+  with its own data key, wrapped by a locally generated master key.
+- **DealLens RAG** (`backend/rag/`): parsed documents are chunked into a per-workspace SQLite index. Retrieval combines BM25 and
+  dense embeddings (`BAAI/bge-small-en-v1.5`) with reciprocal rank fusion and a cross-encoder reranker. Numeric questions are
+  planned as table operations and computed by code. A local LLM (Ollama, default `qwen3:4b-instruct`) only phrases answers from
+  cited sources, and a verifier marks any number, date or entity it cannot ground. Chunks with instruction-like or hidden text
+  are quarantined before they can reach a prompt. Without Ollama, answers are extractive.
 
-Cloud output has page-level Markdown, null word coordinates/confidence, and review
-enabled. Native reuse retains existing native blocks. Existing verification and
-output sanitization remain enabled. No local recognition models are used by cloud
-page transcription. Cloud processing sends images/text to Azure and incurs charges.
+## Extraction Engines
 
-Cloud documents have an explicit configurable deadline (180 seconds by default).
-Local/VLM deadline code is unchanged. Restart the backend after editing environment
-settings. The legacy frozen70 runner retains its old worker deadline; use the new
-cloud-specific evaluator for the longer cloud deadline and budget reservations.
+The PDF/image engine is selected with `AXTRACT_OCR_PROVIDER` (`local` by default). DOCX, PPTX and XLSX always use the native
+extractors.
 
-### Cloud evaluation
+| Engine | Setting | What it does |
+|---|---|---|
+| Native AXTRACT | `AXTRACT_OCR_PROVIDER=local`, `AXTRACT_VLM_OCR=off` | PyMuPDF for digital pages (text, fonts, tables, figures); RapidOCR (ONNX Runtime) for scanned pages and images; local formula and chart readers. Fully offline. |
+| Azure GPT-5.4-mini | `AXTRACT_OCR_PROVIDER=azure` | Renders each page and transcribes it with the Azure OpenAI Responses API. In `hybrid` mode, clean digital prose reuses native text and difficult pages (math, tables, columns, scans) go to the model. Includes dense-page crops, bounded rereads, header/footer separation, HTML table parsing and a per-page USD cap. |
+| LightOnOCR (local) | `AXTRACT_OCR_PROVIDER=local`, `AXTRACT_VLM_OCR=scanned` or `all` | Sends selected pages to a local llama.cpp server running `LightOnOCR-3-0.8B`. Optionally, scan-like pages go to a second server running `LightOnOCR-3-4B`. If a server is unreachable, the page falls back to the native engine. |
 
-`scripts/azure_benchmark.py run` evaluates a deterministic 14-page sample (two pages
-per category), or the fixed 70-page diagnostic with `--scope 70`. It keeps outputs
-inside the selected worktree and uses fresh bounded worker processes. Supply the
-pinned scorer interpreter/checkout/packages to score the unchanged official
-assertions. A diagnostic score is not full-corpus accuracy.
+Sending pages to Azure transmits document images and text to your Azure resource and incurs usage charges.
+
+## Installation & Setup
+
+Requirements: Python 3.11+ (the pinned requirements were tested on 3.14), Node.js 20+, and Git. Commands below are for PowerShell
+from the repository root.
+
+**Backend**
 
 ```powershell
-python scripts/azure_benchmark.py run --data-root <bench_data> --out runs/azure_quality14 --scope 14 --workers 2 --max-usd 0.50 --page-cap-usd 0.025 --scorer-python <python312.exe> --scorer <olmocr_checkout> --scorer-packages <site-packages>
+py -3.14 -m venv backend\.venv
+backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+Copy-Item backend\.env.example backend\.env      # then edit backend\.env (see below)
 ```
 
-`azure_profile.json` records settings/code hashes without credentials;
-`documents.jsonl` records each document's time, process RAM, requests, usage and
-reserved/reported cost; `summary.json` records category scores and scorer exceptions.
-The earlier nano diagnostic is preserved under `runs/azure_nano_frozen70_20261019`.
-
-`score` can evaluate already-saved outputs without making more API requests.
-The scorer executable and pinned test hash are checked before a paid `run` starts.
-`recover` copies a first pass into a NEW output directory, selects only extraction
-failures (not failed assertions), and makes one bounded attempt per failed page.
-Its current recovery policy uses a 150-second request timeout, 8192 output tokens,
-a 240-second document deadline, and an explicit recovery page reservation. The
-combined first-pass plus recovery reservation must fit `--max-usd` before dispatch.
-The first-pass candidate, costs, source snapshot and score remain available.
+**Frontend**
 
 ```powershell
-python scripts/azure_benchmark.py recover --data-root <bench_data> --source runs/azure_quality70 --out runs/azure_quality70_recovered --workers 2 --max-usd 1.50 --page-cap-usd 0.075 --scorer-python <python312.exe> --scorer <olmocr_checkout> --scorer-packages <site-packages>
+cd frontend
+npm install
 ```
 
-Measured on the fixed 70-page diagnostic, the improved mini configuration scored
-62.02 percent on the first pass (66 completed pages) and 65.92 percent after the
-four failed pages recovered (301/430 assertions, 70 completed pages, zero scorer
-exceptions). This is below the 80 percent target. Combined cost was approximately
-USD 0.87 at the configured rates, including conservative timeout reservations;
-the diagnostic extrapolation of USD 12.44/1000 pages is above the stated budget.
-See `runs/azure_mini_quality70_recovered_20261019/comparison.json` for scope and limits.
+**Optional components**
 
-The spending guard reserves estimated maximum request cost before dispatch and
-reduces the output allowance if necessary. Failed/unknown attempts retain their
-reservation. A run stops dispatching documents when its USD reservation allowance
-is exhausted. This is an application estimate using configured rates, not an
-Azure-enforced billing limit. Taxes and pricing-tier differences are not included.
-A per-page cap permits expensive pages; it does not establish the average cost for
-1000 pages. Measure the pilot's average before a full run. Request caps may produce
-incomplete-output errors; those pages must remain failures in reported scores.
+- *Local LightOnOCR*: download a llama.cpp release and the GGUF weights listed in [docs/VLM_OCR.md](docs/VLM_OCR.md), then start
+  the server:
+  ```powershell
+  llama-server.exe -m lo3-0.8b-Q8_0.gguf --mmproj lo3-0.8b-mmproj-f16.gguf --host 127.0.0.1 --port 8090 -c 16384 -ngl 99 --jinja --reasoning off -np 1
+  ```
+  For scan pages, start a second server with `lo3-4b-Q4_K_M.gguf` on port `8091` (`-np 1`).
+- *DealLens RAG*: install Ollama and pull the model, then install the embedding package and weights:
+  ```powershell
+  ollama pull qwen3:4b-instruct
+  backend\.venv\Scripts\python.exe -m pip install fastembed
+  backend\.venv\Scripts\python.exe scripts\fetch_rag_models.py
+  ```
+  On macOS/Linux, `scripts/setup_rag.sh` performs these steps.
+- *Scanned-page equations* (Pix2Text-MFR, offline): see [docs/SCANNED_MATH_SETUP.md](docs/SCANNED_MATH_SETUP.md).
 
-The full runner (`scripts/full_benchmark.py`) also records the expanded cloud
-profile, rejects mismatched resumes, and uses a cloud-only hard worker timeout.
-Use a fresh candidate/run directory for each changed model or input configuration.
+## Environment Configuration
 
-## Supported Formats
+All backend settings are read from `backend/.env`; variables set in the shell take precedence. Never commit this file or put the
+Azure key in frontend environment files.
 
-The following table describes `AXTRACT_OCR_PROVIDER=local`.
+**Local mode (required for the app)**
 
-| Format | Extractor | Capabilities |
-|--------|-----------|-------------|
-| PDF (digital) | PyMuPDF | Text, headings (font analysis), tables, figures, bounding boxes |
-| PDF (scanned) | PyMuPDF → RapidOCR | Adaptive routing: digital pages use native extraction, scanned pages are rendered and OCR'd |
-| PDF (mixed) | PyMuPDF + RapidOCR | Per-page analysis routes each page to the best extractor |
-| DOCX | python-docx | Headings, paragraphs, lists, tables, embedded images |
-| PPTX | python-pptx | Slide titles, body text, lists, tables, images, shape coordinates |
-| XLSX | openpyxl | Sheet-level tables, headers, merged cell info, multi-sheet support |
-| JPG/JPEG | RapidOCR | OCR with real confidence scores and bounding boxes |
-| PNG | RapidOCR | OCR with real confidence scores and bounding boxes |
-
-## Architecture
-
-```
-UPLOAD → FILE VALIDATION → MAGIC BYTE CHECK
-  ↓
-FORMAT DETECTION → EXTRACTOR REGISTRY
-  ↓
-ADAPTIVE ROUTING (PDF: per-page analysis → digital/scanned/mixed)
-  ↓
-SPECIALIZED EXTRACTORS
-  ├─ PyMuPDF    (digital PDF text, tables, figures, heading detection)
-  ├─ RapidOCR   (scanned PDFs, images — self-hosted, ONNX Runtime)
-  ├─ python-docx (DOCX)
-  ├─ python-pptx (PPTX)
-  └─ openpyxl    (XLSX)
-  ↓
-COMMON SEMANTIC BLOCKS (DocumentBlock)
-  ↓
-LAYOUT ANALYSIS + READING ORDER
-  ├─ Header/footer detection
-  ├─ Multi-column detection
-  └─ Top-to-bottom ordering per column
-  ↓
-MARKDOWN GENERATION
-  ↓
-JSON + MARKDOWN RESPONSE → FRONTEND
+```env
+AXTRACT_LOCAL_NO_AUTH=true
 ```
 
-## Project Layout
+**Azure GPT-5.4-mini**
+
+```env
+AXTRACT_OCR_PROVIDER=azure
+AXTRACT_VLM_OCR=off
+AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
+AZURE_OPENAI_API_KEY=<your-api-key>
+AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini
+AXTRACT_AZURE_MODEL=gpt-5.4-mini
+AXTRACT_AZURE_MODE=hybrid
+AXTRACT_AZURE_CROPS=auto
+AXTRACT_AZURE_PROMPT=accuracy
+AXTRACT_AZURE_SCAN_REASONING=low
+AXTRACT_AZURE_DETAIL=original
+AXTRACT_AZURE_MAX_OUTPUT_TOKENS=8192
+AXTRACT_AZURE_TIMEOUT_SECONDS=150
+AXTRACT_AZURE_DOCUMENT_SECONDS=240
+AXTRACT_AZURE_MAX_RETRIES=1
+AXTRACT_AZURE_MAX_REQUESTS_PER_PAGE=3
+AXTRACT_AZURE_MAX_USD_PER_PAGE=0.06
+```
+
+The endpoint may be the resource URL or its `/openai/v1/` URL. If a value is omitted, the code default applies: `cloud` mode,
+crops `off`, 4096 output tokens, 90 s request timeout, 180 s document deadline and no per-page USD cap. All options are listed in
+`backend/.env.example`; an optional fallback deployment (`AZURE_OPENAI_FALLBACK_DEPLOYMENT`) is used only when configured.
+
+**Local LightOnOCR**
+
+```env
+AXTRACT_OCR_PROVIDER=local
+AXTRACT_VLM_OCR=all                         # off | scanned | all
+AXTRACT_VLM_URL=http://127.0.0.1:8090
+AXTRACT_VLM_MODEL_ID=LightOnOCR-3-0.8B-Q8_0
+# Optional second model for scanned pages:
+# AXTRACT_VLM_SCAN_MODEL_ID=lo3-4b-Q4_K_M
+# AXTRACT_VLM_SCAN_URL=http://127.0.0.1:8091
+```
+
+**DealLens (optional)**: `OLLAMA_URL` (default `http://127.0.0.1:11434`) and `DEALLENS_LLM_MODEL` (default `qwen3:4b-instruct`).
+
+**Frontend**: `AXTRACT_LOCAL_NO_AUTH=true` and `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000`, in the shell or in
+`frontend/.env.local`.
+
+## Usage
+
+**Run the application** (two terminals, after starting any optional model servers):
+
+```powershell
+$env:AXTRACT_LOCAL_NO_AUTH = "true"
+backend\.venv\Scripts\python.exe backend\serve_local.py
+```
+
+```powershell
+cd frontend
+$env:AXTRACT_LOCAL_NO_AUTH = "true"; $env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:8000"
+npm run dev:local
+```
+
+Open http://127.0.0.1:3000. The API runs at http://127.0.0.1:8000 (interactive docs at `/docs`). Restart the backend after editing
+`backend/.env`. Only loopback binds are accepted; see [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).
+
+**Parse a file through the API**
+
+```powershell
+curl.exe -F "file=@document.pdf" http://127.0.0.1:8000/api/parse
+```
+
+**Batch PDF-to-Markdown conversion**
+
+```powershell
+backend\.venv\Scripts\python.exe scripts\axtract_batch.py <input-folder> <output-folder> --workers 4
+```
+
+- PDFs are found recursively. Each `<input-folder>\sub\name.pdf` is written to `<output-folder>\sub\name.md`; a multi-page PDF
+  becomes one Markdown file.
+- The engine is the one configured in `backend/.env` (Azure or local). For local LightOnOCR, start the llama.cpp server first and
+  use `--workers 1`.
+- Failed PDFs are listed at the end, produce no Markdown file, and make the command exit with status 1.
+
+**Tests**
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m pytest tests -q
+```
+
+## Project Structure
 
 ```
 backend/
-  main.py              FastAPI app: CORS, routers, structured error handlers
-  routers/             HTTP routes (health, parse)
-  services/
-    parse_service.py   Pipeline orchestration: validate → extract → layout → markdown
-    pdf_router.py      Adaptive PDF routing (digital/scanned/mixed per page)
-    layout_service.py  Reading order reconstruction, column detection, header/footer
-    markdown_service.py  Ordered blocks → clean Markdown
-  extractors/
-    base.py            BaseExtractor contract
-    registry.py        Maps file extensions to extractors
-    pymupdf_extractor.py  Enhanced PDF extraction (text, tables, figures, headings)
-    ocr_extractor.py   RapidOCR-based extraction for images and scanned pages
-    docx_extractor.py  DOCX extraction
-    pptx_extractor.py  PPTX extraction
-    xlsx_extractor.py  XLSX extraction
-  models/
-    document.py        DocumentBlock, DocumentResponse, BlockType, BBox
-    errors.py          AppError, ErrorResponse, DocumentError
-  utils/
-    files.py           Safe filenames, temp storage, magic byte validation
-  tests/               pytest test suite
-  uploads/             Temporary upload storage (git-ignored)
-  requirements.txt
-
-frontend/
-  app/                 Next.js App Router
-  components/
-    FileDropzone.tsx   Drag-and-drop multi-format upload
-    ResultView.tsx     Tabbed result viewer (Blocks, Markdown, JSON)
-  lib/
-    api.ts             API client
-    types.ts           TypeScript types mirroring backend schema
-
-evaluation/
-  scripts/
-    evaluate_text.py   Text accuracy metrics (similarity, WER, CER)
-    evaluate_tables.py Table extraction accuracy
-    benchmark.py       Performance benchmarking
-  fixtures/            Ground truth files (add your own)
+  main.py, serve_local.py   FastAPI app and the loopback-only launcher
+  routers/                  API routes: parse, documents, preview, DealLens (rag), benchmark, health
+  services/                 Pipeline: PDF routing, layout, tables, charts, equations, Markdown, LightOnOCR client
+  extractors/               Native, Azure OCR, DOCX, PPTX and XLSX extractors and the registry
+  verify/                   AXTRACT Verify validation layers
+  security/                 Active-content, hidden-content, Unicode and output-safety checks
+  rag/                      DealLens retrieval, answering, verification and exports
+  crypto/, db/, auth/       Envelope encryption, SQLite storage, local-mode guard
+  tests/                    pytest suite
+frontend/                   Next.js app (app/ pages, components/, lib/ API client)
+scripts/                    Batch CLI, model setup and benchmark tooling
+docs/                       Detailed guides (local mode, LightOnOCR, RAG design, scanned math)
+evaluation/                 Text and table evaluation scripts
 ```
-
-## Prerequisites
-
-- Python 3.11+ (all measurements and pinned requirements are from 3.14.6; the official scorer runs separately on 3.12)
-- Node.js 20+ and npm (tested with Node 22)
-- Git
-
-## Local-only development
-
-AXTRACT uses local SQLite metadata and encrypted original files. No account or external authentication service is needed. Both servers require explicit opt-in and verified loopback listeners. See [local setup and safety](docs/LOCAL_DEVELOPMENT.md) for PowerShell commands.
-
-## Backend Setup
-
-```bash
-cd backend
-python -m venv .venv
-
-# Activate:
-# PowerShell:  .venv\Scripts\Activate.ps1
-# Git Bash:    source .venv/Scripts/activate
-# macOS/Linux: source .venv/bin/activate
-
-python -m pip install -r requirements.txt
-AXTRACT_LOCAL_NO_AUTH=true python serve_local.py
-```
-
-Runs at **http://localhost:8000** — API docs at http://localhost:8000/docs
-
-### Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| fastapi + uvicorn | Web framework and ASGI server |
-| python-multipart | File upload handling |
-| pymupdf | PDF text, table, and figure extraction |
-| rapidocr-onnxruntime | Self-hosted OCR (PaddleOCR models via ONNX Runtime) |
-| python-docx | DOCX extraction |
-| python-pptx | PPTX extraction |
-| openpyxl | XLSX extraction |
-| Pillow | Image processing for OCR |
-| pytest + httpx | Testing |
-
-**Why RapidOCR instead of PaddleOCR?** RapidOCR uses the same PaddleOCR models but runs
-them via ONNX Runtime instead of PaddlePaddle, making it ~10x lighter to install, fully
-self-hosted, compatible with Python 3.14, and faster to start up.
-
-## Frontend Setup
-
-```bash
-cd frontend
-npm install
-AXTRACT_LOCAL_NO_AUTH=true npm run dev:local
-```
-
-Runs at **http://localhost:3000**
-
-Start the backend first. Other scripts: `npm run build`, `npm run lint`.
-
-## API
-
-### `GET /health`
-
-```json
-{ "status": "ok" }
-```
-
-### `POST /api/parse`
-
-Multipart form upload with field `file`. Accepts PDF, DOCX, PPTX, XLSX, JPG, PNG.
-
-```bash
-curl -F "file=@document.pdf" http://localhost:8000/api/parse
-```
-
-Returns `DocumentResponse`:
-
-```json
-{
-  "document_id": "...",
-  "filename": "document.pdf",
-  "file_type": "pdf",
-  "page_count": 5,
-  "processing_time_ms": 230,
-  "status": "success",
-  "blocks": [
-    {
-      "id": "p1-b0",
-      "type": "heading",
-      "content": "Chapter 1",
-      "page": 1,
-      "bbox": [0.12, 0.06, 0.54, 0.10],
-      "confidence": null,
-      "extractor": "pymupdf",
-      "reading_order": 0,
-      "requires_review": false,
-      "metadata": { "font_size": 24.0, "is_bold": true, "route": "digital" }
-    }
-  ],
-  "markdown": "# Chapter 1\n\n...",
-  "errors": []
-}
-```
-
-### Coordinate Convention
-
-`bbox` is `[x1, y1, x2, y2]` normalized to **0.0–1.0** relative to page dimensions,
-origin at top-left. Formats without spatial coordinates (DOCX) use `null`.
-
-### Confidence Policy
-
-- **Real confidence**: preserved from the extractor/model (e.g., RapidOCR confidence)
-- **Deterministic extraction**: `confidence: null` (never fabricated)
-- **Low confidence**: `requires_review: true` when confidence < 0.6
-- **Unsupported content**: preserved with metadata, never hallucinated
-
-### Error Codes
-
-| HTTP | Code | Meaning |
-|------|------|---------|
-| 400 | `MISSING_FILE` | No file uploaded |
-| 400 | `EMPTY_FILE` | File is empty |
-| 413 | `FILE_TOO_LARGE` | Exceeds 100 MB limit |
-| 415 | `UNSUPPORTED_FORMAT` | Extension not supported |
-| 422 | `INVALID_FILE` | File content invalid or corrupt |
-| 422 | `ENCRYPTED_FILE` | Password-protected PDF |
-
-## Testing
-
-```bash
-cd backend
-python -m pytest tests/ -v
-```
-
-Tests cover: health endpoint, digital PDF, scanned PDF, DOCX, PPTX, XLSX, JPG/PNG,
-unsupported format, corrupt file, empty file, invalid magic bytes, heading detection,
-normalized bounding boxes, layout ordering, multi-column detection, header/footer
-classification, Markdown generation for all block types.
-
-## Batch PDF to Markdown
-
-Convert a folder of PDFs recursively, writing one Markdown file for each PDF. The input
-subfolder structure is preserved so repeated PDF filenames do not overwrite each other.
-Each file is isolated: failed PDFs are reported after the rest of the batch finishes, and
-the command exits with status 1 if any file failed.
-
-```powershell
-backend\.venv\Scripts\python.exe scripts\axtract_batch.py .\input-pdfs .\markdown-output
-```
-
-The default is one worker for predictable CPU and model memory use. Add `--workers 2` to
-process multiple PDFs concurrently on a machine with adequate resources.
-
-## Scanned math (optional) and reproducing the frozen diagnostic
-
-Scanned-page equation recognition (Pix2Text-MFR, MIT licence, CPU-only, offline) is **off by default**. It needs the pinned
-packages in `backend/requirements.txt` and the 8 model files, which you place on the machine yourself (nothing is downloaded at
-runtime). Set up and verify it in a clean virtual environment:
-
-```powershell
-py -3.14 -m venv .venv
-.venv\Scripts\python -m pip install -r backend\requirements.txt          # pinned; backend\requirements.lock.txt is the tested full lock
-.venv\Scripts\python scripts\scanned_math_assets.py install --from <folder with the 8 Pix2Text-MFR files>
-.venv\Scripts\python scripts\scanned_math_assets.py check                # must print: OK: Pix2Text-MFR loads from ...
-$env:AXTRACT_SCANNED_MATH = "1"                                          # "1" warns and continues if assets are missing; "require" fails loudly
-.venv\Scripts\python scripts\axtract_batch.py .\input-pdfs .\markdown-output
-```
-
-To reproduce the 70-PDF / 430-assertion diagnostic (a sample, **not** full-corpus accuracy) with the unchanged official scorer, follow
-[docs/FROZEN70_REPRODUCTION.md](docs/FROZEN70_REPRODUCTION.md); the short form is
-`python scripts/frozen70_benchmark.py extract|score|report ... --scanned-math require`. Asset layout, versions, hashes and licences:
-[docs/SCANNED_MATH_SETUP.md](docs/SCANNED_MATH_SETUP.md).
-
-## Evaluation & Benchmarking
-
-See [evaluation/README.md](evaluation/README.md) for detailed metrics documentation.
-
-```bash
-# Performance benchmark
-cd backend
-python ../evaluation/scripts/benchmark.py /path/to/test/files/
-
-# Text accuracy (requires ground truth)
-python ../evaluation/scripts/evaluate_text.py result.json ground_truth.txt
-
-# Table accuracy (requires ground truth)
-python ../evaluation/scripts/evaluate_tables.py result.json tables_gt.json
-```
-
-## Adding an Extractor
-
-1. Create `backend/extractors/<name>_extractor.py` subclassing `BaseExtractor`
-2. Set `name` and `supported_extensions`, implement `extract(file_path) -> ExtractionResult`
-3. Register in `backend/extractors/registry.py`
-4. Use `None` for any value the extractor doesn't know (confidence, bbox)
-
-The route and service do not need to change.
-
-## Feature Status
-
-| Feature | Status |
-|---------|--------|
-| Multi-format ingestion (PDF/DOCX/PPTX/XLSX/JPG/PNG) | Implemented |
-| Digital PDF text extraction | Implemented |
-| PDF heading detection (font analysis) | Implemented |
-| PDF table extraction | Implemented (PyMuPDF find_tables with plausibility checks) |
-| PDF figure detection | Implemented (image and vector chart signals; chart data remains unextracted) |
-| Scanned PDF → OCR | Implemented (adaptive routing) |
-| Mixed digital/scanned PDF | Implemented (per-page routing) |
-| Image OCR (JPG/PNG) | Implemented (RapidOCR) |
-| DOCX extraction | Implemented |
-| PPTX extraction | Implemented |
-| XLSX extraction | Implemented |
-| Layout analysis | Implemented (column detection, header/footer) |
-| Reading order reconstruction | Implemented |
-| Markdown generation | Implemented |
-| Normalized bounding boxes | Implemented (0.0–1.0) |
-| Real confidence scores | Implemented (OCR) |
-| Structured error handling | Implemented |
-| Magic byte validation | Implemented |
-| Upload size limit | Implemented (100 MB) |
-| Frontend multi-format upload | Implemented |
-| Frontend tabbed result view | Implemented (Blocks/Markdown/JSON) |
-| Frontend table rendering | Implemented (HTML tables) |
-| Automated test suite | 35 tests passing |
-| Evaluation framework | Implemented (scripts, needs ground truth) |
-| Performance benchmarking | Implemented |
-| Chart data extraction | Detection only (no value extraction without VLM) |
-| Equation → LaTeX | Detection only (pix2tex not on Python 3.14) |
-| Cross-page table merging | Not implemented (conservative: separate tables) |
-| Advanced layout model | Heuristic only (no ML layout model) |
-| PDF provenance viewer | Bbox data available, no visual overlay yet |
-| Authentication | Not implemented (not needed for baseline) |
-| Database | Not implemented |
-| Task queue | Not implemented |
-| Cloud storage | Not implemented |
-| Chatbot / LLM integration | Not implemented (future feature) |
-
----
-
-## Charts, equations and previews (local, no network at runtime)
-
-**Setup (one time)**
-
-```bash
-cd backend && python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cd .. && backend/.venv/bin/python scripts/fetch_models.py   # formula weights, checksummed
-# LibreOffice is needed only to preview DOCX/PPTX/XLSX (and EMF/WMF pictures):
-#   macOS: download from libreoffice.org, or put `soffice` on PATH
-```
-
-Without the formula weights the server still runs: formula regions are flagged
-`formula_model_unavailable`. Without LibreOffice, Office previews are reported in the optional
-`preview_error` field; the parse itself still succeeds.
-
-**How regions are read** (`services/region_router.py`)
-
-| Region | Source | Method | Values |
-|---|---|---|---|
-| Office native chart | `word|ppt/charts/chartN.xml` | cached series in the XML | exact |
-| PDF vector chart | drawing primitives (pdfplumber) | axis ticks → values | exact |
-| Chart in a picture (PDF/DOCX/PPTX/JPG/PNG) | raster | OpenCV + OCR tick calibration | `values_estimated` unless printed labels agree |
-| Word/PowerPoint equation | OMML | built-in OMML→LaTeX | exact |
-| Equation image / scanned formula | crop | local ONNX formula model, validated + OCR cross-check | confidence ≤ 0.75, flagged when unverified |
-| Inline text math (`x^2 + y^2 = r^2`) | text layer | deterministic conversion | validated |
-
-Nothing is invented: unreadable values are `null`, unverified LaTeX is flagged
-(`requires_review`, `metadata.flags`), and charts whose printed numbers contradict the
-measurement are flagged `data_labels_disagree_with_measurement`.
-
-**Optional response fields added** (schema otherwise unchanged): `preview_available`,
-`preview_pages`, `preview_error`. Block `metadata` gains `preview` (page + bbox in the preview
-pages, Office formats), `chart_data`, `latex`, `flags`, `needs_review`, `markdown`, `page_size_pt`.
-
-**Components and licences**
-
-| Component | Used for | Licence |
-|---|---|---|
-| pypdfium2 | page rendering | BSD-3 / Apache-2.0 |
-| pdfplumber | PDF vector chart primitives | MIT |
-| rapid-layout (+ bundled CDLA ONNX layout model) | formula/figure regions | Apache-2.0 (model weights: verify before commercial shipping) |
-| rapid-latex-ocr (pix2tex ONNX export) | image → LaTeX | Apache-2.0 code; pix2tex MIT; weights: verify |
-| latex2mathml | LaTeX syntax check | MIT |
-| defusedxml | safe parsing of chart parts | PSF |
-| OpenCV (via rapidocr) | chart geometry | Apache-2.0 |
-| KaTeX (frontend) | equation rendering | MIT |
-| LibreOffice (external, optional) | Office → PDF preview | MPL-2.0 |
-| **PyMuPDF** | PDF text/tables (existing) | **AGPL-3.0: replace or license before commercial distribution** |
-
-Tests: `cd backend && .venv/bin/python -m pytest` (LibreOffice / formula tests skip if absent).
-Reports: `backend/.venv/bin/python scripts/run_samples.py --tag after` → `reports/after_report.md`
-and annotated pages in `reports/previews/`.
-
----
-
-## DealLens: auditable Q&A over a data room (RAG layer)
-
-*"It doesn't just read the data room. It audits it — and every answer comes with a receipt."*
-
-DealLens sits on top of the parser: upload a data room (several documents) and ask questions, run diligence packs, find contradictions
-between documents, quarantine hidden/injected content, and get an auto-drafted seller question list. Self-hosted: local LLM via **Ollama**,
-local ONNX embeddings and reranker, SQLite. Full feature list: [FEATURES.md](FEATURES.md). Design: [docs/RAG_DESIGN.md](docs/RAG_DESIGN.md).
-Demo: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
-
-**Setup (once, needs network once):**
-```bash
-scripts/setup_rag.sh                                       # Ollama + qwen3:4b-instruct + embedding/reranker weights (SHA-256 manifest)
-backend/.venv/bin/python scripts/make_demo_dataroom.py      # synthetic "Project Falcon" data room + eval/golden_qa.yaml
-backend/.venv/bin/python scripts/run_rag_eval.py            # Baseline vs DealLens → reports/rag_eval.md (add --no-llm for a fast run)
-```
-Without Ollama everything still works in **extractive mode** (exact table values and quoted passages, flagged in the UI).
-
-**Models and licences**
-
-| Component | Choice | Licence |
-|---|---|---|
-| LLM | `qwen3:4b-instruct` via Ollama (default; `DEALLENS_LLM_MODEL` to change) | Apache-2.0 |
-| Embeddings | `BAAI/bge-small-en-v1.5` via fastembed | MIT (fastembed: Apache-2.0) |
-| Reranker | `Xenova/ms-marco-MiniLM-L-6-v2` (cross-encoder) | Apache-2.0 |
-| Index | SQLite + numpy exact search + own BM25 | stdlib / BSD |
-| Baseline text extraction | pypdf | BSD-3 |
-| Exports | python-docx, openpyxl | MIT |
-| UI tests (dev only) | Playwright | Apache-2.0 |
-
-```mermaid
-flowchart LR
-  U[Upload data room] --> P[ParseAnything parser<br/>blocks + bbox + confidence]
-  P --> S[Security shield<br/>hidden text · injection · active content]
-  S -->|quarantine| Q[(Quarantine)]
-  S --> C[Chunker + typed table store + facts]
-  C --> I[(SQLite · BM25 · vectors)]
-  Qn[Question] --> R[Router] --> H[Hybrid retrieval<br/>BM25 + dense → RRF → cross-encoder]
-  I --> H
-  R -->|numeric| T[Planner → table-op DSL<br/>executed by our code] --> NR[Number Receipt]
-  H --> G[LLM or extractive] --> V[Verifier<br/>numbers · dates · entities]
-  NR --> V --> A[Answer: citations · receipts · grounding · badges]
-  I --> D[Contradictions · packs · seller questions · maturity wall]
-```
-
-**Key guarantees:** the LLM never decides a fact and never does arithmetic (it may plan JSON; our DSL computes); document text is untrusted
-and never reaches a prompt if quarantined; every number, citation and suggestion links to document + page + box; if the evidence is weak the
-answer is "Not found" plus what was searched; logs and the audit trail hold ids, hashes and timings only.
-### Deployment Limitation
-
-The current RAG/DealLens deployment is **host-machine dependent**. The backend and RAG services run on the deployment computer, so the host machine must remain powered on for RAG queries to work. If the computer is switched off, the RAG layer is unavailable until the backend host is started again.
-
-A future production deployment can move these services to a continuously running server/cloud instance.
-## Current Metrics
-
-### Parser Benchmark
-
-AXTRACT was tested on a 20-document `allenai/olmOCR-bench` development run.
-
-| Metric | Result |
-|---|---:|
-| Documents processed | 20 |
-| Successful documents | 20 |
-| Failed documents | 0 |
-| Processing success rate | **100%** |
-| Total pages | 20 |
-| Blocks extracted | 715 |
-| Total runtime | 60.21 s |
-| Throughput | 0.33 pages/sec |
-| Mean latency | 14.50 s |
-| Median latency | 8.20 s |
-| P95 latency | 48.12 s |
-| Peak memory | 1.39 GB |
-
-### Category Runtime
-
-| Category | Documents | Mean runtime |
-|---|---:|---:|
-| Headers / Footers | 1 | 3.89 s |
-| arXiv Math | 12 | 8.21 s |
-| Tables | 3 | 21.79 s |
-| Multi-column | 2 | 25.21 s |
-| Old Scans Math | 1 | 30.64 s |
-| Old Scans | 1 | 41.06 s |
-
-> **Important:** The 100% success rate measures whether documents were successfully processed by the pipeline. It is **not an accuracy score**. Extraction accuracy, reading-order accuracy, table fidelity, figure extraction, equation recognition, and provenance quality still require ground-truth evaluation.
-
-### Security Metrics
-
-The security pipeline currently covers:
-
-- Unicode and prompt-injection detection
-- Hidden PDF content
-- Hidden XLSX sheets/rows/columns
-- Hidden PPTX content
-- Office VBA/OLE/DDE detection
-- Suspicious Excel hardcoded financial values
-- Dangerous URI detection
-- Script/event-handler sanitization
-- Spreadsheet formula-injection protection
-
-Security findings are returned separately from normal document content through:
-
-```text
-security_findings[]
-hidden_content[]
