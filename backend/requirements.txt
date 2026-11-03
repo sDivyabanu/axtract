@@ -17,7 +17,7 @@ openpyxl==3.1.5
 rapidocr-onnxruntime==1.2.3
 
 # Image processing
-Pillow==12.3.0
+Pillow==13.0.0
 
 # Runtime packages imported directly by the recognizers (pinned to the measured environment, Python 3.14.6)
 numpy==2.5.3  # array handling (all image paths)
